@@ -37,6 +37,12 @@ defaults:
 # config for actor, rollout and reference model
 actor_rollout_ref:
 
+  actor:
+    # TODO haha overwrite
+    checkpoint:
+      #  save_contents: ['model', 'optimizer', 'extra']
+      save_contents: [ 'hf_model' ]
+
   # Whether it's a hybrid engine, currently only supports hybrid engine
   hybrid_engine: true
 
@@ -209,7 +215,7 @@ trainer:
   del_local_ckpt_after_load: False
 
   # Default local directory for saving checkpoints
-  default_local_dir: checkpoints/${trainer.project_name}/${trainer.experiment_name}
+  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
 
   # Maximum number of actor checkpoints to keep
   max_actor_ckpt_to_keep: null

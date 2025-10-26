@@ -431,4 +431,9 @@ def create_rl_sampler(data_config, dataset):
 
 
 if __name__ == "__main__":
+    # TODO haha modify
+    # Set Ray temp directory to home directory to avoid /tmp/ access issues
+    ray_temp_dir = os.path.expanduser("~/ray_tmp")
+    os.makedirs(ray_temp_dir, exist_ok=True)
+    os.environ["RAY_TMPDIR"] = ray_temp_dir
     main()
