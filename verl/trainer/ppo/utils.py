@@ -12,8 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import random
 import warnings
 from enum import Enum
+import numpy as np
+import torch
 
 from omegaconf import DictConfig
 
@@ -35,6 +39,7 @@ class Role(Enum):
     RefPolicy = 4
     RewardModel = 5
     ActorRolloutRef = 6
+    ClassmateWorker = 7
 
     def __str__(self):
         return self._get_role_string()
@@ -48,6 +53,7 @@ class Role(Enum):
             Role.RefPolicy: "ref",
             Role.RewardModel: "rm",
             Role.ActorRolloutRef: "actor_rollout_ref",
+            Role.ClassmateWorker: "classmate_worker",
         }
         return role_mapping.get(self, self.name.lower())
 
@@ -94,3 +100,14 @@ def need_critic(config: DictConfig) -> bool:
             stacklevel=2,
         )
         return False
+
+# Set seed
+def set_seed(seed):
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
