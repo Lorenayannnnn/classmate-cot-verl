@@ -38,7 +38,7 @@ defaults:
 actor_rollout_ref:
 
   actor:
-    # TODO haha overwrite
+    # TODO overwrite
     checkpoint:
       #  save_contents: ['model', 'optimizer', 'extra']
       save_contents: [ 'hf_model' ]
