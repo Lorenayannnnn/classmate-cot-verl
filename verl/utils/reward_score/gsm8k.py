@@ -62,7 +62,17 @@ def compute_score(solution_str, ground_truth, method="strict", format_score=0.0,
         format_score: the score for the format
         score: the score for the correct answer
     """
+    if method is None:
+        method = "strict"
     answer = extract_solution(solution_str=solution_str, method=method)
+
+    # print(f"""
+    # 🐛 solution_str: {solution_str}
+    # 🐛 ground_truth: {ground_truth}
+    # 🐛 strictly extracted answer: {answer}
+    # 🐛 flexibly extracted answer: {extract_solution(solution_str=solution_str, method="flexible")}
+    # """)
+
     if answer is None:
         return 0
     else:

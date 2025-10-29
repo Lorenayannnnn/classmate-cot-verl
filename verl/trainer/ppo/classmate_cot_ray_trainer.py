@@ -289,8 +289,12 @@ class ClassmateCoTRayPPOTrainer:
         device_name=None,
 
         # TODO modify
-        classmate_cot_reward_configs=None, 
+        classmate_cot_reward_configs=None,
+        classmate_batch_size=None,
+        classmate_free_cache_engine=None,
+        classmate_use_vllm=None,
         classmate_generation_configs=None,
+        classmate_vllm_configs=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -326,6 +330,10 @@ class ClassmateCoTRayPPOTrainer:
 
         # Store the tokenizer for text processing
         self.tokenizer = tokenizer
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "left"
+
         self.processor = processor
         self.config = config
         self.reward_fn = reward_fn
@@ -351,7 +359,11 @@ class ClassmateCoTRayPPOTrainer:
 
         # Store classmate configurations
         self.classmate_cot_reward_configs = classmate_cot_reward_configs
+        self.classmate_batch_size = classmate_batch_size
+        self.classmate_free_cache_engine = classmate_free_cache_engine
+        self.classmate_use_vllm = classmate_use_vllm
         self.classmate_generation_configs = classmate_generation_configs
+        self.classmate_vllm_configs = classmate_vllm_configs
 
         # if ref_in_actor is True, the reference policy will be actor without lora applied
         self.ref_in_actor = config.actor_rollout_ref.model.get("lora_rank", 0) > 0
@@ -748,12 +760,13 @@ class ClassmateCoTRayPPOTrainer:
             # Create separate config for each model
             classmate_config_config = ClassmateWorkerConfig(
                 model_name_or_path=model_path,
-                generation_config=self.classmate_generation_configs,
-                max_prompt_len=self.config.data.max_prompt_length,
                 model_index=model_idx,
-                vllm_gpu_memory_utilization=self.classmate_generation_configs.gpu_memory_utilization,
-                tensor_parallel_size=self.classmate_generation_configs.tensor_parallel_size,
-                free_cache_engine=self.classmate_generation_configs.free_cache_engine,
+                classmate_batch_size=self.classmate_batch_size,
+                classmate_free_cache_engine=self.classmate_free_cache_engine,
+                classmate_use_vllm=self.classmate_use_vllm,
+                max_prompt_len=self.config.data.max_prompt_length,
+                generation_config=self.classmate_generation_configs,
+                vllm_config=self.classmate_vllm_configs,
             )
 
             # Create unique role name for each classmate model worker group
@@ -825,7 +838,7 @@ class ClassmateCoTRayPPOTrainer:
             classmate_wg = all_wg[classmate_role_name]
             classmate_wg.init_model()
             self.classmate_workers.append(classmate_wg)
-        print(f"Initialized {len(self.classmate_workers)} classmate workers")
+        print(f"Initialized {len(self.classmate_workers)} classmate")
 
         # create async rollout manager and request scheduler
         self.async_rollout_mode = False
@@ -847,33 +860,32 @@ class ClassmateCoTRayPPOTrainer:
         all_actor_responses = self.tokenizer.batch_decode(
             data.batch["responses"], skip_special_tokens=True
         )
+        # print("🐛 sample prompt id", data.batch["prompts"][0])
+        # print("🐛 sample prompt", all_prompts[0])
+        # print("🐛 sample prompt id", data.batch["prompts"][0])
+        # print("🐛 sample response", all_actor_responses[0])
+        # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
+
 
         all_prompt_plus_actor_responses = []
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
-        
+
         # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
+        # TODO: split by " " for now
         if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
-            # Remove the last two steps by \n
+            keep_rate = 0.8     # TODO
             for res_idx, response in enumerate(all_actor_responses):
-                # remove the last two steps by \n
-                split_response = response.rsplit("\n", 2)
-                if len(split_response) == 1:
-                    modified_response = response
-                elif len(split_response) == 2:
-                    modified_response = split_response[0]
-                else:
-                    modified_response = "\n".join(split_response[:-2])
+                split_response = response.split(" ")
+                num_to_keep = int(len(split_response) * keep_rate)
+                modified_response = " ".join(split_response[:num_to_keep])
                 all_prompt_plus_actor_responses.append(all_prompts[res_idx] + modified_response)
         elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
             for res_idx, response in enumerate(all_actor_responses):
-                # randomly truncate the response to a random length splitting by whitespace
-                response_tokens = response.split()
-                if len(response_tokens) > 1:
-                    truncation_point = random.randint(1, len(response_tokens) - 1)
-                    truncated_response = " ".join(response_tokens[:truncation_point])
-                else:
-                    truncated_response = response  # no truncation if only one token
+                split_response = response.split(" ")
+                rand_keep_rate = random.uniform(0.3, 0.95)
+                num_to_keep = int(len(split_response) * rand_keep_rate)
+                truncated_response = " ".join(split_response[:num_to_keep])
                 all_prompt_plus_actor_responses.append(all_prompts[res_idx] + truncated_response)
         else:
             raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
@@ -882,6 +894,9 @@ class ClassmateCoTRayPPOTrainer:
             "prompts": np.array(all_prompts),
             "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
+
+        # print("🐛 Sample classmate input from prepare batch", all_prompt_plus_actor_responses[0])
+        # print("🐛 Sample classmate input from prepare batch", all_prompt_plus_actor_responses[1])
 
         return DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
 
@@ -908,7 +923,7 @@ class ClassmateCoTRayPPOTrainer:
         # Pad per-worker to its world size to satisfy equal chunk requirement, and remember pad_size for unpadding.
         futures = []  # list[(model_idx, ObjectRef[DataProto])]
         pad_sizes: dict[int, int] = {}
-        for m_idx, worker_group in enumerate(self.classmate_workers):
+        for classmate_idx, worker_group in enumerate(self.classmate_workers):
             size_divisor = getattr(worker_group, "world_size", 1)
             if size_divisor is None:
                 size_divisor = 1
@@ -916,38 +931,40 @@ class ClassmateCoTRayPPOTrainer:
                 cls_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor)
             else:
                 cls_batch_padded, pad_size = classmate_batch, 0
-            pad_sizes[m_idx] = pad_size
+            pad_sizes[classmate_idx] = pad_size
             # Pass as keyword to avoid any binding issues through the worker group wrappers
             fut = worker_group.generate_classmate_continuations(data=cls_batch_padded)
-            futures.append((m_idx, fut))
+            futures.append((classmate_idx, fut))
 
         # Resolve all models in parallel (DataProtoFuture -> DataProto)
         resolved = [f.get() for _, f in futures]
 
         # Stitch results by model index (unpad each model's result individually)
-        for (m_idx, _), result_dp in zip(futures, resolved):
-            pad_size = pad_sizes.get(m_idx, 0)
+        for (classmate_idx, _), result_dp in zip(futures, resolved):
+            pad_size = pad_sizes.get(classmate_idx, 0)
             if pad_size and pad_size > 0:
                 result_dp = unpad_dataproto(result_dp, pad_size=pad_size)
             cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz, num_return_sequences)
             assert len(cls_out) == bsz, (
-                f"Expected {bsz} outputs from model {m_idx}, got {len(cls_out)}"
+                f"Expected {bsz} outputs from model {classmate_idx}, got {len(cls_out)}"
             )
             for i in range(bsz):
-                per_sample = cls_out[i]
-                # Normalize to list[str] to support num_samples_per_classmate >= 1
-                if isinstance(per_sample, str):
-                    per_sample = [per_sample]
-                elif isinstance(per_sample, tuple):
-                    per_sample = list(per_sample)
-                elif hasattr(per_sample, "tolist"):
-                    per_sample = per_sample.tolist()
+                # per_sample = cls_out[i]
+                # if isinstance(per_sample, str):
+                #     per_sample = [per_sample]
+                # elif isinstance(per_sample, tuple):
+                #     per_sample = list(per_sample)
+                # elif hasattr(per_sample, "tolist"):
+                #     per_sample = per_sample.tolist()
                 # Ensure it is a list of strings
-                if per_sample is None:
-                    per_sample = []
-                outputs[i][m_idx] = per_sample
+                # if per_sample is None:
+                #     per_sample = []
+                outputs[i][classmate_idx] = cls_out[i]
 
         batch.non_tensor_batch["classmate_outputs"] = np.array(outputs)
+        # Expected shape: (bsz, num_models, num_return_sequences)
+        assert batch.non_tensor_batch["classmate_outputs"].shape == (bsz, num_models, self.classmate_generation_configs.num_return_sequences), \
+            f"Expected shape {(bsz, num_models, self.classmate_generation_configs.num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
 
         return batch
 

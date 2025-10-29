@@ -24,6 +24,7 @@ def default_compute_score(
     sandbox_fusion_url=None,
     concurrent_semaphore=None,
     memory_limit_mb=None,
+    method=None,
     **kwargs,
 ):
     """Compute the score for a given solution based on the data source.
@@ -44,7 +45,7 @@ def default_compute_score(
     if data_source == "openai/gsm8k":
         from . import gsm8k
 
-        res = gsm8k.compute_score(solution_str, ground_truth)
+        res = gsm8k.compute_score(solution_str, ground_truth, method=method)
     elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval", "HuggingFaceH4/MATH-500"]:
         from . import math_reward
 
@@ -123,12 +124,13 @@ def _default_compute_score(
     sandbox_fusion_url=None,
     concurrent_semaphore=None,
     memory_limit_mb=None,
+    method=None,
 ):
     """
     Legacy function API to be deprecated. Please use `default_compute_score` instead.
     """
     return default_compute_score(
-        data_source, solution_str, ground_truth, extra_info, sandbox_fusion_url, concurrent_semaphore, memory_limit_mb
+        data_source, solution_str, ground_truth, extra_info, sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, method
     )
 
 

@@ -90,6 +90,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         already_print_data_sources = {}
 
+        # print("🐛🐛🐛 data", data)
+        # print("🐛🐛🐛 classmate_outputs", data.non_tensor_batch["classmate_outputs"].shape)
+
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
@@ -148,18 +151,28 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         solution_str=classmate_output_sample,
                         ground_truth=ground_truth,
                         extra_info=extra_info,
+                        # TODO flexible for classmate
+                        method="flexible",
                     )
+                    # print(f"""
+                    # 🐛 Sample data_source: {data_source}
+                    # 🐛 Sample ground_truth: {ground_truth}
+                    # 🐛 Sample extra_info: {extra_info}
+                    # 🐛 Sample main model response: {response_str}
+                    # 🐛 Sample main model reward: {base_reward}
+                    # 🐛 Sample classmate response: {classmate_output_sample}
+                    # 🐛 Sample tmp_classmate_reward: {tmp_classmate_reward}
+                    # """)
                 # Average over num_return_sequences
                 tmp_classmate_reward /= len(classmate_output)
                 classmate_reward += tmp_classmate_reward * classmate_model_weights[classmate_idx]
 
-            # TODO haha check shape (esp. for multiple classmate models)
-            print(f"🐛🐛🐛classmate_outputs: {classmate_outputs}"
-                  f" classmate_reward: {classmate_reward}")
-            breakpoint()
+            # print(f"🐛classmate_outputs: {classmate_outputs} classmate_reward: {classmate_reward}")
+            # breakpoint()
 
             # Combine actor and classmate rewards
-            final_reward = base_reward + classmate_reward * self.classmate_reward_weight
+            # final_reward = base_reward + classmate_reward * self.classmate_reward_weight
+            final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
             reward_extra_info["base_reward"].append(base_reward)
             reward_extra_info["classmate_reward"].append(classmate_reward)
             reward_extra_info["final_reward"].append(final_reward)

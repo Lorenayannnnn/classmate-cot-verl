@@ -1,4 +1,6 @@
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorWithPadding
+
+from verl.utils.dataset.rl_dataset import collate_fn
 
 
 def upload_ckpts_to_huggingface():
@@ -111,5 +113,35 @@ def upload_ckpts_to_huggingface():
             print(f"  - {step_dir.name}")
 
 
+def test():
+    test = [
+        "This is a test function.",
+        "It tests loading the uploaded model from Hugging Face Hub.",
+        "The model should be able to tokenize this input properly."
+    ]
+    model_name_path = "allenai/OLMo-2-0425-1B-DPO"
+    tokenizer = AutoTokenizer.from_pretrained(model_name_path)
+    tokenizer.padding_side = "left"
+    encoded_features = [
+        tokenizer(t, padding=False, return_attention_mask=True)
+        for t in test
+    ]
+    # collate
+    collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="pt")
+    batch = collator(encoded_features)
+    print(batch)
+
+    for output_id in batch["input_ids"]:
+        decode = tokenizer.decode(output_id, skip_special_tokens=True)
+        print(decode)
+
+    batch_decode = tokenizer.batch_decode(batch["input_ids"], skip_special_tokens=True)
+    print(batch_decode)
+    batch_decode = tokenizer.batch_decode(batch["input_ids"], skip_special_tokens=False)
+    print(batch_decode)
+
+
+
 if __name__ == "__main__":
-    upload_ckpts_to_huggingface()
+    # upload_ckpts_to_huggingface()
+    test()

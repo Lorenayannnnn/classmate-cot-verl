@@ -95,7 +95,16 @@
       - ```_prepare_classmate_batch()```: change prompts based on reward_type / continue_mode
       - Use [ClassmateWorker](verl/workers/classmate_workers.py) to do the sampling
         - Take in model_path and initialize model and tokenizer
-        - Return outputs with shape (bsz, num_return_sequences)
+        - Return outputs with shape (bsz, classmate_num, num_return_sequences)
+        - ```_generate_classmate_continuations()```: 
     - ```marked_timer("reward", timing_raw, color="yellow"):```: 
       Use [classmate reward manager](verl/workers/reward_manager/classmate_cot_rm.py) to calculate classmate rewards (built on top of naive reward manager for GRPO)
       - Calculate Classmate Rewards: For each batch item, iterate through all samples from each classmate model, calculate each sample's reward one by one, average across samples for each classmate, and do weighted average across all classmate models (TODO: now the classmate's weights are fixed to be average)
+
+
+- Some painpoints:
+  - Took some times to navigate the entire pipeline (it's fairly modular, but takes some time to figure out how different actors interact & got scheduled. Should have read their docs first)
+  - How to initialize workers and share resource pool with other actor & reference rollout workers
+  - How to do classmate sampling in parallel + onload & offload models before and after sampling
+  - Just hard to debug: can't use pdb in ray actors. Need to wait for a while to start the program every time.
+  - How to create multiple vLLM engines (still unsolved)

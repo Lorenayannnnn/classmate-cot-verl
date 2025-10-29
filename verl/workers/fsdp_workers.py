@@ -380,6 +380,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
                 trust_remote_code=trust_remote_code,
             )
 
+            # TODO modify
+            actor_module.generation_config.pad_token_id = self.tokenizer.pad_token_id
+
             # Apply Liger kernel to the model if use_liger is set to True
             if use_liger:
                 from liger_kernel.transformers.monkey_patch import _apply_liger_kernel_to_instance

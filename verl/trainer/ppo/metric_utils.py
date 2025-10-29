@@ -97,6 +97,8 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
             - critic/returns/mean, max, min: Statistics about returns
             - critic/values/mean, max, min: Statistics about critic values (if use_critic=True)
             - critic/vf_explained_var: Explained variance of the value function (if use_critic=True)
+            - critic/main_model_reward/mean, max, min: Statistics about main model rewards (if available)
+            - critic/classmate_reward/mean, max, min: Statistics about classmate rewards (if available)
             - response_length/mean, max, min, clip_ratio: Statistics about response lengths
             - prompt_length/mean, max, min, clip_ratio: Statistics about prompt lengths
             - num_turns/mean, max, min: Statistics about the number of multi-turn conversations
@@ -220,6 +222,24 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         metrics["tool_call_counts/min"] = tool_call_counts.min()
         metrics["tool_call_counts/max"] = tool_call_counts.max()
         metrics["tool_call_counts/mean"] = tool_call_counts.mean()
+
+    if "classmate_reward" in batch.non_tensor_batch:
+        # Classmate CoT reward breakdown metrics
+        base_rewards = batch.non_tensor_batch["base_reward"]
+        # Filter out aborted samples for base_reward statistics
+        non_aborted_base_rewards = base_rewards[non_aborted_mask.cpu().numpy()]
+        if len(non_aborted_base_rewards) > 0:
+            metrics["critic/main_model_reward/mean"] = float(np.mean(non_aborted_base_rewards))
+            metrics["critic/main_model_reward/max"] = float(np.max(non_aborted_base_rewards))
+            metrics["critic/main_model_reward/min"] = float(np.min(non_aborted_base_rewards))
+
+        classmate_rewards = batch.non_tensor_batch["classmate_reward"]
+        # Filter out aborted samples for classmate_reward statistics
+        non_aborted_classmate_rewards = classmate_rewards[non_aborted_mask.cpu().numpy()]
+        if len(non_aborted_classmate_rewards) > 0:
+            metrics["critic/classmate_reward/mean"] = float(np.mean(non_aborted_classmate_rewards))
+            metrics["critic/classmate_reward/max"] = float(np.max(non_aborted_classmate_rewards))
+            metrics["critic/classmate_reward/min"] = float(np.min(non_aborted_classmate_rewards))
 
     return metrics
 

@@ -338,7 +338,6 @@ class ClassmateCoTTaskRunner:
         )
         train_sampler = create_rl_sampler(config.data, train_dataset)
 
-        # Initialize the ClassmateCoT PPO trainer.
         trainer = ClassmateCoTRayPPOTrainer(
             config=config,
             tokenizer=tokenizer,
@@ -353,7 +352,11 @@ class ClassmateCoTTaskRunner:
             collate_fn=collate_fn,
             train_sampler=train_sampler,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
+            classmate_batch_size=config.reward_model.classmate_batch_size,
+            classmate_free_cache_engine=config.reward_model.classmate_free_cache_engine,
+            classmate_use_vllm=config.reward_model.classmate_use_vllm,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
+            classmate_vllm_configs=config.reward_model.classmate_vllm_configs,
         )
         # Initialize the workers of the trainer.
         trainer.init_workers()
