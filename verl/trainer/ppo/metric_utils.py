@@ -210,6 +210,14 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         "prompt_length/clip_ratio": torch.mean(torch.eq(prompt_length, max_prompt_length).float()).detach().item(),
     }
 
+    base_rewards = batch.non_tensor_batch["base_reward"]
+    # Filter out aborted samples for base_reward statistics
+    non_aborted_base_rewards = base_rewards[non_aborted_mask.cpu().numpy()]
+    if len(non_aborted_base_rewards) > 0:
+        metrics["critic/main_model_reward/mean"] = float(np.mean(non_aborted_base_rewards))
+        metrics["critic/main_model_reward/max"] = float(np.max(non_aborted_base_rewards))
+        metrics["critic/main_model_reward/min"] = float(np.min(non_aborted_base_rewards))
+
     # multi-turn conversation
     if "__num_turns__" in batch.non_tensor_batch:
         num_turns = batch.non_tensor_batch["__num_turns__"]
@@ -223,16 +231,9 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         metrics["tool_call_counts/max"] = tool_call_counts.max()
         metrics["tool_call_counts/mean"] = tool_call_counts.mean()
 
+    # Train with classmate models
     if "classmate_reward" in batch.non_tensor_batch:
         # Classmate CoT reward breakdown metrics
-        base_rewards = batch.non_tensor_batch["base_reward"]
-        # Filter out aborted samples for base_reward statistics
-        non_aborted_base_rewards = base_rewards[non_aborted_mask.cpu().numpy()]
-        if len(non_aborted_base_rewards) > 0:
-            metrics["critic/main_model_reward/mean"] = float(np.mean(non_aborted_base_rewards))
-            metrics["critic/main_model_reward/max"] = float(np.max(non_aborted_base_rewards))
-            metrics["critic/main_model_reward/min"] = float(np.min(non_aborted_base_rewards))
-
         classmate_rewards = batch.non_tensor_batch["classmate_reward"]
         # Filter out aborted samples for classmate_reward statistics
         non_aborted_classmate_rewards = classmate_rewards[non_aborted_mask.cpu().numpy()]

@@ -1,8 +1,8 @@
 set -x
 
 
-gsm8k_train_path=$HOME/data/gsm8k/train.parquet
-gsm8k_test_path=$HOME/data/gsm8k/test.parquet
+gsm8k_train_path=/data/gsm8k/train.parquet
+gsm8k_test_path=/data/gsm8k/test.parquet
 #math_train_path=$HOME/data/math/train.parquet
 #math_test_path=$HOME/data/math/test.parquet
 
@@ -14,15 +14,15 @@ train_files="['$gsm8k_train_path']"
 test_files="['$gsm8k_test_path']"
 #1320
 
-total_episodes=200000
+total_episodes=400000
 train_size=7470
 train_batch_size=512
 mini_batch_size_per_gpu=128
 gpu_num=4
 
 # Note: Currently train_batch_size = gpu_num * mini_batch_size_per_gpu, which causes ratio between current policy and original ref to always be 1 -> no clipping effect.
-total_ckpts=20
-total_test_times=5
+total_ckpts=40
+total_test_times=10
 
 epoch_num=$((total_episodes / train_size))
 gpu_for_train=${gpu_num}
@@ -43,7 +43,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     actor_rollout_ref.model.path=allenai/OLMo-2-0425-1B-DPO \
     actor_rollout_ref.actor.optim.lr=3e-7 \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu*gpu_for_train)) \
+    actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.1 \

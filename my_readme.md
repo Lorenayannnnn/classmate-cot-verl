@@ -1,6 +1,8 @@
 
 
-## Setup environment
+## Setup server environment
+
+### Install zsh and Oh My Zsh
 - Install zsh:
   ```
   sudo apt update
@@ -14,7 +16,16 @@
   ```
   This will install Oh My Zsh and automatically backup your existing `.zshrc` file.
 
+### Install docker
 
+[//]: # (TODO need to complete)
+- Follow the official Docker installation guide for your operating system: https://docs.docker.com/get-docker/
+- After installation, verify that Docker is installed correctly by running:
+  ```bash
+  docker --version
+  ```
+
+### Create user
 - create user:
   - adduser lorena
   - Generate ssh key:
@@ -28,6 +39,42 @@
     chmod 600 /home/lorena/.ssh/authorized_keys
     ```
 
+## Install environment for the project
+### Install docker:
+- Install dependency with docker:
+  - If encounter layer registration permission issue, then need to change the data-root-dir to a non-nsf filesystem.
+    ~/.config/docker/daemon.json
+    ```
+    {
+[//]: # (    "data-root": "/local/docker-storage/docker_users_data/lorenayan",)
+    "/local/data/lorena/docker-storage"
+[//]: # (    "storage-driver": "vfs")
+     }
+    systemctl --user restart docker
+    ```
+- Build docker image:
+  ```
+  bash my_scripts/create_docker.sh
+  docker start verl
+  docker exec -it verl bash
+  ```
+- Install zsh/oh-my-zsh in docker container:
+  ```
+  apt update
+  apt install zsh
+
+  zsh --version
+  
+  sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  ```
+- Change ~/.bashrc:
+  ```
+  cd verl
+  zsh
+  ```
+- 
+
+### Install with miniconda (if not docker):
 - Setup miniconda:
   ```
   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
@@ -46,11 +93,10 @@
     ```
     conda --version
     ```
-
-- Install dependency:
+- Install dependency with conda:
   - conda create -n verl python==3.12
   - conda activate verl
-  - bash scripts/install_vllm_sglang_mcore.sh
+  - USE_MEGATRON=0 bash scripts/install_vllm_sglang_mcore.sh
   - pip install --no-deps -e .
 
 
@@ -108,3 +154,7 @@
   - How to do classmate sampling in parallel + onload & offload models before and after sampling
   - Just hard to debug: can't use pdb in ray actors. Need to wait for a while to start the program every time.
   - How to create multiple vLLM engines (still unsolved)
+
+## Storage path
+- /local/data/lorena/
+- /proj/interaction/interaction-filer/lorena/classmate-cot-verl

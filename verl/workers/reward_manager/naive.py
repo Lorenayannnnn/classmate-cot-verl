@@ -101,6 +101,7 @@ class NaiveRewardManager(AbstractRewardManager):
             else:
                 reward = score
 
+            reward_extra_info["base_reward"].append(reward)     # Temporarily added for drawing main model's reward of baseline & one trained with classmate in the same figure
             reward_tensor[i, valid_response_length - 1] = reward
 
             if data_source not in already_print_data_sources:

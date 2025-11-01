@@ -1,3 +1,5 @@
+import os
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorWithPadding
 
 from verl.utils.dataset.rl_dataset import collate_fn
@@ -8,9 +10,13 @@ def upload_ckpts_to_huggingface():
     from huggingface_hub import HfApi, create_repo
     from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
-    ROOT = Path("outputs/classmate_cot_w_verl/grpo_olmo_1B_gsm8k_baseline")
     USER_OR_ORG = "LorenaYannnnn"                 # <-- change if needed
-    REPO_NAME = "classmate-cot-baseline"  # single repo name
+    # ROOT = Path("outputs/classmate_cot_w_verl/grpo_olmo_1B_gsm8k_baseline")
+    # REPO_NAME = "classmate-cot-baseline"  # single repo name
+
+    ROOT = Path("outputs/classmate_cot_w_verl/grpo_olmo_1B_with_classmate_llama")
+    REPO_NAME = "classmate-cot-grpo_olmo_1B_with_classmate_llama"  # single repo name
+
     PRIVATE = True                                # set False to make public
 
     api = HfApi()
@@ -27,9 +33,9 @@ def upload_ckpts_to_huggingface():
     # Discover candidate subdirs (e.g., global_step_114, global_step_133, ...)
     sub_dirs = sorted([p for p in ROOT.iterdir() if p.is_dir()])
     sub_dirs.sort(key=lambda p: int(p.name.split('_')[-1]))
-    total_cnt = len(sub_dirs)
-    total_cnt = int(total_cnt * 3 / 4)  # only upload last 3/4 checkpoints
-    sub_dirs = sub_dirs[total_cnt:]  # adjust if you want to limit number of uploads
+    # total_cnt = len(sub_dirs)
+    # total_cnt = int(total_cnt * 3 / 4)  # only upload last 3/4 checkpoints
+    # sub_dirs = sub_dirs[total_cnt:]  # adjust if you want to limit number of uploads
 
     for step_dir in sub_dirs:
         hf_dir = step_dir / "actor" / "huggingface"
@@ -113,6 +119,25 @@ def upload_ckpts_to_huggingface():
             print(f"  - {step_dir.name}")
 
 
+def download_huggingface_ckpt():
+    from transformers import AutoModelForCausalLM
+
+    model_name_path = "LorenaYannnnn/classmate-cot-baseline"
+    all_revision_steps = [f"global_step_{step_idx * 19}" for step_idx in range(1, 20)] + ["global_step_364"]
+    output_dir = "/local/data/lorena/grpo_olmo_1B_gsm8k_baseline"
+    for revision in all_revision_steps:
+        save_path = f"{output_dir}/{revision}/actor/huggingface"
+        if os.path.exists(save_path):
+            print(f"Skipped revision {revision}, already exists at {save_path}.")
+            continue
+        try:
+            model = AutoModelForCausalLM.from_pretrained(model_name_path, revision=revision)
+            model.save_pretrained(save_path)
+            print(f"Saved checkpoint {revision} to {save_path}")
+        except:
+            print(f"Skipped revision {revision}, could not be loaded.")
+
+
 def test():
     test = [
         "This is a test function.",
@@ -144,4 +169,9 @@ def test():
 
 if __name__ == "__main__":
     # upload_ckpts_to_huggingface()
-    test()
+    # download_huggingface_ckpt()
+    # test()
+
+    # Write a text file to /proj/interaction/interaction-filer/lorena/classmate-cot-verl
+    with open("/proj/interaction/interaction-filer/lorena/classmate-cot-verl/upload_log.txt", "w") as f:
+        f.write("Upload completed successfully.\n")
