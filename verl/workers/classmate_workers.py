@@ -17,6 +17,7 @@ import logging
 import os
 
 import numpy as np
+from omegaconf import OmegaConf
 from transformers import AutoTokenizer
 from transformers import DataCollatorWithPadding
 # from tqdm import tqdm
@@ -40,6 +41,7 @@ class ClassmateWorkerConfig:
     classmate_batch_size: int
     classmate_free_cache_engine: bool
     classmate_use_vllm: bool
+    classmate_num_return_sequences: int
 
     generation_config: Dict[str, Any]
     """
@@ -47,7 +49,6 @@ class ClassmateWorkerConfig:
     do_sample: True
     temperature: 0.7
     top_p: 0.9
-    num_return_sequences: 1
     """
 
     vllm_config: Dict[str, Any]
@@ -94,6 +95,16 @@ class ClassmateWorker(Worker):
         # Initialize model and tokenizer as None - will be loaded in init_model()
         self.tokenizer = None
         self.llm = None
+        OmegaConf.set_struct(self.generation_config, False)
+        if self.use_vllm:
+            self.generation_config.num_return_sequences = config.classmate_num_return_sequences
+        else:
+            self.generation_config.n = config.classmate_num_return_sequences
+        OmegaConf.set_struct(self.generation_config, True)
+
+
+
+            
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
@@ -165,24 +176,25 @@ class ClassmateWorker(Worker):
         Simply calls wake_up() if available - vLLM handles the internal details.
         """
         if self.use_vllm:
-            if self.llm is None:
-                raise RuntimeError(f"vLLM engine for classmate model {self.model_index} is not initialized")
-
-            if not self.free_cache_engine:
-                return  # No need to wake up if sleep mode is disabled
-
-            try:
-                # Wake up the vLLM engine (load weights and KV cache back to GPU)
-                if hasattr(self.llm, 'llm_engine') and hasattr(self.llm.llm_engine, 'wake_up'):
-                    # For LLM with llm_engine attribute
-                    self.llm.llm_engine.wake_up()
-                elif hasattr(self.llm, 'wake_up'):
-                    # For regular LLM class
-                    self.llm.wake_up()
-
-                log_gpu_memory_usage(f"After onloading classmate model {self.model_index}", logger=logger)
-            except Exception as e:
-                logger.warning(f"Failed to wake up classmate model {self.model_index}: {e}")
+            pass
+            # if self.llm is None:
+            #     raise RuntimeError(f"vLLM engine for classmate model {self.model_index} is not initialized")
+            #
+            # if not self.free_cache_engine:
+            #     return  # No need to wake up if sleep mode is disabled
+            #
+            # try:
+            #     # Wake up the vLLM engine (load weights and KV cache back to GPU)
+            #     if hasattr(self.llm, 'llm_engine') and hasattr(self.llm.llm_engine, 'wake_up'):
+            #         # For LLM with llm_engine attribute
+            #         self.llm.llm_engine.wake_up()
+            #     elif hasattr(self.llm, 'wake_up'):
+            #         # For regular LLM class
+            #         self.llm.wake_up()
+            #
+            #     log_gpu_memory_usage(f"After onloading classmate model {self.model_index}", logger=logger)
+            # except Exception as e:
+            #     logger.warning(f"Failed to wake up classmate model {self.model_index}: {e}")
         else:
             if self.llm is None:
                 raise RuntimeError(f"Huggingface model for classmate model {self.model_index} is not initialized")
@@ -200,26 +212,27 @@ class ClassmateWorker(Worker):
         Uses aggressive_empty_cache for cleanup like FSDP workers.
         """
         if self.use_vllm:
-            if self.llm is None:
-                return
-
-            if not self.free_cache_engine:
-                return  # No need to sleep if sleep mode is disabled
-
-            try:
-                # Put the vLLM engine to sleep (offload weights and KV cache from GPU)
-                if hasattr(self.llm, 'llm_engine') and hasattr(self.llm.llm_engine, 'sleep'):
-                    # For LLM with llm_engine attribute
-                    self.llm.llm_engine.sleep()
-                elif hasattr(self.llm, 'sleep'):
-                    # For regular LLM class
-                    self.llm.sleep()
-
-                # Aggressive cache cleanup (following FSDP workers pattern)
-                aggressive_empty_cache(force_sync=True)
-                log_gpu_memory_usage(f"After offloading classmate model {self.model_index}", logger=logger)
-            except Exception as e:
-                logger.warning(f"Failed to sleep classmate model {self.model_index}: {e}")
+            pass
+            # if self.llm is None:
+            #     return
+            #
+            # if not self.free_cache_engine:
+            #     return  # No need to sleep if sleep mode is disabled
+            #
+            # try:
+            #     # Put the vLLM engine to sleep (offload weights and KV cache from GPU)
+            #     if hasattr(self.llm, 'llm_engine') and hasattr(self.llm.llm_engine, 'sleep'):
+            #         # For LLM with llm_engine attribute
+            #         self.llm.llm_engine.sleep()
+            #     elif hasattr(self.llm, 'sleep'):
+            #         # For regular LLM class
+            #         self.llm.sleep()
+            #
+            #     # Aggressive cache cleanup (following FSDP workers pattern)
+            #     aggressive_empty_cache(force_sync=True)
+            #     log_gpu_memory_usage(f"After offloading classmate model {self.model_index}", logger=logger)
+            # except Exception as e:
+            #     logger.warning(f"Failed to sleep classmate model {self.model_index}: {e}")
         else:
             if self.llm is None:
                 return
@@ -258,21 +271,19 @@ class ClassmateWorker(Worker):
             # if isinstance(prompts, np.ndarray):
             #     prompts = prompts.tolist()
             
-            num_return_sequences = self.generation_config.num_return_sequences
-            assert num_return_sequences == 1, "Classmate worker currently only supports num_return_sequences=1"
+            assert self.classmate_num_return_sequences == 1, "Classmate worker currently only supports num_return_sequences=1"
 
             print(f"Start sampling from classmate model {self.model_index} for {len(prompt_plus_actor_responses)} inputs")
 
             if self.use_vllm:
                 raise NotImplementedError("vLLM support is currently disabled for classmate workers.")
-                from vllm import SamplingParams
-
-                # Convert generation_config to vLLM SamplingParams
-                sampling_params = SamplingParams(
-                    n=num_return_sequences,
-                    **self.generation_config,
-                    skip_special_tokens=True,
-                )
+                # from vllm import SamplingParams
+                #
+                # # Convert generation_config to vLLM SamplingParams
+                # sampling_params = SamplingParams(
+                #     **self.generation_config,
+                #     skip_special_tokens=True,
+                # )
 
                 # Process in batches to manage memory
                 total_samples = len(prompt_plus_actor_responses)
@@ -373,8 +384,7 @@ class ClassmateWorker(Worker):
             traceback.print_exc()
             # Return empty outputs matching expected shape
             bsz = len(data.non_tensor_batch.prompt_plus_actor_responses)
-            num_return_sequences = self.generation_config.num_return_sequences
-            classmate_outputs = [[""] * num_return_sequences for _ in range(bsz)]
+            classmate_outputs = [[""] * self.classmate_num_return_sequences for _ in range(bsz)]
         
         finally:
             # OFFLOAD: Offload model from GPU after generation (following ActorRolloutRef pattern)

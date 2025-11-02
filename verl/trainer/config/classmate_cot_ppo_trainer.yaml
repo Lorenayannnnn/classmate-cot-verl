@@ -83,17 +83,19 @@ reward_model:
   
   classmate_batch_size: 64
   classmate_free_cache_engine: True
-  classmate_use_vllm: False
+  classmate_use_vllm: True
+  classmate_num_return_sequences: 1
   classmate_generation_configs:
     max_new_tokens: 256   # TODO might change it to (1 - random_keep_rate) * actor's data.max_response_length
     do_sample: True
     temperature: 0.7
     top_p: 0.9
-    num_return_sequences: 1
   classmate_vllm_configs:
-    gpu_memory_utilization: 0.9
+    gpu_memory_utilization: 0.8
     tensor_parallel_size: 1
     max_model_len: null
+    enable_sleep_mode: True
+
 
 # config for the algorithm
 algorithm:

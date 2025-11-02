@@ -355,6 +355,7 @@ class ClassmateCoTTaskRunner:
             classmate_batch_size=config.reward_model.classmate_batch_size,
             classmate_free_cache_engine=config.reward_model.classmate_free_cache_engine,
             classmate_use_vllm=config.reward_model.classmate_use_vllm,
+            classmate_num_return_sequences=config.reward_model.classmate_num_return_sequences,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
             classmate_vllm_configs=config.reward_model.classmate_vllm_configs,
         )

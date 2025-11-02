@@ -293,6 +293,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_batch_size=None,
         classmate_free_cache_engine=None,
         classmate_use_vllm=None,
+        classmate_num_return_sequences=None,
         classmate_generation_configs=None,
         classmate_vllm_configs=None,
     ):
@@ -362,6 +363,7 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_batch_size = classmate_batch_size
         self.classmate_free_cache_engine = classmate_free_cache_engine
         self.classmate_use_vllm = classmate_use_vllm
+        self.classmate_num_return_sequences = classmate_num_return_sequences
         self.classmate_generation_configs = classmate_generation_configs
         self.classmate_vllm_configs = classmate_vllm_configs
 
@@ -764,6 +766,7 @@ class ClassmateCoTRayPPOTrainer:
                 classmate_batch_size=self.classmate_batch_size,
                 classmate_free_cache_engine=self.classmate_free_cache_engine,
                 classmate_use_vllm=self.classmate_use_vllm,
+                classmate_num_return_sequences=self.classmate_num_return_sequences,
                 max_prompt_len=self.config.data.max_prompt_length,
                 generation_config=self.classmate_generation_configs,
                 vllm_config=self.classmate_vllm_configs,
