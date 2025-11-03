@@ -172,6 +172,21 @@ if __name__ == "__main__":
     # download_huggingface_ckpt()
     # test()
 
-    # Write a text file to /proj/interaction/interaction-filer/lorena/classmate-cot-verl
-    with open("/proj/interaction/interaction-filer/lorena/classmate-cot-verl/upload_log.txt", "w") as f:
-        f.write("Upload completed successfully.\n")
+    tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-2-0425-1B-DPO")
+
+    batch_prompts = [
+        "What is the capital of France?",
+        "Solve the equation: 2x + 3 = 7.",
+        "Explain the theory of relativity in simple terms."
+    ]
+
+    batch_attn_mask = tokenizer(
+        batch_prompts,
+        padding=True,
+        return_tensors="pt",
+    )["attention_mask"]
+
+    int(batch_attn_mask.sum(dim=1).max())
+
+    breakpoint()
+

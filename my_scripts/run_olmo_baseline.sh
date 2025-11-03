@@ -14,7 +14,7 @@ train_files="['$gsm8k_train_path']"
 test_files="['$gsm8k_test_path']"
 #1320
 
-total_episodes=400000
+total_episodes=800000
 train_size=7470
 train_batch_size=512
 mini_batch_size_per_gpu=128

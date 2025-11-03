@@ -172,7 +172,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             # Combine actor and classmate rewards
             # final_reward = base_reward + classmate_reward * self.classmate_reward_weight
-            final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
+            # final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
+            final_reward = base_reward + self.classmate_reward_weight * classmate_reward
             reward_extra_info["base_reward"].append(base_reward)
             reward_extra_info["classmate_reward"].append(classmate_reward)
             reward_extra_info["final_reward"].append(final_reward)

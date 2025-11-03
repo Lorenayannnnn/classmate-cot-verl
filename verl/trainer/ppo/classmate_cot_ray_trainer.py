@@ -296,6 +296,8 @@ class ClassmateCoTRayPPOTrainer:
         classmate_num_return_sequences=None,
         classmate_generation_configs=None,
         classmate_vllm_configs=None,
+        seed=None,
+        host_classmate_name_to_url_json_fn=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -363,8 +365,21 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_batch_size = classmate_batch_size
         self.classmate_free_cache_engine = classmate_free_cache_engine
         self.classmate_use_vllm = classmate_use_vllm
-        self.classmate_num_return_sequences = classmate_num_return_sequences
         self.classmate_generation_configs = classmate_generation_configs
+        self.host_classmate_name_to_url_json_fn = host_classmate_name_to_url_json_fn
+
+        OmegaConf.set_struct(self.classmate_generation_configs, False)
+        if not self.classmate_generation_configs.do_sample:
+            self.classmate_generation_configs["temperature"] = 0.0
+            self.classmate_generation_configs["top_p"] = 1.0
+        if classmate_use_vllm:
+            self.classmate_generation_configs.n = classmate_num_return_sequences
+            self.classmate_generation_configs.seed = seed
+            self.classmate_generation_configs.pop("do_sample")
+        else:
+            self.classmate_generation_configs.num_return_sequences = classmate_num_return_sequences
+        OmegaConf.set_struct(self.classmate_generation_configs, True)
+
         self.classmate_vllm_configs = classmate_vllm_configs
 
         # if ref_in_actor is True, the reference policy will be actor without lora applied
@@ -754,22 +769,29 @@ class ClassmateCoTRayPPOTrainer:
 
         # TODO modify: create classmates, one worker per model
         model_paths = self.classmate_cot_reward_configs.classmate_model_name_or_path_list
+        # Read in host_classmate_name_to_url_json_fn
+        with open(self.host_classmate_name_to_url_json_fn, "r") as f:
+            host_classmate_name_to_url = json.load(f)
         for model_idx, model_path in enumerate(model_paths):
             # All classmate workers share the same resource pool
             # For different resource pools per model, modify ResourcePoolManager mapping
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.ClassmateWorker)
 
+            if model_path not in host_classmate_name_to_url:
+                raise ValueError(f"Model path {model_path} not found in host_classmate_name_to_url mapping.")
+
             # Create separate config for each model
-            classmate_config_config = ClassmateWorkerConfig(
+            classmate_config = ClassmateWorkerConfig(
                 model_name_or_path=model_path,
                 model_index=model_idx,
                 classmate_batch_size=self.classmate_batch_size,
                 classmate_free_cache_engine=self.classmate_free_cache_engine,
                 classmate_use_vllm=self.classmate_use_vllm,
-                classmate_num_return_sequences=self.classmate_num_return_sequences,
-                max_prompt_len=self.config.data.max_prompt_length,
+                max_new_tokens=self.classmate_generation_configs.max_new_tokens,
                 generation_config=self.classmate_generation_configs,
                 vllm_config=self.classmate_vllm_configs,
+                api_host=host_classmate_name_to_url[model_path]["local_host"],        # TODO for now only support using the same server
+                api_port=host_classmate_name_to_url[model_path]["port"],
             )
 
             # Create unique role name for each classmate model worker group
@@ -777,7 +799,7 @@ class ClassmateCoTRayPPOTrainer:
 
             classmate_worker_cls = RayClassWithInitArgs(
                 cls=self.role_worker_mapping[Role.ClassmateWorker],
-                config=classmate_config_config,
+                config=classmate_config,
                 role=classmate_role_name,
             )
             self.resource_pool_to_cls[resource_pool][classmate_role_name] = classmate_worker_cls

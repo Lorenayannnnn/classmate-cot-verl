@@ -62,10 +62,11 @@
   ```
   apt update
   apt install zsh
-
   zsh --version
-  
   sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  
+  hf auth login
+  wandb login
   ```
 - Change ~/.bashrc:
   ```
@@ -100,32 +101,9 @@
   - pip install --no-deps -e .
 
 
-## Modify for classmate CoT
+## Modify for classmate CoT training
 
 - Add config: [classmate_cot_ppo_trainer.yaml](verl/trainer/config/classmate_cot_ppo_trainer.yaml)
-  - reward_model:
-    - reward_manager: classmate_cot     # verl/workers/reward_manager/classmate_cot.py
-
-    - classmate_cot_reward_configs:
-      # "Qwen/Qwen2.5-7B-Instruct", "mistralai/Ministral-8B-Instruct-2410", "meta-llama/Llama-3.1-8B-Instruct"
-      # "meta-llama/Llama-3.2-1B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct", "allenai/OLMo-2-0425-1B-Instruct", "allenai/OLMo-2-0425-1B-SFT"
-      classmate_model_name_or_path_list: ["meta-llama/Llama-3.2-1B-Instruct"]
-
-      classmate_reward_weight: 1.0
-
-      # vanilla, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
-      classmate_reward_type: vanilla_reward
-
-      # "immediate_answer", "continue_cot"
-      classmate_continue_mode: continue_cot
-    
-    - classmate_generation_configs:
-      max_new_tokens: 256
-      do_sample: True
-      temperature: 0.7
-      top_p: 0.9
-      num_return_sequences: 1
-
   - (optional) custom compute_score function
 - [classmate training main ppo script](verl/trainer/classmate_cot_main_ppo.py):
   - Change config file name at the top
@@ -154,6 +132,12 @@
   - How to do classmate sampling in parallel + onload & offload models before and after sampling
   - Just hard to debug: can't use pdb in ray actors. Need to wait for a while to start the program every time.
   - How to create multiple vLLM engines (still unsolved)
+
+
+
+
+
+
 
 ## Storage path
 - /local/data/lorena/
