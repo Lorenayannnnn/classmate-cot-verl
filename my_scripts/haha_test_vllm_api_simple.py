@@ -102,8 +102,9 @@ def test_openai_client():
     import time
     from openai import OpenAI
 
-    openai_api_key = "EMPTY"  # vLLM's OpenAI-compatible server doesn't require a real API key
-    openai_api_base = "http://127.0.0.1:8001/v1"  # Remove /v1 - OpenAI client adds it automatically
+    openai_api_key = "EMPTY"  # Keep it EMPTY for local vLLM API server
+    # openai_api_base = "http://127.0.0.1:8000/v1"
+    openai_api_base = "http://coffee.cs.columbia.edu:8000/v1"
 
     client = OpenAI(
         base_url=openai_api_base,
@@ -133,14 +134,14 @@ def test_openai_client():
                 print(f"Output continuation: {choice.text}")
                 print("--------End--------")
                 completions.append(choice.text)
-            return  # Success, exit the function
+            break
 
         except Exception as e:
             print(f"❌ Attempt {attempt} failed: {e}")
             print(f"⏳ Retrying in {retry_delay} seconds...")
             time.sleep(retry_delay)
 
-
+    client.close()
 
 
 if __name__ == "__main__":
@@ -151,7 +152,7 @@ if __name__ == "__main__":
     #
     # # Run tests
     # success = test_vllm_api(host, port, model_name)
-    #
+
     # if not success:
     #     sys.exit(1)
 
@@ -159,5 +160,5 @@ if __name__ == "__main__":
 
 
 
-#python scripts/haha_test_vllm_api_simple.py 127.0.0.1 8000 meta-llama/Llama-3.2-1B-Instruct
-#python scripts/haha_test_vllm_api_simple.py
+#python my_scripts/haha_test_vllm_api_simple.py 127.0.0.1 8000 meta-llama/Llama-3.2-1B-Instruct
+#python my_scripts/haha_test_vllm_api_simple.py

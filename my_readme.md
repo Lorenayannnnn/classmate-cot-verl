@@ -101,6 +101,21 @@
   - pip install --no-deps -e .
 
 
+## Host and test remote classmate vllm engines
+- Directly run vllm serve: [haha_host_classmate_model.sh](my_scripts/host_classmate_model.sh)
+- Then change port number in outputs/host_classmate_models/classmate_model_mapping.json
+
+[//]: # (- Hosting:)
+
+[//]: # (  - [host_classmate_model.py]&#40;my_scripts/deprecate_host_classmate_model.py&#41;)
+
+[//]: # (  - [host_classmate_model.sh]&#40;my_scripts/deprecate_host_classmate_model.sh&#41;)
+
+[//]: # (- Testing:)
+
+[//]: # (  - [haha_test_vllm_api_simple.py]&#40;my_scripts/haha_test_vllm_api_simple.py&#41;)
+
+
 ## Modify for classmate CoT training
 
 - Add config: [classmate_cot_ppo_trainer.yaml](verl/trainer/config/classmate_cot_ppo_trainer.yaml)

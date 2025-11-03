@@ -83,7 +83,7 @@ reward_model:
     host_classmate_name_to_url_json_fn: "outputs/host_classmate_models/classmate_model_mapping.json"
   classmate_batch_size: 64
   classmate_free_cache_engine: True
-  classmate_use_vllm: False
+  classmate_use_vllm: True
   classmate_num_return_sequences: 1
   classmate_generation_configs:
     max_new_tokens: 256   # TODO might change it to (1 - random_keep_rate) * actor's data.max_response_length

@@ -1,4 +1,5 @@
 
+#docker create --gpus all --shm-size="10g" --cap-add=SYS_ADMIN \
 docker create --gpus all --net=host --shm-size="10g" --cap-add=SYS_ADMIN \
   -v .:/workspace/verl \
   -v $HOME/data:/data \

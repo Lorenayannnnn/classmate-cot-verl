@@ -368,6 +368,7 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_generation_configs = classmate_generation_configs
         self.host_classmate_name_to_url_json_fn = host_classmate_name_to_url_json_fn
 
+        self.classmate_num_return_sequences = classmate_num_return_sequences
         OmegaConf.set_struct(self.classmate_generation_configs, False)
         if not self.classmate_generation_configs.do_sample:
             self.classmate_generation_configs["temperature"] = 0.0
@@ -988,8 +989,8 @@ class ClassmateCoTRayPPOTrainer:
 
         batch.non_tensor_batch["classmate_outputs"] = np.array(outputs)
         # Expected shape: (bsz, num_models, num_return_sequences)
-        assert batch.non_tensor_batch["classmate_outputs"].shape == (bsz, num_models, self.classmate_generation_configs.num_return_sequences), \
-            f"Expected shape {(bsz, num_models, self.classmate_generation_configs.num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
+        assert batch.non_tensor_batch["classmate_outputs"].shape == (bsz, num_models, self.classmate_num_return_sequences), \
+            f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
 
         return batch
 

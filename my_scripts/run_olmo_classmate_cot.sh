@@ -18,7 +18,7 @@ total_episodes=400000
 train_size=7470
 train_batch_size=512
 mini_batch_size_per_gpu=128
-gpu_num=4
+gpu_num=2
 
 # Note: Currently train_batch_size = gpu_num * mini_batch_size_per_gpu, which causes ratio between current policy and original ref to always be 1 -> no clipping effect.
 total_ckpts=40
@@ -31,7 +31,7 @@ train_steps=$((total_episodes / train_batch_size))
 #allenai/OLMo-2-0425-1B-DPO
 #allenai/OLMo-2-1124-7B-DPO
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1 python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$test_files" \

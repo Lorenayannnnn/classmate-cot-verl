@@ -99,7 +99,7 @@ class ClassmateWorker(Worker):
         self.llm = None
 
         # API server configuration for remote vLLM serving
-        self.api_base_url = f"http://{config.api_host}:{config.api_port}/v0"
+        self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
         self.client = None
 
     def _generate_via_remote_api(self, batch_prompts: list, batch_max_token_len: int) -> list:
@@ -120,24 +120,24 @@ class ClassmateWorker(Worker):
 
         vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
 
-        # finish = False
-        # while not finish:
-        #     try:
-        #         print("🐛🐛🐛 Send request. Wait...")
-        #         response = self.client.completions.create(**vllm_api_params, timeout=60)
-        #         print(f"🐛🐛🐛 Response received: {response}")
-        #         completions = [choice.text for choice in response.choices]
-        #         print("🐛🐛🐛 Successful vLLM API completions:", completions)
-        #         finish = True
-        #     except Exception as e:
-        #         print(f"Error checking model readiness: {e}")
-        #         time.sleep(5)
+        finish = False
+        while not finish:
+            try:
+                # print("🐛🐛🐛 Send request. Wait...")
+                response = self.client.completions.create(**vllm_api_params, timeout=60)
+                # print(f"🐛🐛🐛 Response received: {response}")
+                completions = [choice.text for choice in response.choices]
+                # print("🐛🐛🐛 Successful vLLM API completions:", completions)
+                finish = True
+            except Exception as e:
+                print(f"Error checking model readiness: {e}")
+                time.sleep(5)
 
-        print("🐛🐛🐛 Send request. Wait...")
-        response = self.client.completions.create(**vllm_api_params, timeout=60)
-        print(f"🐛🐛🐛 Response received: {response}")
-        completions = [choice.text for choice in response.choices]
-        print("🐛🐛🐛 Successful vLLM API completions:", completions)
+        # print("🐛🐛🐛 Send request. Wait...")
+        # response = self.client.completions.create(**vllm_api_params, timeout=60)
+        # print(f"🐛🐛🐛 Response received: {response}")
+        # completions = [choice.text for choice in response.choices]
+        # print("🐛🐛🐛 Successful vLLM API completions:", completions)
 
         return completions
 
@@ -277,8 +277,7 @@ class ClassmateWorker(Worker):
                     batch_completions = self._generate_via_remote_api(batch_prompts, batch_max_token_len)
                     classmate_outputs.extend(batch_completions)
 
-                # TODO haha
-                print(f"🐛🐛 Classmate completions: {classmate_outputs}")
+                # print(f"🐛🐛 Classmate completions: {classmate_outputs}")
             else:
                 # Fall back to huggingface generation
                 import torch
