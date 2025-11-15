@@ -151,7 +151,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         solution_str=classmate_output_sample,
                         ground_truth=ground_truth,
                         extra_info=extra_info,
-                        # TODO flexible for classmate
+                        # TODO flexible for classmate (not strict requirement on format)
                         method="flexible",
                     )
                     # print(f"""

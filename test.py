@@ -1,8 +1,6 @@
 import os
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorWithPadding
-
-from verl.utils.dataset.rl_dataset import collate_fn
+from transformers import AutoTokenizer, DataCollatorWithPadding
 
 
 def upload_ckpts_to_huggingface():
@@ -14,10 +12,25 @@ def upload_ckpts_to_huggingface():
     # ROOT = Path("outputs/classmate_cot_w_verl/grpo_olmo_1B_gsm8k_baseline")
     # REPO_NAME = "classmate-cot-baseline"  # single repo name
 
-    ROOT = Path("outputs/classmate_cot_w_verl/grpo_olmo_1B_with_classmate_llama")
-    REPO_NAME = "classmate-cot-grpo_olmo_1B_with_classmate_llama"  # single repo name
+    # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_20251030/grpo_olmo_1B_with_classmate_llama")
+    # REPO_NAME = "20251030-grpo_olmo_1B_with_classmate_llama"
 
-    PRIVATE = True                                # set False to make public
+    # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_gsm8k_baseline_400000_episodes")
+    # REPO_NAME = "20251106-grpo_olmo_1B_gsm8k_baseline_400000_episodes"
+
+    # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_with_classmate_llama_400000_episodes")
+    # REPO_NAME = "20251106-grpo_olmo_1B_with_classmate_llama_400000_episodes"
+
+    # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_gsm8k_baseline_800000_episodes")
+    # REPO_NAME = "20251112-grpo_olmo_1B_gsm8k_baseline_800000_episodes"
+
+    # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_with_classmate_llama_800000_episodes")
+    # REPO_NAME = "20251112-grpo_olmo_1B_with_classmate_llama_800000_episodes"
+
+    ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes")
+    REPO_NAME = "20251112-grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes"
+
+    PRIVATE = False                                # set False to make public
 
     api = HfApi()
     repo_id = f"{USER_OR_ORG}/{REPO_NAME}"
@@ -32,6 +45,8 @@ def upload_ckpts_to_huggingface():
 
     # Discover candidate subdirs (e.g., global_step_114, global_step_133, ...)
     sub_dirs = sorted([p for p in ROOT.iterdir() if p.is_dir()])
+    skip_dir = [".hydra"]
+    sub_dirs = [p for p in sub_dirs if p.name not in skip_dir]
     sub_dirs.sort(key=lambda p: int(p.name.split('_')[-1]))
     # total_cnt = len(sub_dirs)
     # total_cnt = int(total_cnt * 3 / 4)  # only upload last 3/4 checkpoints
@@ -168,25 +183,23 @@ def test():
 
 
 if __name__ == "__main__":
-    # upload_ckpts_to_huggingface()
+    upload_ckpts_to_huggingface()
     # download_huggingface_ckpt()
     # test()
-
-    tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-2-0425-1B-DPO")
-
-    batch_prompts = [
-        "What is the capital of France?",
-        "Solve the equation: 2x + 3 = 7.",
-        "Explain the theory of relativity in simple terms."
-    ]
-
-    batch_attn_mask = tokenizer(
-        batch_prompts,
-        padding=True,
-        return_tensors="pt",
-    )["attention_mask"]
-
-    int(batch_attn_mask.sum(dim=1).max())
-
-    breakpoint()
+    #
+    # tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-2-0425-1B-DPO")
+    #
+    # batch_prompts = [
+    #     "What is the capital of France?",
+    #     "Solve the equation: 2x + 3 = 7.",
+    #     "Explain the theory of relativity in simple terms."
+    # ]
+    #
+    # batch_attn_mask = tokenizer(
+    #     batch_prompts,
+    #     padding=True,
+    #     return_tensors="pt",
+    # )["attention_mask"]
+    #
+    # int(batch_attn_mask.sum(dim=1).max())
 

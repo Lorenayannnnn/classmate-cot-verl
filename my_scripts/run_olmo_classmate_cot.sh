@@ -18,11 +18,11 @@ total_episodes=400000
 train_size=7470
 train_batch_size=512
 mini_batch_size_per_gpu=128
-gpu_num=2
+gpu_num=4
 
 # Note: Currently train_batch_size = gpu_num * mini_batch_size_per_gpu, which causes ratio between current policy and original ref to always be 1 -> no clipping effect.
 total_ckpts=40
-total_test_times=10
+total_test_times=5
 
 epoch_num=$((total_episodes / train_size))
 gpu_for_train=${gpu_num}
@@ -31,7 +31,7 @@ train_steps=$((total_episodes / train_batch_size))
 #allenai/OLMo-2-0425-1B-DPO
 #allenai/OLMo-2-1124-7B-DPO
 
-CUDA_VISIBLE_DEVICES=0,1 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$test_files" \
@@ -63,7 +63,7 @@ CUDA_VISIBLE_DEVICES=0,1 python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name='grpo_olmo_1B_with_classmate_llama_400000_episodes' \
+    trainer.experiment_name='grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes' \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=$((train_steps / total_ckpts)) \

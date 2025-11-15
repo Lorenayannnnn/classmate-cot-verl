@@ -698,12 +698,24 @@ class ClassmateCoTRayPPOTrainer:
         data_src2var2metric2val = process_validation_metrics(data_sources, sample_uids, reward_extra_infos_dict)
         metric_dict = {}
         for data_source, var2metric2val in data_src2var2metric2val.items():
-            core_var = "acc" if "acc" in var2metric2val else "reward"
+            # Determine core variable: prefer acc, then check for final_reward, fallback to reward
+            # if "acc" in var2metric2val:
+            #     core_var = "acc"
+            # elif "final_reward" in var2metric2val:
+            #     core_var = "final_reward"
+            # else:
+            #     core_var = "reward"
+            
+            core_reward_vars = {"acc", "base_reward", "classmate_reward", "final_reward", "reward"}
+            
             for var_name, metric2val in var2metric2val.items():
                 n_max = max([int(name.split("@")[-1].split("/")[0]) for name in metric2val.keys()])
                 for metric_name, metric_val in metric2val.items():
+                    # A metric goes to val-core if:
+                    # 1. It's one of the core reward variables AND
+                    # 2. It's a summary metric (mean/maj/best) at max sample size
                     if (
-                        (var_name == core_var)
+                        (var_name in core_reward_vars)
                         and any(metric_name.startswith(pfx) for pfx in ["mean", "maj", "best"])
                         and (f"@{n_max}" in metric_name)
                     ):

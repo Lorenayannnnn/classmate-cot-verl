@@ -176,7 +176,7 @@ trainer.fit()           # This runs training with classmate collaboration
   "classmate_scores": [list_of_scores],   # Individual classmate scores  
   "best_classmate_score": [best_score],   # Top classmate performance
   "avg_classmate_score": [avg_score],     # Average classmate performance
-  "final_reward": [combined_score],       # Final training signal
+  "reward": [combined_score],       # Final training signal
 }
 ```
 
