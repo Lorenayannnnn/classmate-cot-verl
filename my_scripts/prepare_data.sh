@@ -1,5 +1,9 @@
 
+export PYTHONPATH=:${PYTHONPATH}
 
-#python3 examples/data_preprocess/*.py
-python3 examples/data_preprocess/gsm8k.py
+#python3 verl/data_preprocessing/*.py
+#python3 verl/data_preprocessing/gsm8k.py
+python3 verl/data_preprocessing/hendrycks_math.py
+
+
 #bash my_scripts/prepare_data.sh

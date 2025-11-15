@@ -58,6 +58,14 @@
   docker start verl
   docker exec -it verl bash
   ```
+- Rebuild docker container
+  ```bash
+  docker stop verl
+  docker rm verl
+  bash my_scripts/create_docker.sh
+  docker start verl
+  docker exec -it verl bash
+  ```
 - Install zsh/oh-my-zsh in docker container:
   ```
   apt update
@@ -117,7 +125,11 @@
 
 
 ## Modify for classmate CoT training
-
+- Dataset-specific preprocessing and reward
+  - Preprocessing scripts:
+    - [data_preprocessing](verl/data_preprocessing)
+    - [prepare_data.sh](my_scripts/prepare_data.sh): ```bash my_scripts/prepare_data.sh```
+  - Common utils: [math_utils.py](verl/utils/math_utils.py)
 - Add config: [classmate_cot_ppo_trainer.yaml](verl/trainer/config/classmate_cot_ppo_trainer.yaml)
   - (optional) custom compute_score function
 - [classmate training main ppo script](verl/trainer/classmate_cot_main_ppo.py):
@@ -139,6 +151,10 @@
     - ```marked_timer("reward", timing_raw, color="yellow"):```: 
       Use [classmate reward manager](verl/workers/reward_manager/classmate_cot_rm.py) to calculate classmate rewards (built on top of naive reward manager for GRPO)
       - Calculate Classmate Rewards: For each batch item, iterate through all samples from each classmate model, calculate each sample's reward one by one, average across samples for each classmate, and do weighted average across all classmate models (TODO: now the classmate's weights are fixed to be average)
+- Dataset-specific rewards:
+  - [__init__.py](verl/utils/reward_score/__init__.py): def default_compute_score 
+  - [gsm8k.py](verl/utils/reward_score/gsm8k.py)
+  - [hendrycks_math.py](verl/utils/reward_score/hendrycks_math.py)
 
 
 - Some painpoints:
@@ -149,7 +165,15 @@
   - How to create multiple vLLM engines (still unsolved)
 
 
-
+## Run Experiments
+- Preprocess datasets:
+- Run training:
+    ```
+    bash my_scripts/run_olmo_baseline.sh
+    ```
+    ```
+    bash my_scripts/run_olmo_classmate_cot.sh
+    ```
 
 
 
