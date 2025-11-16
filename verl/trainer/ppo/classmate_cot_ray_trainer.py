@@ -905,7 +905,8 @@ class ClassmateCoTRayPPOTrainer:
         # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
 
 
-        all_prompt_plus_actor_responses = []
+        # all_prompt_plus_actor_responses = []
+        all_actor_responses = []
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
@@ -917,20 +918,23 @@ class ClassmateCoTRayPPOTrainer:
                 split_response = response.split(" ")
                 num_to_keep = int(len(split_response) * keep_rate)
                 modified_response = " ".join(split_response[:num_to_keep])
-                all_prompt_plus_actor_responses.append(all_prompts[res_idx] + modified_response)
+                # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + modified_response)
+                all_actor_responses.append(modified_response)
         elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
             for res_idx, response in enumerate(all_actor_responses):
                 split_response = response.split(" ")
                 rand_keep_rate = random.uniform(0.3, 0.95)
                 num_to_keep = int(len(split_response) * rand_keep_rate)
                 truncated_response = " ".join(split_response[:num_to_keep])
-                all_prompt_plus_actor_responses.append(all_prompts[res_idx] + truncated_response)
+                # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + truncated_response)
+                all_actor_responses.append(modified_response)
         else:
             raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 
         classmate_non_tensor_batch = {
             "prompts": np.array(all_prompts),
-            "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
+            "actor_responses": np.array(all_actor_responses),
+            # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
 
         # print("🐛 Sample classmate input from prepare batch", all_prompt_plus_actor_responses[0])
@@ -987,16 +991,6 @@ class ClassmateCoTRayPPOTrainer:
                 f"Expected {bsz} outputs from model {classmate_idx}, got {len(cls_out)}"
             )
             for i in range(bsz):
-                # per_sample = cls_out[i]
-                # if isinstance(per_sample, str):
-                #     per_sample = [per_sample]
-                # elif isinstance(per_sample, tuple):
-                #     per_sample = list(per_sample)
-                # elif hasattr(per_sample, "tolist"):
-                #     per_sample = per_sample.tolist()
-                # Ensure it is a list of strings
-                # if per_sample is None:
-                #     per_sample = []
                 outputs[i][classmate_idx] = cls_out[i]
 
         batch.non_tensor_batch["classmate_outputs"] = np.array(outputs)
