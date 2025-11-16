@@ -129,10 +129,12 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     score_mean = torch.mean(non_aborted_sequence_score).detach().item()
     score_max = torch.max(non_aborted_sequence_score).detach().item()
     score_min = torch.min(non_aborted_sequence_score).detach().item()
+    score_std = torch.std(non_aborted_sequence_score).detach().item()
 
     reward_mean = torch.mean(non_aborted_sequence_reward).detach().item()
     reward_max = torch.max(non_aborted_sequence_reward).detach().item()
     reward_min = torch.min(non_aborted_sequence_reward).detach().item()
+    reward_std = torch.std(non_aborted_sequence_reward).detach().item()
 
     valid_adv = torch.masked_select(advantages, response_mask)
     valid_returns = torch.masked_select(returns, response_mask)
@@ -163,24 +165,30 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         "critic/score/mean": score_mean,
         "critic/score/max": score_max,
         "critic/score/min": score_min,
+        "critic/score/std": score_std,
         # reward
         "critic/rewards/mean": reward_mean,
         "critic/rewards/max": reward_max,
         "critic/rewards/min": reward_min,
+        "critic/rewards/std": reward_std,
         # adv
         "critic/advantages/mean": torch.mean(valid_adv).detach().item(),
         "critic/advantages/max": torch.max(valid_adv).detach().item(),
         "critic/advantages/min": torch.min(valid_adv).detach().item(),
+        "critic/advantages/std": torch.std(valid_adv).detach().item(),
         # returns
         "critic/returns/mean": torch.mean(valid_returns).detach().item(),
         "critic/returns/max": torch.max(valid_returns).detach().item(),
         "critic/returns/min": torch.min(valid_returns).detach().item(),
+        "critic/returns/std": torch.std(valid_returns).detach().item(),
         **(
             {
                 # values
                 "critic/values/mean": torch.mean(valid_values).detach().item(),
                 "critic/values/max": torch.max(valid_values).detach().item(),
                 "critic/values/min": torch.min(valid_values).detach().item(),
+                "critic/values/std": torch.std(valid_values).detach().item(),
+
                 # vf explained var
                 "critic/vf_explained_var": (1.0 - return_diff_var / (return_var + 1e-5)).detach().item(),
             }
@@ -217,6 +225,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         metrics["critic/main_model_reward/mean"] = float(np.mean(non_aborted_base_rewards))
         metrics["critic/main_model_reward/max"] = float(np.max(non_aborted_base_rewards))
         metrics["critic/main_model_reward/min"] = float(np.min(non_aborted_base_rewards))
+        metrics["critic/main_model_reward/std"] = float(np.std(non_aborted_base_rewards))
 
     # multi-turn conversation
     if "__num_turns__" in batch.non_tensor_batch:
@@ -241,6 +250,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
             metrics["critic/classmate_reward/mean"] = float(np.mean(non_aborted_classmate_rewards))
             metrics["critic/classmate_reward/max"] = float(np.max(non_aborted_classmate_rewards))
             metrics["critic/classmate_reward/min"] = float(np.min(non_aborted_classmate_rewards))
+            metrics["critic/classmate_reward/std"] = float(np.std(non_aborted_classmate_rewards))
 
     return metrics
 
