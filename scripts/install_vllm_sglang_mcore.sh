@@ -51,4 +51,7 @@ if [ $USE_MEGATRON -eq 1 ]; then
     pip install nvidia-cudnn-cu12==9.8.0.87
 fi
 
+# TODO: following are temporary fixes for omegaconf/hydra to use antlr 4.9.* while keeping 4.11.1 for parse_latex for math evaluation
+bash scripts/build_omegaconf_hydra_w_antlr_4111.sh
+
 echo "Successfully installed all packages"

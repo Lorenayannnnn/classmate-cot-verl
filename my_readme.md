@@ -46,9 +46,7 @@
     ~/.config/docker/daemon.json
     ```
     {
-[//]: # (    "data-root": "/local/docker-storage/docker_users_data/lorenayan",)
     "/local/data/lorena/docker-storage"
-[//]: # (    "storage-driver": "vfs")
      }
     systemctl --user restart docker
     ```
@@ -103,28 +101,15 @@
     conda --version
     ```
 - Install dependency with conda:
-  - conda create -n verl python==3.12
-  - conda activate verl
-  - USE_MEGATRON=0 bash scripts/install_vllm_sglang_mcore.sh
-  - pip install --no-deps -e .
+  ```
+  conda create -n verl python==3.10.12
+  conda activate verl
+  USE_MEGATRON=0 USE_SGLANG=0 bash scripts/install_vllm_sglang_mcore.sh
+  pip install --no-deps -e .
+  ```
+  Note: [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4111.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
 
-
-## Host and test remote classmate vllm engines
-- Directly run vllm serve: [haha_host_classmate_model.sh](my_scripts/host_classmate_model.sh)
-- Then change port number in outputs/host_classmate_models/classmate_model_mapping.json
-
-[//]: # (- Hosting:)
-
-[//]: # (  - [host_classmate_model.py]&#40;my_scripts/deprecate_host_classmate_model.py&#41;)
-
-[//]: # (  - [host_classmate_model.sh]&#40;my_scripts/deprecate_host_classmate_model.sh&#41;)
-
-[//]: # (- Testing:)
-
-[//]: # (  - [haha_test_vllm_api_simple.py]&#40;my_scripts/haha_test_vllm_api_simple.py&#41;)
-
-
-## Modify for classmate CoT training
+# Modify for classmate CoT training
 - Dataset-specific preprocessing and reward
   - Preprocessing scripts:
     - [data_preprocessing](verl/data_preprocessing)
@@ -143,7 +128,7 @@
     - create_classmate_workers()
   - Update ```fit()```:
     - ```batch = self._generate_classmate_continuations(batch)```
-      - ```_prepare_classmate_batch()```: change prompts based on reward_type / continue_mode
+      - ```_prepare_classmate_batch()```: take CoT token ids from the main model and reformat them for classmate; change prompts based on reward_type / continue_mode
       - Use [ClassmateWorker](verl/workers/classmate_workers.py) to do the sampling
         - Take in model_path and initialize model and tokenizer
         - Return outputs with shape (bsz, classmate_num, num_return_sequences)
@@ -155,6 +140,7 @@
   - [__init__.py](verl/utils/reward_score/__init__.py): def default_compute_score 
   - [gsm8k.py](verl/utils/reward_score/gsm8k.py)
   - [hendrycks_math.py](verl/utils/reward_score/hendrycks_math.py)
+- Printing training metrics: [metric_utils.py](verl/trainer/ppo/metric_utils.py) -> def compute_data_metrics
 
 
 - Some painpoints:
@@ -165,19 +151,42 @@
   - How to create multiple vLLM engines (still unsolved)
 
 
-## Run Experiments
-- Preprocess datasets:
-- Run training:
-    ```
-    bash my_scripts/run_olmo_baseline.sh
-    ```
-    ```
-    bash my_scripts/run_olmo_classmate_cot.sh
-    ```
+# Run Experiments
+## Preprocess datasets
+- Dataset-specific scripts are in [data_preprocessing](verl/data_preprocessing):
+  - The scripts extract clean solutions from the given solution CoTs and concat question with instruction following templates.
+  - Change things like output directories if needed.
+- Run [prepare_data.sh](my_scripts/prepare_data.sh):
+  ```
+  bash my_scripts/prepare_data.sh
+  ```
+
+## Training
+### Baseline
+- gsm8k:
+  ```
+  bash my_scripts/run_olmo_baseline.sh
+  ```
+- hendrycks_math:
+  ```
+  bash my_scripts/run_olmo_hendrycks_baseline.sh
+  ```
+  
+### Train with classmate
+- Host and test remote classmate vllm engines:
+  - Directly run vllm serve: [host_classmate_model.sh](my_scripts/host_classmate_model.sh)
+  - Then change port number in outputs/host_classmate_models/classmate_model_mapping.json
+- gsm8k:
+  ```
+  bash my_scripts/run_olmo_classmate_cot.sh
+  ```
+- hendrycks_math:
+  ```
+  bash my_scripts/run_olmo_hendrycks_classmate_cot.sh
+  ```
 
 
-
-
-## Storage path
-- /local/data/lorena/
-- /proj/interaction/interaction-filer/lorena/classmate-cot-verl
+# Others
+- Storage path:
+  - /local/data/lorena/
+  - /proj/interaction/interaction-filer/lorena/classmate-cot-verl
