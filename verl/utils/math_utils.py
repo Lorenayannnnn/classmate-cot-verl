@@ -1,8 +1,12 @@
 import re
 import signal
+import logging
 
 import sympy
 from sympy.parsing.latex import parse_latex
+
+eval_logger = logging.getLogger(__file__)
+
 
 def hendrycks_math_extract_solution(solution_str):
     """

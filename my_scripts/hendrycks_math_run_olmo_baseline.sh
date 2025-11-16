@@ -1,37 +1,44 @@
 set -x
 
+#data_dir=/data    # run with docker
+data_dir=$HOME/data   # run with conda
 
-gsm8k_train_path=/data/gsm8k/train.parquet
-gsm8k_test_path=/data/gsm8k/test.parquet
+#TODO change dataset
+#train_path=/data/gsm8k/train.parquet
+#train_size=??    # TODO: get After filtering out too long prompts number
+#epoch_num=??    # TODO to make it about 400000 * 8 episodes
+#test_path=/data/gsm8k/test.parquet
+#dataset_name="gsm8k"
+train_path=${data_dir}/hendrycks_math/train.parquet
+train_size=7496   # After filtering out too long prompts
+epoch_num=55    # to make it about 400000 * 8 episodes
+test_path=${data_dir}/hendrycks_math/test.parquet
+dataset_name="hendrycks_math"
 #math_train_path=$HOME/data/math/train.parquet
 #math_test_path=$HOME/data/math/test.parquet
 
 #train_files="['$gsm8k_train_path', '$math_train_path']"
 #test_files="['$gsm8k_test_path', '$math_test_path']"
 
-train_files="['$gsm8k_train_path']"
-#7470
-test_files="['$gsm8k_test_path']"
-#1320
+train_files="['$train_path']"
+test_files="['$test_path']"
 
-total_episodes=400000
-train_size=7470
 train_batch_size=512
-mini_batch_size_per_gpu=128
+mini_batch_size_per_gpu=64
 gpu_num=4
 
-# Note: Currently train_batch_size = gpu_num * mini_batch_size_per_gpu, which causes ratio between current policy and original ref to always be 1 -> no clipping effect.
 total_ckpts=40
-total_test_times=5
+total_test_times=10
 
-epoch_num=$((total_episodes / train_size))
+rollout_n=8
+train_steps=$(($train_size // train_batch_size * epoch_num))
+total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
-train_steps=$((total_episodes / train_batch_size))
 
 #allenai/OLMo-2-0425-1B-DPO
 #allenai/OLMo-2-1124-7B-DPO
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$test_files" \
@@ -55,15 +62,15 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
-    actor_rollout_ref.rollout.n=8 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.n=${rollout_n} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name='grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes' \
+    trainer.experiment_name="grpo_olmo_1B_${dataset_name}_baseline_${total_episodes}_episodes" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=$((train_steps / total_ckpts)) \
@@ -72,4 +79,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     data.seed=42
 
 
-#bash my_scripts/run_olmo_classmate_cot.sh
+#bash my_scripts/hendrycks_math_run_olmo_baseline.sh

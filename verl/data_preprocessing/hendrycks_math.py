@@ -72,7 +72,7 @@ if __name__ == "__main__":
             solution = extract_solution(answer_raw)
             data = {
                 "data_source": data_source,
-                "prompt": [
+                "prompt": [     # Note: the message is already created here. This is directly passed to tokenizer.apply_chat_template in RLHF Dataset
                     {
                         "role": "user",
                         "content": question,
@@ -106,5 +106,4 @@ if __name__ == "__main__":
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
-
         copy(src=local_save_dir, dst=hdfs_dir)
