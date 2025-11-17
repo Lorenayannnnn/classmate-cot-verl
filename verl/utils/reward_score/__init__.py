@@ -25,6 +25,7 @@ def default_compute_score(
     concurrent_semaphore=None,
     memory_limit_mb=None,
     method=None,
+    return_dict=True,
     **kwargs,
 ):
     """Compute the score for a given solution based on the data source.
@@ -46,9 +47,23 @@ def default_compute_score(
         from . import gsm8k
 
         res = gsm8k.compute_score(solution_str, ground_truth, method=method)
+        if return_dict:
+            return {
+                "score": res
+            }
     elif data_source == "EleutherAI/hendrycks_math":
         from . import hendrycks_math
         res = hendrycks_math.compute_score(solution_str, ground_truth)
+        if return_dict:
+            return {
+                "score": res
+            }
+    elif data_source == "newfacade/LeetCodeDataset":
+        from . import leetcode
+
+        res = leetcode.compute_score(solution_str, ground_truth, entry_point=extra_info["reward_model"]["entry_point"],
+                                     gt_test_case=extra_info["reward_model"]["test"],
+                                     import_prompt=extra_info["reward_model"]["import_prompt"])
     elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval", "HuggingFaceH4/MATH-500"]:
         from . import math_reward
 

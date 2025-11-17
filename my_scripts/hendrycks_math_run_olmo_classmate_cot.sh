@@ -24,21 +24,21 @@ train_files="['$train_path']"
 test_files="['$test_path']"
 
 train_batch_size=512
-mini_batch_size_per_gpu=128
+mini_batch_size_per_gpu=64
 gpu_num=4
 
 total_ckpts=40
 total_test_times=10
 
 rollout_n=8
-train_steps=$(($train_size // train_batch_size * epoch_num))
+train_steps=$((train_size / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #allenai/OLMo-2-0425-1B-DPO
 #allenai/OLMo-2-1124-7B-DPO
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$test_files" \
@@ -48,7 +48,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=allenai/OLMo-2-0425-1B-DPO \
-    actor_rollout_ref.actor.optim.lr=3e-7 \
+    actor_rollout_ref.actor.optim.lr=2e-7 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \

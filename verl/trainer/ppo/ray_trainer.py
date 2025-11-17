@@ -642,12 +642,18 @@ class RayPPOTrainer:
         data_src2var2metric2val = process_validation_metrics(data_sources, sample_uids, reward_extra_infos_dict)
         metric_dict = {}
         for data_source, var2metric2val in data_src2var2metric2val.items():
-            core_var = "acc" if "acc" in var2metric2val else "reward"
+            # core_var = "acc" if "acc" in var2metric2val else "reward"
+            core_reward_vars = {"acc", "base_reward", "classmate_reward", "final_reward", "reward"}
+
+            # TODO for code & test case generation
+            code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
+            core_reward_vars.update(code_test_case_reward_keys)
+
             for var_name, metric2val in var2metric2val.items():
                 n_max = max([int(name.split("@")[-1].split("/")[0]) for name in metric2val.keys()])
                 for metric_name, metric_val in metric2val.items():
                     if (
-                        (var_name == core_var)
+                        (var_name in core_reward_vars)
                         and any(metric_name.startswith(pfx) for pfx in ["mean", "maj", "best"])
                         and (f"@{n_max}" in metric_name)
                     ):

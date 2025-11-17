@@ -86,11 +86,15 @@ class NaiveRewardManager(AbstractRewardManager):
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
 
+            # TODO modify
+            extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
+
             score = self.compute_score(
                 data_source=data_source,
                 solution_str=response_str,
                 ground_truth=ground_truth,
                 extra_info=extra_info,
+                return_dict=True,
             )
 
             if isinstance(score, dict):
@@ -101,7 +105,7 @@ class NaiveRewardManager(AbstractRewardManager):
             else:
                 reward = score
 
-            reward_extra_info["base_reward"].append(reward)     # Temporarily added for drawing main model's reward of baseline & one trained with classmate in the same figure
+            reward_extra_info["base_reward"].append(reward)     # TODO modify: Temporarily added for drawing main model's reward of baseline & one trained with classmate in the same figure
             reward_tensor[i, valid_response_length - 1] = reward
 
             if data_source not in already_print_data_sources:
