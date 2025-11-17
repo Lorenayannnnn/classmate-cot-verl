@@ -707,6 +707,9 @@ class ClassmateCoTRayPPOTrainer:
             #     core_var = "reward"
             
             core_reward_vars = {"acc", "base_reward", "classmate_reward", "final_reward", "reward"}
+            # TODO haha for code & test case generation
+            code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
+            core_reward_vars.update(code_test_case_reward_keys)
             
             for var_name, metric2val in var2metric2val.items():
                 n_max = max([int(name.split("@")[-1].split("/")[0]) for name in metric2val.keys()])
@@ -906,7 +909,7 @@ class ClassmateCoTRayPPOTrainer:
 
 
         # all_prompt_plus_actor_responses = []
-        all_actor_responses = []
+        all_processed_actor_responses = []
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
@@ -919,7 +922,7 @@ class ClassmateCoTRayPPOTrainer:
                 num_to_keep = int(len(split_response) * keep_rate)
                 modified_response = " ".join(split_response[:num_to_keep])
                 # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + modified_response)
-                all_actor_responses.append(modified_response)
+                all_processed_actor_responses.append(modified_response)
         elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
             for res_idx, response in enumerate(all_actor_responses):
                 split_response = response.split(" ")
@@ -927,18 +930,17 @@ class ClassmateCoTRayPPOTrainer:
                 num_to_keep = int(len(split_response) * rand_keep_rate)
                 truncated_response = " ".join(split_response[:num_to_keep])
                 # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + truncated_response)
-                all_actor_responses.append(modified_response)
+                all_processed_actor_responses.append(modified_response)
         else:
             raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 
         classmate_non_tensor_batch = {
             "prompts": np.array(all_prompts),
-            "actor_responses": np.array(all_actor_responses),
+            "actor_responses": np.array(all_processed_actor_responses),
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
-
-        # print("🐛 Sample classmate input from prepare batch", all_prompt_plus_actor_responses[0])
-        # print("🐛 Sample classmate input from prepare batch", all_prompt_plus_actor_responses[1])
+        # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[0])
+        # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[1])
 
         return DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
 

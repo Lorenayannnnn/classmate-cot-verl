@@ -218,14 +218,24 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         "prompt_length/clip_ratio": torch.mean(torch.eq(prompt_length, max_prompt_length).float()).detach().item(),
     }
 
-    base_rewards = batch.non_tensor_batch["base_reward"]
-    # Filter out aborted samples for base_reward statistics
-    non_aborted_base_rewards = base_rewards[non_aborted_mask.cpu().numpy()]
-    if len(non_aborted_base_rewards) > 0:
-        metrics["critic/main_model_reward/mean"] = float(np.mean(non_aborted_base_rewards))
-        metrics["critic/main_model_reward/max"] = float(np.max(non_aborted_base_rewards))
-        metrics["critic/main_model_reward/min"] = float(np.min(non_aborted_base_rewards))
-        metrics["critic/main_model_reward/std"] = float(np.std(non_aborted_base_rewards))
+    def print_if_exists(key: str, metric_name: str):
+        if key in batch.non_tensor_batch:
+            values = batch.non_tensor_batch[key]
+            # Filter out aborted samples for statistics
+            non_aborted_values = values[non_aborted_mask.cpu().numpy()]
+            if len(non_aborted_values) > 0:
+                metrics[f"critic/{metric_name}/mean"] = float(np.mean(non_aborted_values))
+                metrics[f"critic/{metric_name}/max"] = float(np.max(non_aborted_values))
+                metrics[f"critic/{metric_name}/min"] = float(np.min(non_aborted_values))
+                metrics[f"critic/{metric_name}/std"] = float(np.std(non_aborted_values))
+
+    print_if_exists("base_reward", "main_model_reward")
+
+    # TODO modify: For code + test case generation
+    # TODO haha check if these metrics get printed
+    print_if_exists("base_test_case_format_score", "main_model_test_case_format_score")
+    print_if_exists("base_correct_code_score", "main_model_correct_code_score")
+
 
     # multi-turn conversation
     if "__num_turns__" in batch.non_tensor_batch:
@@ -241,16 +251,9 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         metrics["tool_call_counts/mean"] = tool_call_counts.mean()
 
     # Train with classmate models
-    if "classmate_reward" in batch.non_tensor_batch:
-        # Classmate CoT reward breakdown metrics
-        classmate_rewards = batch.non_tensor_batch["classmate_reward"]
-        # Filter out aborted samples for classmate_reward statistics
-        non_aborted_classmate_rewards = classmate_rewards[non_aborted_mask.cpu().numpy()]
-        if len(non_aborted_classmate_rewards) > 0:
-            metrics["critic/classmate_reward/mean"] = float(np.mean(non_aborted_classmate_rewards))
-            metrics["critic/classmate_reward/max"] = float(np.max(non_aborted_classmate_rewards))
-            metrics["critic/classmate_reward/min"] = float(np.min(non_aborted_classmate_rewards))
-            metrics["critic/classmate_reward/std"] = float(np.std(non_aborted_classmate_rewards))
+    print_if_exists("classmate_reward", "classmate_reward")
+    print_if_exists("classmate_test_case_format_score", "classmate_test_case_format_score")
+    print_if_exists("classmate_correct_code_score", "classmate_correct_code_score")
 
     return metrics
 

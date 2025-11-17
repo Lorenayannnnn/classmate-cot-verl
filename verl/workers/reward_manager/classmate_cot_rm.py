@@ -119,41 +119,51 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
 
+            # TODO modify
+            extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
+
             # Compute base actor reward
             actor_score = self.compute_score(
                 data_source=data_source,
                 solution_str=response_str,
                 ground_truth=ground_truth,
                 extra_info=extra_info,
+                return_dict=True,
             )
 
             if isinstance(actor_score, dict):
                 base_reward = actor_score["score"]
                 # Store the information including original reward
                 for key, value in actor_score.items():
-                    reward_extra_info[f"actor_{key}"].append(value)
+                    reward_extra_info[f"base_{key}"].append(value)
             else:
                 base_reward = actor_score
-                reward_extra_info["actor_score"].append(base_reward)
-            
+
+            reward_extra_info["base_reward"].append(base_reward)
             # -------------------- Calculate Classmate Rewards --------------------
-            classmate_reward = 0.0
+            total_classmate_reward_dict = {}
             classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
 
             # TODO weight for each classmate model
             classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
 
             for classmate_idx, classmate_output in enumerate(classmate_outputs):   # Iterate over num_classmate_models
-                tmp_classmate_reward = 0.0
+                tmp_total_classmate_reward_dict = {}
                 for classmate_output_sample in classmate_output:   # Iterate over num_return_sequences
-                    tmp_classmate_reward += self.compute_score(
+                    tmp_classmate_result = self.compute_score(
                         data_source=data_source,
                         solution_str=classmate_output_sample,
                         ground_truth=ground_truth,
                         extra_info=extra_info,
                         # TODO flexible for classmate (not strict requirement on format)
                         method="flexible",
+                        return_dict=True
                     )
+                    for k, v in tmp_classmate_result.items():
+                        if k not in tmp_total_classmate_reward_dict:
+                            tmp_total_classmate_reward_dict[k] = 0.0
+                        tmp_total_classmate_reward_dict[k] += v
+
                     # print(f"""
                     # 🐛 Sample data_source: {data_source}
                     # 🐛 Sample ground_truth: {ground_truth}
@@ -164,8 +174,10 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     # 🐛 Sample tmp_classmate_reward: {tmp_classmate_reward}
                     # """)
                 # Average over num_return_sequences
-                tmp_classmate_reward /= len(classmate_output)
-                classmate_reward += tmp_classmate_reward * classmate_model_weights[classmate_idx]
+                for k, v in tmp_total_classmate_reward_dict.items():
+                    if k not in total_classmate_reward_dict:
+                        total_classmate_reward_dict[k] = 0.0
+                    total_classmate_reward_dict[k] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
 
             # print(f"🐛classmate_outputs: {classmate_outputs} classmate_reward: {classmate_reward}")
             # breakpoint()
@@ -173,10 +185,13 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             # Combine actor and classmate rewards
             # final_reward = base_reward + classmate_reward * self.classmate_reward_weight
             # final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
+            classmate_reward = total_classmate_reward_dict["score"]
             final_reward = base_reward + self.classmate_reward_weight * classmate_reward
-            reward_extra_info["base_reward"].append(base_reward)
             reward_extra_info["classmate_reward"].append(classmate_reward)
             reward_extra_info["final_reward"].append(final_reward)
+            # Update total_classmate_reward_dict to reward_extra_info
+            for key, value in total_classmate_reward_dict.items():
+                reward_extra_info[f"classmate_{key}"].append(value)
 
             reward_tensor[i, valid_response_length - 1] = final_reward
 
