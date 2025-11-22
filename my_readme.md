@@ -110,6 +110,11 @@
   Note: [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4111.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
 
 # Modify for classmate CoT training
+- Login:
+  ```
+  hf auth login
+  wandb login
+  ```
 - Dataset-specific preprocessing and reward
   - Preprocessing scripts:
     - [data_preprocessing](verl/data_preprocessing)
@@ -190,3 +195,6 @@
 - Storage path:
   - /local/data/lorena/
   - /proj/interaction/interaction-filer/lorena/classmate-cot-verl
+- Hosting classmate on lambda:
+  - "local_host": "141.148.74.128",
+  - "local_host": "150.136.222.129",

@@ -25,7 +25,7 @@ test_files="['$test_path']"
 
 train_batch_size=512
 mini_batch_size_per_gpu=64
-gpu_num=4
+gpu_num=8
 
 total_ckpts=40
 total_test_times=10
@@ -38,7 +38,7 @@ gpu_for_train=${gpu_num}
 #allenai/OLMo-2-0425-1B-DPO
 #allenai/OLMo-2-1124-7B-DPO
 
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$test_files" \

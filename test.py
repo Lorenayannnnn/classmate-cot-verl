@@ -1,8 +1,5 @@
 import os
 
-from transformers import AutoTokenizer, DataCollatorWithPadding, AutoModelForCausalLM
-
-
 def upload_ckpts_to_huggingface():
     from pathlib import Path
     from huggingface_hub import HfApi, create_repo
@@ -27,8 +24,11 @@ def upload_ckpts_to_huggingface():
     # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_with_classmate_llama_800000_episodes")
     # REPO_NAME = "20251112-grpo_olmo_1B_with_classmate_llama_800000_episodes"
 
-    ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes")
-    REPO_NAME = "20251112-grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes"
+    # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes")
+    # REPO_NAME = "20251112-grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes"
+
+    ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes")
+    REPO_NAME = "20251122-grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes"
 
     PRIVATE = False                                # set False to make public
 
@@ -153,134 +153,9 @@ def download_huggingface_ckpt():
             print(f"Skipped revision {revision}, could not be loaded.")
 
 
-def test():
-    import ast
-
-    def execute_code(solution_code, test_case_code, import_prompt, entry_point, check_correctness=False):
-        """
-        Execute the solution code + test code to verify executability.
-        Optionally run assertion tests for correctness.
-        """
-        try:
-            # Build full code
-            full_code = import_prompt + "\n" + solution_code + "\n" + test_case_code
-
-            # First check: compilation
-            compiled = compile(full_code, "<string>", "exec")
-
-            # Execute in isolated namespace
-            env = {}
-            exec(compiled, env)
-
-            # Optional: run the checker
-            if check_correctness:
-                # Build candidate function dynamically from entry_point
-                candidate = eval(entry_point, env)
-                # Expose candidate to test case code (so `check(candidate)` works)
-                env["candidate"] = candidate
-                if "check" not in env:
-                    return False  # No checker found
-                env["check"](candidate)
-
-            return True
-
-        except Exception as e:
-            # Any exception → not executable
-            # print("Execution error:", e)
-            return False
-
-
-    import_prompt = "from typing import List"
-
-    entry_point = "Solution().twoSum"
-
-    solution_code = """class Solution:
-    def twoSum(self, nums: List[int], target: int) -> List[int]:
-        d = {}
-        for i, x in enumerate(nums):
-            if (target - x) in d:
-                return [d[target - x], i]
-            d[x] = i
-    """
-
-    test_case_code = """def check(candidate):
-    assert candidate(nums=[3, 3], target=6) == [0, 1]
-    assert candidate(nums=[-1, -2, -3, -4], target=-8) is None
-    assert candidate(nums=[1000000000, 1000000000], target=2000000000) == [0, 1]
-    """
-
-    # Test both modes
-    result_correctness = execute_code(solution_code, test_case_code,
-                                      import_prompt, entry_point,
-                                      check_correctness=True)
-
-    result_executable = execute_code(solution_code, test_case_code,
-                                     import_prompt, entry_point,
-                                     check_correctness=False)
-
-    print("Executability test:", result_executable)
-    print("Correctness test:", result_correctness)
-
-    input_prompt = """### Question:
-Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.
-You may assume that each input would have exactly one solution, and you may not use the same element twice.
-You can return the answer in any order.
-
-Example 1:
-
-Input: nums = [2,7,11,15], target = 9
-Output: [0,1]
-Explanation: Because nums[0] + nums[1] == 9, we return [0, 1].
-
-Example 2:
-
-Input: nums = [3,2,4], target = 6
-Output: [1,2]
-
-Example 3:
-
-Input: nums = [3,3], target = 6
-Output: [0,1]
-
-Constraints:
-
-2 <= nums.length <= 104
--109 <= nums[i] <= 109
--109 <= target <= 109
-Only one valid answer exists.
-
-### Format: Use the following starter code to write the solution and one or more assert statements to test the solution.
-````python
-# 1. Solution:
-class Solution:
-    def twoSum(self, nums: List[int], target: int) -> List[int]:
-
-# 2. Test case:
-def check(candidate):
-    assert candidate(
-
-```
-
-### Answer: Return only the code and the check function.
-```python
-# 1. Solution:
-"""
-
-    model_name = "allenai/OLMo-2-0425-1B-DPO"
-    model = AutoModelForCausalLM.from_pretrained(model_name).to("cuda")
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-
-    tokenized_input = tokenizer(input_prompt, return_tensors="pt")
-    tokenized_input = {k: v.to("cuda") for k, v in tokenized_input.items()}
-    generation_output = model.generate(**tokenized_input, max_new_tokens=512, do_sample=True, temperature=0.7, top_p=0.9)
-    generated_text = tokenizer.decode(generation_output[0][len(tokenized_input["input_ids"][0]):], skip_special_tokens=True)
-    print(generated_text)
-
-
-
 if __name__ == "__main__":
-    # upload_ckpts_to_huggingface()
+    upload_ckpts_to_huggingface()
     # download_huggingface_ckpt()
-    test()
+    # test()
 
 #CUDA_VISIBLE_DEVICES=2 python test.py

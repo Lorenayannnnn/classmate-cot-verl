@@ -1,6 +1,8 @@
 
 # TODO: temporary fixes for omegaconf/hydra to use antlr 4.11.1 (needed by parse_latex for training on hendrycks math dataset)
 
+sudo apt install -y openjdk-17-jdk
+
 pip uninstall omegaconf hydra-core
 
 # clone sources
@@ -57,3 +59,4 @@ pip list 2>/dev/null | grep antlr4
 
 # cleanup
 rm -rf omegaconf hydra antlr-4.11.1-complete.jar
+#bash scripts/build_omegaconf_hydra_w_antlr_4111.sh
