@@ -30,13 +30,13 @@
   - adduser lorena
   - Generate ssh key:
     ```bash
-    ssh-keygen -t ed25519 -f /home/lorena/.ssh/lambda_lorena -N ""
-    chown -R lorena:lorena /home/lorena/.ssh
-    chmod 700 /home/lorena/.ssh
-    chmod 600 /home/lorena/.ssh/lambda_lorena
-    chmod 644 /home/lorena/.ssh/lambda_lorena.pub
-    cat /home/lorena/.ssh/lambda_lorena.pub >> /home/lorena/.ssh/authorized_keys
-    chmod 600 /home/lorena/.ssh/authorized_keys
+    ssh-keygen -t ed25519 -f $HOME/.ssh/$USER -N ""
+    chown -R $USER:$USER $HOME/.ssh
+    chmod 700 $HOME/.ssh
+    chmod 600 $HOME/.ssh/$USER
+    chmod 644 $HOME/.ssh/$USER.pub
+    cat $HOME/.ssh/$USER.pub >> $HOME/.ssh/authorized_keys
+    chmod 600 $HOME/.ssh/authorized_keys
     ```
 
 ## Install environment for the project
@@ -145,8 +145,21 @@
   - [__init__.py](verl/utils/reward_score/__init__.py): def default_compute_score 
   - [gsm8k.py](verl/utils/reward_score/gsm8k.py)
   - [hendrycks_math.py](verl/utils/reward_score/hendrycks_math.py)
+  - [code_contests_modify_code.py](verl/utils/reward_score/code_contests_modify_code.py)
 - Printing training metrics: [metric_utils.py](verl/trainer/ppo/metric_utils.py) -> def compute_data_metrics
+- Train on coding task:
+  - Sandbox_fusion: [__init__.py](verl/utils/reward_score/sandbox_fusion/__init__.py): pass in the programming language
+  - Pass in sandbox fusion url: ppo_trainer.yaml config files, ppo_trainer.py, reward_manager (naive.py, classmate_cot_rm.py)
+  - compute_score: check the ```elif code_contests_modify_code``` in ```default_compute_score```
 
+# Hosting Sandbox for coding tasks
+- Host [SandBox Fusion](https://bytedance.github.io/SandboxFusion/docs/docs/get-started#local-deployment) (create a sandbox to test code safely):
+  - Note: need a machine with root access
+  - ```docker run -it -p YOUR_PORT_NUMBER:8080 volcengine/sandbox-fusion:server-20250609``` (Uvicorn always starts on port 8080 in docker. Map it to some port number on your machine)
+  - Test connection:
+    ```
+    curl 'http://localhost:YOUR_PORT_NUMBER/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
+    ```
 
 - Some painpoints:
   - Took some times to navigate the entire pipeline (it's fairly modular, but takes some time to figure out how different actors interact & got scheduled. Should have read their docs first)
@@ -196,5 +209,3 @@
   - /local/data/lorena/
   - /proj/interaction/interaction-filer/lorena/classmate-cot-verl
 - Hosting classmate on lambda:
-  - "local_host": "141.148.74.128",
-  - "local_host": "150.136.222.129",

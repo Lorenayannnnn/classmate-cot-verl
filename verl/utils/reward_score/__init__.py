@@ -19,7 +19,7 @@ from verl.utils.import_utils import deprecated
 def default_compute_score(
     data_source,
     solution_str,
-    ground_truth,
+    ground_truth=None,
     extra_info=None,
     sandbox_fusion_url=None,
     concurrent_semaphore=None,
@@ -58,7 +58,59 @@ def default_compute_score(
             return {
                 "score": res
             }
+    elif data_source == "code_contests_modify_code":
+        from . import code_contests_modify_code
+        # "extra_info": {
+        #     "split": split,
+        #     "index": idx,
+        #
+        #     "language": example["language"],
+        #     "test_inputs_outputs": test_inputs_outputs,
+        #     "correct_solutions": example["solutions"]["solution"],
+        #     "incorrect_solutions": example["incorrect_solutions"]["solution"],
+        #     "language_idx": example["language_idx"],
+        #     "difficulty": example["difficulty"],
+        #     "public_tests": example["public_tests"],
+        # },
+
+        # response_str, correct_sols, incorrect_sols, gt_test_cases, language, sandbox_fusion_url
+        res = code_contests_modify_code.compute_score(
+            response_str=solution_str,
+            correct_sols=extra_info["correct_solutions"],
+            incorrect_sols=extra_info["incorrect_solutions"],
+            gt_test_cases=extra_info["test_inputs_outputs"],
+            language=extra_info["language"],
+            sandbox_fusion_url=sandbox_fusion_url,
+        )
+        # result = {
+        #     "cot": reasoning_str,
+        #     "generated_test_pass_correct_sol": 0.0,
+        #     "generated_test_pass_incorrect_sol": 0.0,
+        #     "generated_code_pass_gt_test": 0.0,
+        #     "generated_code_pass_generated_test": 0.0,
+        #     "score": 0.0,   # for now same as generated_code_pass_generated_test
+        # }
+        if return_dict:
+            return res
+        else:
+            return res["score"]
+
+        # Use the passed sandbox_fusion_url if available
+        # if sandbox_fusion_url:
+        #     from . import sandbox_fusion
+        #
+        #     # Pass the URL directly, ground_truth likely contains test cases here
+        #     res = sandbox_fusion.compute_score(
+        #         sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, solution_str, ground_truth, continuous=True
+        #     )
+        # else:
+        #     # If no sandbox URL is provided, fall back to prime_code or raise error
+        #     from . import prime_code
+        #
+        #     # Assuming prime_code doesn't need the URL
+        #     res = prime_code.compute_score(solution_str, ground_truth, continuous=True)
     elif data_source == "newfacade/LeetCodeDataset":
+        raise NotImplementedError("LeetCodeDataset not fully tested yet.")
         from . import leetcode
 
         res = leetcode.compute_score(solution_str, ground_truth, entry_point=extra_info["reward_model"]["entry_point"],

@@ -26,16 +26,18 @@ logger = logging.getLogger(__name__)
 
 
 def compute_score(
-    sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, completion, test_cases, continuous=False, timeout=10
+    sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, completion, test_cases, language="python", continuous=False, timeout=10
 ):
     """
     Computes the code score using the remote sandbox API.
 
     Args:
         sandbox_fusion_url: The URL of the sandbox_fusion service, eg: "https://<your service endpoint>/run_code"
-
+        concurrent_semaphore: Semaphore
+        memory_limit_mb: Memory limit in MB for each test case.
         completion: The completion string containing the code.
         test_cases: JSON string or dictionary containing "inputs" and "outputs".
+        language: The language of the code.
         continuous: Whether to compute a continuous score (based on the first N test cases).
         timeout: Timeout for each test case.
 
@@ -45,8 +47,8 @@ def compute_score(
         metadata_list: List containing execution metadata for each test case.
     """
     solution = completion
-    if "```python" in completion:
-        solution = completion.split("```python")[-1].split("```")[0]
+    if f"```{language}" in completion:
+        solution = completion.split(f"```{language}")[-1].split("```")[0]
     elif "```" in completion:
         # Handle cases like ```\ncode\n```
         parts = completion.split("```")
@@ -87,6 +89,7 @@ def compute_score(
             timeout=timeout,
             concurrent_semaphore=concurrent_semaphore,
             memory_limit_mb=memory_limit_mb,
+            language=language
         )
 
         # Calculate score

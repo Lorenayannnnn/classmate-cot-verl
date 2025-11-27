@@ -304,6 +304,7 @@ class ClassmateCoTTaskRunner:
         processor = hf_processor(local_path, trust_remote_code=trust_remote_code, use_fast=True)
 
         # Load the reward manager for training and validation.
+        # TODO haha check if sandbox_url is set
         reward_fn = load_reward_manager(
             config, tokenizer, num_examine=0,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,

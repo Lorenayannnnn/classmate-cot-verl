@@ -38,6 +38,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             reward_fn_key="data_source", 
             classmate_cot_reward_configs=None, 
             classmate_generation_configs=None,
+            sandbox_fusion_url=None,
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -71,6 +72,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         
         # Get reward weight for combining actor and classmate rewards
         self.classmate_reward_weight = self.classmate_cot_reward_configs.classmate_reward_weight
+
+        self.sandbox_fusion_url = sandbox_fusion_url
     
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
@@ -129,6 +132,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 ground_truth=ground_truth,
                 extra_info=extra_info,
                 return_dict=True,
+                sandbox_fusion_url=self.sandbox_fusion_url
             )
 
             if isinstance(actor_score, dict):
@@ -139,7 +143,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             else:
                 base_reward = actor_score
 
-            reward_extra_info["base_reward"].append(base_reward)
+            reward_extra_info["main_model_reward"].append(base_reward)
             # -------------------- Calculate Classmate Rewards --------------------
             total_classmate_reward_dict = {}
             classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
@@ -157,12 +161,13 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         extra_info=extra_info,
                         # TODO flexible for classmate (not strict requirement on format)
                         method="flexible",
-                        return_dict=True
+                        return_dict=True,
+                        sandbox_fusion_url=self.sandbox_fusion_url
                     )
                     for k, v in tmp_classmate_result.items():
-                        if k not in tmp_total_classmate_reward_dict:
-                            tmp_total_classmate_reward_dict[k] = 0.0
-                        tmp_total_classmate_reward_dict[k] += v
+                        if f"classmate_{k}" not in tmp_total_classmate_reward_dict:
+                            tmp_total_classmate_reward_dict[f"classmate_{k}"] = 0.0
+                        tmp_total_classmate_reward_dict[f"classmate_{k}"] += v
 
                     # print(f"""
                     # 🐛 Sample data_source: {data_source}
@@ -175,9 +180,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     # """)
                 # Average over num_return_sequences
                 for k, v in tmp_total_classmate_reward_dict.items():
-                    if k not in total_classmate_reward_dict:
-                        total_classmate_reward_dict[k] = 0.0
-                    total_classmate_reward_dict[k] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
+                    if f"classmate_{k}" not in tmp_total_classmate_reward_dict:
+                        total_classmate_reward_dict[f"classmate_{k}"] = 0.0
+                    total_classmate_reward_dict[f"classmate_{k}"] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
 
             # print(f"🐛classmate_outputs: {classmate_outputs} classmate_reward: {classmate_reward}")
             # breakpoint()
@@ -187,7 +192,6 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             # final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
             classmate_reward = total_classmate_reward_dict["score"]
             final_reward = base_reward + self.classmate_reward_weight * classmate_reward
-            reward_extra_info["classmate_reward"].append(classmate_reward)
             reward_extra_info["final_reward"].append(final_reward)
             # Update total_classmate_reward_dict to reward_extra_info
             for key, value in total_classmate_reward_dict.items():

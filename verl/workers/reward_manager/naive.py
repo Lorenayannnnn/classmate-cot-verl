@@ -27,7 +27,7 @@ from verl.workers.reward_manager.abstract import AbstractRewardManager
 class NaiveRewardManager(AbstractRewardManager):
     """The reward manager."""
 
-    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source") -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source", sandbox_fusion_url=None) -> None:
         """
         Initialize the NaiveRewardManager instance.
 
@@ -42,6 +42,9 @@ class NaiveRewardManager(AbstractRewardManager):
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or default_compute_score
         self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
+
+        # Modify
+        self.sandbox_fusion_url = sandbox_fusion_url
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """We will expand this function gradually based on the available datasets"""
@@ -95,17 +98,26 @@ class NaiveRewardManager(AbstractRewardManager):
                 ground_truth=ground_truth,
                 extra_info=extra_info,
                 return_dict=True,
+                sandbox_fusion_url=self.sandbox_fusion_url,
             )
+            # for code_contests_modify_code
+            # score = {
+            #     "cot": reasoning_str,
+            #     "generated_test_pass_correct_sol": 0.0,
+            #     "generated_test_pass_incorrect_sol": 0.0,
+            #     "generated_code_pass_gt_test": 0.0,
+            #     "generated_code_pass_generated_test": 0.0,
+            # }
 
             if isinstance(score, dict):
                 reward = score["score"]
                 # Store the information including original reward
                 for key, value in score.items():
-                    reward_extra_info[key].append(value)
+                    reward_extra_info[f"main_model_{key}"].append(value)
             else:
                 reward = score
 
-            reward_extra_info["base_reward"].append(reward)     # TODO modify: Temporarily added for drawing main model's reward of baseline & one trained with classmate in the same figure
+            reward_extra_info["main_model_reward"].append(reward)     # Modify: Temporarily added for plotting main model's reward of baseline and one trained with classmate in the same figure
             reward_tensor[i, valid_response_length - 1] = reward
 
             if data_source not in already_print_data_sources:

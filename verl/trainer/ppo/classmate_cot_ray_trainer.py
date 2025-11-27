@@ -706,7 +706,7 @@ class ClassmateCoTRayPPOTrainer:
             # else:
             #     core_var = "reward"
             
-            core_reward_vars = {"acc", "base_reward", "classmate_reward", "final_reward", "reward"}
+            core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "final_reward", "reward"}
             # TODO haha for code & test case generation
             code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
             core_reward_vars.update(code_test_case_reward_keys)
@@ -892,12 +892,16 @@ class ClassmateCoTRayPPOTrainer:
             )
 
     def _prepare_classmate_batch(self, data: DataProto) -> DataProto:
-        """Prepare batch data for classmate generation. Each worker will handle its own tokenization."""
+        """
+        Prepare batch data for classmate generation. Each worker will handle its own tokenization.
+        This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
+        given we need to apply chat template
+        """
         
         # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
-        all_prompts = self.tokenizer.batch_decode(
-            data.batch["prompts"], skip_special_tokens=True
-        )
+        # all_prompts = self.tokenizer.batch_decode(
+        #     data.batch["prompts"], skip_special_tokens=True
+        # )
         all_actor_responses = self.tokenizer.batch_decode(
             data.batch["responses"], skip_special_tokens=True
         )
@@ -913,11 +917,22 @@ class ClassmateCoTRayPPOTrainer:
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
+        # TODO modify: For code_contests_modify_code
+        def process_response(data_source, response_str):
+            if data_source == "code_contests_modify_code":
+                reason_section_name = "### Reasoning"
+                test_case_section_name = "### Test Inputs and Outputs"
+                return reason_section_name + "\n" + response_str.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
+            else:
+                return response_str
+
         # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
+        data_source_list = data.non_tensor_batch.get("data_source", ["unknown"] * len(all_actor_responses))
         # TODO: split by " " for now
         if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
             keep_rate = 0.8     # TODO
             for res_idx, response in enumerate(all_actor_responses):
+                response = process_response(data_source_list[res_idx], response)
                 split_response = response.split(" ")
                 num_to_keep = int(len(split_response) * keep_rate)
                 modified_response = " ".join(split_response[:num_to_keep])
@@ -925,6 +940,7 @@ class ClassmateCoTRayPPOTrainer:
                 all_processed_actor_responses.append(modified_response)
         elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
             for res_idx, response in enumerate(all_actor_responses):
+                response = process_response(data_source_list[res_idx], response)
                 split_response = response.split(" ")
                 rand_keep_rate = random.uniform(0.3, 0.95)
                 num_to_keep = int(len(split_response) * rand_keep_rate)

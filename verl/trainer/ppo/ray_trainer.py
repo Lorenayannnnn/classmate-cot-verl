@@ -643,10 +643,21 @@ class RayPPOTrainer:
         metric_dict = {}
         for data_source, var2metric2val in data_src2var2metric2val.items():
             # core_var = "acc" if "acc" in var2metric2val else "reward"
-            core_reward_vars = {"acc", "base_reward", "classmate_reward", "final_reward", "reward"}
+            core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "final_reward", "reward"}
 
-            # TODO for code & test case generation
-            code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
+            # Modify for code_contests_modify_code
+            # result = {
+            #     "cot": reasoning_str,
+            #     "generated_test_pass_correct_sol": 0.0,
+            #     "generated_test_pass_incorrect_sol": 0.0,
+            #     "generated_code_pass_gt_test": 0.0,
+            #     "generated_code_pass_generated_test": 0.0,
+            # }
+            code_test_case_reward_keys = [k for k in var2metric2val.keys() if
+                                          "generated_test_pass_correct_sol" in k or
+                                          "generated_test_pass_incorrect_sol" in k or
+                                          "generated_code_pass_gt_test" in k or
+                                          "generated_code_pass_generated_test" in k]
             core_reward_vars.update(code_test_case_reward_keys)
 
             for var_name, metric2val in var2metric2val.items():

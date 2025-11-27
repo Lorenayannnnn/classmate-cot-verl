@@ -40,8 +40,8 @@ actor_rollout_ref:
   actor:
     # TODO Modify
     checkpoint:
-      #  save_contents: ['model', 'optimizer', 'extra']
-      save_contents: [ 'hf_model' ]
+        save_contents: ['model', 'optimizer', 'extra']
+#      save_contents: [ 'hf_model' ]
 
   # Whether it's a hybrid engine, currently only supports hybrid engine
   hybrid_engine: true
@@ -95,6 +95,8 @@ reward_model:
     tensor_parallel_size: 1
     max_model_len: null
     enable_sleep_mode: True
+
+  sandbox_fusion_url: null
 
 
 # config for the algorithm

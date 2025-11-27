@@ -65,6 +65,9 @@ custom_reward_function:
   # The name of the reward function within the specified file. Default is 'compute_score'.
   name: compute_score
 
+reward_model:
+  sandbox_fusion_url: null
+
 # config for the algorithm
 algorithm:
 
