@@ -117,7 +117,6 @@
     - [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4111.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
 
 # Modify for classmate CoT training
-  ```
 - Dataset-specific preprocessing and reward
   - Preprocessing scripts:
     - [data_preprocessing](verl/data_preprocessing)
