@@ -394,6 +394,9 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
                 fused_kernel_options.get("impl_backend", None) if fused_kernel_options is not None else None
             )
 
+            # TODO quantize
+
+
             apply_monkey_patch(
                 model=actor_module,
                 use_remove_padding=use_remove_padding,

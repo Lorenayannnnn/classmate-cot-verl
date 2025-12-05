@@ -19,6 +19,7 @@ import torch
 
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
+from verl.utils.reward_score.olmo3_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
 
@@ -26,8 +27,9 @@ from verl.workers.reward_manager.abstract import AbstractRewardManager
 @register("naive")
 class NaiveRewardManager(AbstractRewardManager):
     """The reward manager."""
-
-    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source", sandbox_fusion_url=None) -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source",
+                 code_api_url=None, llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
+                 llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None):
         """
         Initialize the NaiveRewardManager instance.
 
@@ -43,8 +45,35 @@ class NaiveRewardManager(AbstractRewardManager):
         self.compute_score = compute_score or default_compute_score
         self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
 
-        # Modify
-        self.sandbox_fusion_url = sandbox_fusion_url
+        # TODO Modify
+        self.code_api_url = code_api_url
+        self.llm_judge_config_dict = {
+            "llm_judge_model": llm_judge_model,
+            "llm_judge_timeout": llm_judge_timeout,
+            "llm_judge_max_tokens": llm_judge_max_tokens,
+            "llm_judge_max_context_length": llm_judge_max_context_length,
+            "llm_judge_temperature": llm_judge_temperature,
+            "seed": seed,
+        }
+
+        self.code_verifier_src_to_verifier = {
+            "code": CodeVerifier(
+                verifier_config=CodeVerifierConfig(
+                    code_api_url=code_api_url + "/test_program",
+                    code_max_execution_time=1.0,
+                    code_pass_rate_reward_threshold=0.99,
+                    code_apply_perf_penalty=False,
+                )
+            ),
+            "code_stdio": CodeVerifier(
+                verifier_config=CodeVerifierConfig(
+                    code_api_url=code_api_url + "/test_program_stdio",
+                    code_max_execution_time=1.0,
+                    code_pass_rate_reward_threshold=0.99,
+                    code_apply_perf_penalty=False,
+                )
+            ),
+        }
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """We will expand this function gradually based on the available datasets"""
@@ -98,7 +127,9 @@ class NaiveRewardManager(AbstractRewardManager):
                 ground_truth=ground_truth,
                 extra_info=extra_info,
                 return_dict=True,
-                sandbox_fusion_url=self.sandbox_fusion_url,
+                code_api_url=self.code_api_url,
+                llm_judge_config_dict=self.llm_judge_config_dict,
+                code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
             )
             # for code_contests_modify_code
             # score = {

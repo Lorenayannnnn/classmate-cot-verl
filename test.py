@@ -1,4 +1,13 @@
+import base64
 import os
+import pickle
+
+import torch
+import zlib
+from datasets import load_dataset
+from litellm import acompletion
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
 
 def upload_ckpts_to_huggingface():
     from pathlib import Path
@@ -154,8 +163,102 @@ def download_huggingface_ckpt():
 
 
 if __name__ == "__main__":
-    upload_ckpts_to_huggingface()
+    # upload_ckpts_to_huggingface()
     # download_huggingface_ckpt()
     # test()
 
-#CUDA_VISIBLE_DEVICES=2 python test.py
+    # dataset = load_dataset("allenai/Dolci-Think-RL-7B")
+    # # Get unique value of "dataset" column. Note each entry in dataset["train"] is a list
+    # all_datasets = [entry["dataset"][0] for entry in dataset["train"]]
+    # unique_datasets = set(all_datasets)
+    # # get code entries
+    #
+    # # ['code', 'code_stdio', 'ifeval', 'general-quality', 'general-quality_ref', 'math']
+    #
+    # # code_entries = [entry for entry in dataset["train"] if entry["dataset"][0] == "code"]
+    # general_entries = [entry for entry in dataset["train"] if "general" in entry["dataset"][0].lower()]
+    # breakpoint()
+
+    # read in /data/Dolci-Think-RL-7B/train.parquet
+    # {'math': 7543, 'code_stdio': 2318, 'code': 3028, 'ifeval': 7453, 'general-quality_ref': 4188, 'general-quality': 970}
+    # print number of entries in each subset ['code', 'code_stdio', 'ifeval', 'general-quality', 'general-quality_ref', 'math']
+    def count(dataset, split):
+        subset_counts = {}
+        for entry in dataset:
+            dataset_name = entry["data_source"]
+            if dataset_name not in subset_counts:
+                subset_counts[dataset_name] = 0
+            subset_counts[dataset_name] += 1
+        print(split, subset_counts)
+
+    dir_name = "/home/lorenayan/data/think-wo_general-Dolci-Think-RL-7B_specified_percentage_general-quality-0_general-quality_ref-0_subset_25500"
+    train_dataset = load_dataset("parquet", data_files=f"{dir_name}/train.parquet")["train"]
+    eval_dataset = load_dataset("parquet", data_files=f"{dir_name}/eval.parquet")["train"]
+    count(train_dataset, "train")
+    count(eval_dataset, "eval")
+    breakpoint()
+    # original_dataset = load_dataset("allenai/Dolci-Think-RL-7B")["train"]
+    # Get one entry with dataset == "code_stdio"
+    # code_stdio_entry = next(entry for entry in original_dataset if entry["dataset"][0] == "code_stdio" and "eJx9lbtSwzAQRSETHvFXuE" in entry["ground_truth"][0])
+
+    # tests = "eJx1jr0KAjEQhFVOxWAniI0whcVVkr/7exhL4WxOi7tS8AFSxvd1N+HIIboQstl8Mzuv7N3NZ6EuPn/63C1v3WPovTsYGFFASWgpFDS96KAQ3q3uQx+YDf2WDEg/kLZduL2FjjQs3UZEvW8ztw0t8RI28UXiyVvR4U3MU2NRooZJNGdSIUVKZAO91lD1xPik2VhycT4qlnxNWLhrYpkKTRXn1Whiw76phMKMXv++2PT4wxT0Gu2v5w+hDlOO"
+    #
+    # b64_decoded = base64.b64decode(tests.encode("utf-8"))
+    #
+    # # Use a streaming decompressor to handle potentially very large test cases
+    # # without allocating a massive buffer upfront. This is more memory-efficient.
+    # decompressor = zlib.decompressobj()
+    # decompressed_chunks = []
+    # total_decompressed_size = 0
+    #
+    # # Process in chunks to avoid holding the entire decompressed data in memory at once.
+    # chunk_size = 256 * 1024  # 256KB chunks
+    # for i in range(0, len(b64_decoded), chunk_size):
+    #     chunk = b64_decoded[i: i + chunk_size]
+    #     decompressed_chunk = decompressor.decompress(chunk)
+    #     total_decompressed_size += len(decompressed_chunk)
+    #     decompressed_chunks.append(decompressed_chunk)
+    #
+    # decompressed_chunks.append(decompressor.flush())
+    #
+    # decompressed_data = b"".join(decompressed_chunks)
+    # final = pickle.loads(decompressed_data)
+    # breakpoint()
+    #
+    # from transformers import AutoTokenizer
+    # tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Think-DPO")
+
+    # model_name_path = "allenai/Olmo-3-7B-Think-DPO"
+    # tokenizer = AutoTokenizer.from_pretrained(model_name_path, use_fast=True)
+    # messages = [
+    #     {"role": "system", "content": "You are OLMo, a helpful function-calling AI assistant built by Ai2. Your date cutoff is November 2024, and your model weights are available at https://huggingface.co/allenai."},
+    #     {"role": "user", "content": "create 12 fortune telling phrases in style of voice phone calling style."}
+    # ]
+    # inputs = tokenizer.apply_chat_template(messages,
+    #     template_name="olmo_thinker",
+    #     eos_token=tokenizer.eos_token,
+    #     add_generation_prompt=True,
+    #     return_tensors="pt"
+    # )
+    # inputs = {
+    #     "input_ids": inputs.cuda(),
+    #     "attention_mask": torch.tensor([1] * inputs.shape[-1]).unsqueeze(0).cuda()
+    # }
+    # model = AutoModelForCausalLM.from_pretrained(model_name_path).to("cuda")
+    # outputs = model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=0.7, top_p=0.9)
+    # decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # # print(decoded_output)
+    # # breakpoint()
+
+    #
+    # from litellm import completion
+    # import os
+    #
+    # response = completion(
+    #     model="deepinfra/Qwen/Qwen3-32B",
+    #     messages=[{"role": "user", "content": "write code for saying hi from LiteLLM"}]
+    # )
+
+#CUDA_VISIBLE_DEVICES=3 python test.py
+#LAMBDA_API_KEY=secret_lorena_88c093e313d24a0d921ecbe0a5332a8d.IErX5Qxijmx0DpxHrwdUyK2G8s61uFR8 HOSTED_VLLM_API_BASE=https://api.lambda.ai/v1 python test.py
+#DEEPINFRA_API_KEY=yafq4uYi5X3T2II8d1aFrBhaYkqy16Ur python test.py

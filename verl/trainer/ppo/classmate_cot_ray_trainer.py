@@ -57,6 +57,7 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, shou
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
+from verl.utils.reward_score.olmo3_verifiers import process_code_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.torch_functional import masked_mean
@@ -899,9 +900,9 @@ class ClassmateCoTRayPPOTrainer:
         """
         
         # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
-        # all_prompts = self.tokenizer.batch_decode(
-        #     data.batch["prompts"], skip_special_tokens=True
-        # )
+        all_prompts = self.tokenizer.batch_decode(
+            data.batch["prompts"], skip_special_tokens=True
+        )
         all_actor_responses = self.tokenizer.batch_decode(
             data.batch["responses"], skip_special_tokens=True
         )
@@ -923,6 +924,9 @@ class ClassmateCoTRayPPOTrainer:
                 reason_section_name = "### Reasoning"
                 test_case_section_name = "### Test Inputs and Outputs"
                 return reason_section_name + "\n" + response_str.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
+            elif data_source == "code_stdio" or data_source == "code":
+                # used in olmo3 CodeVerifier
+                return process_code_output(response_str)
             else:
                 return response_str
 
@@ -932,12 +936,16 @@ class ClassmateCoTRayPPOTrainer:
         if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
             keep_rate = 0.8     # TODO
             for res_idx, response in enumerate(all_actor_responses):
-                response = process_response(data_source_list[res_idx], response)
-                split_response = response.split(" ")
+                processed_response = process_response(data_source_list[res_idx], response)
+                split_response = processed_response.split(" ")
                 num_to_keep = int(len(split_response) * keep_rate)
                 modified_response = " ".join(split_response[:num_to_keep])
                 # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + modified_response)
                 all_processed_actor_responses.append(modified_response)
+                # if "code" in data_source_list[res_idx]:
+                #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
+                #     print(f"🐛🐛🐛 original response {processed_response}")
+                    # print(f"🐛🐛🐛 sample modified_response {modified_response}")
         elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
             for res_idx, response in enumerate(all_actor_responses):
                 response = process_response(data_source_list[res_idx], response)

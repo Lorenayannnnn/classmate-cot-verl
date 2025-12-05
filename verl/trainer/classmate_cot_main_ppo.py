@@ -32,7 +32,8 @@ from verl.utils.device import is_cuda_available
 from verl.utils.import_utils import load_extern_type
 
 
-@hydra.main(config_path="config", config_name="classmate_cot_ppo_trainer", version_base=None)
+# @hydra.main(config_path="config", config_name="classmate_cot_ppo_trainer", version_base=None)
+@hydra.main(config_path="config", config_name="olmo3_classmate_cot_ppo_trainer", version_base=None)
 def main(config):
     """Main entry point for PPO training with Hydra configuration management.
 
@@ -304,14 +305,27 @@ class ClassmateCoTTaskRunner:
         processor = hf_processor(local_path, trust_remote_code=trust_remote_code, use_fast=True)
 
         # Load the reward manager for training and validation.
-        # TODO haha check if sandbox_url is set
         reward_fn = load_reward_manager(
             config, tokenizer, num_examine=0,
+            code_api_url=config.reward_model.sandbox_fusion_url,
+            llm_judge_model=config.reward_model.llm_judge_model,
+            llm_judge_timeout=config.reward_model.llm_judge_timeout,
+            llm_judge_max_tokens=config.reward_model.llm_judge_max_tokens,
+            llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
+            llm_judge_temperature=config.reward_model.llm_judge_temperature,
+            seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
         )
         val_reward_fn = load_reward_manager(
             config, tokenizer, num_examine=1,
+            code_api_url=config.reward_model.sandbox_fusion_url,
+            llm_judge_model=config.reward_model.llm_judge_model,
+            llm_judge_timeout=config.reward_model.llm_judge_timeout,
+            llm_judge_max_tokens=config.reward_model.llm_judge_max_tokens,
+            llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
+            llm_judge_temperature=config.reward_model.llm_judge_temperature,
+            seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
         )

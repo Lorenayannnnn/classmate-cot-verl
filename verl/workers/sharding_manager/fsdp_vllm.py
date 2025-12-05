@@ -46,6 +46,11 @@ from verl.utils.model import check_exclude_modules, check_target_modules, conver
 from verl.utils.profiler import GPUMemoryLogger, log_gpu_memory_usage, simple_timer
 from verl.utils.torch_functional import check_device_is_available
 from verl.utils.vllm import TensorLoRARequest, VLLMHijack, is_version_ge
+from verl.workers.rollout.vllm_rollout.utils import (
+    VLLM_LORA_INT_ID,
+    VLLM_LORA_NAME,
+    VLLM_LORA_PATH
+)
 
 from .base import BaseShardingManager
 
@@ -298,7 +303,8 @@ class FSDPVLLMShardingManager(BaseShardingManager):
                 lora_reqest = TensorLoRARequest(
                     lora_name=f"{lora_int_id}",
                     lora_int_id=lora_int_id,
-                    lora_path="simon_lora_path",
+                    # lora_path="simon_lora_path",
+                    lora_path=VLLM_LORA_PATH,
                     peft_config=asdict(peft_config),
                     lora_tensors=updated_params,
                 )

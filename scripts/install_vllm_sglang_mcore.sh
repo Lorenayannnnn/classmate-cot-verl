@@ -7,20 +7,22 @@ export MAX_JOBS=32
 
 echo "1. install inference frameworks and pytorch they need"
 if [ $USE_SGLANG -eq 1 ]; then
-    pip install "sglang[all]==0.4.6.post1" --no-cache-dir --find-links https://flashinfer.ai/whl/cu124/torch2.6/flashinfer-python && pip install torch-memory-saver --no-cache-dir
+    pip install "sglang[all]==0.4.6.post1" --no-cache-dir --find-links https://flashinfer.ai/whl/cu124/torch2.9/flashinfer-python && pip install torch-memory-saver --no-cache-dir
 fi
-pip install --no-cache-dir "vllm==0.8.5.post1" "torch==2.6.0" "torchvision==0.21.0" "torchaudio==2.6.0" "tensordict==0.6.2" torchdata
+#pip install --no-cache-dir "vllm==0.8.5.post1" "litellm==1.80.7" "torch==2.6.0" "torchvision==0.21.0" "torchaudio==2.6.0" "tensordict==0.6.2" torchdata
+pip install --no-cache-dir "litellm==1.80.7" "torch==2.6.0" "torchvision==0.21.0" "torchaudio==2.6.0" "tensordict==0.6.2" torchdata
 
 echo "2. install basic packages"
-pip install "transformers[hf_xet]>=4.51.0" accelerate datasets peft hf-transfer \
-    "numpy<2.0.0" "pyarrow>=15.0.0" pandas \
+pip install "transformers[hf_xet]>=4.51.0" accelerate datasets peft hf-transfer "pyarrow>=15.0.0" pandas \
     ray[default] codetiming hydra-core pylatexenc qwen-vl-utils wandb dill pybind11 liger-kernel mathruler \
-    pytest py-spy pyext pre-commit ruff tensorboard 
+    pytest py-spy pyext pre-commit ruff tensorboard langdetect==1.0.9 immutabledict==1.2.0 nltk==3.9.2
 
 pip install "nvidia-ml-py>=12.560.30" "fastapi[standard]>=0.115.0" "optree>=0.13.0" "pydantic>=2.9" "grpcio>=1.62.1"
 
 
 echo "3. install FlashAttention and FlashInfer"
+pip install "flash-attn==2.8.3" "flashinfer-python==0.5.3"
+
 # Install flash-attn-2.7.4.post1 (cxx11abi=False)
 wget -nv https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl && \
     pip install --no-cache-dir flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl

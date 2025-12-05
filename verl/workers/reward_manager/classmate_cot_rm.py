@@ -22,6 +22,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
+from verl.utils.reward_score.olmo3_verifiers import CodeVerifier, CodeVerifierConfig
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
 
@@ -36,9 +37,11 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             num_examine, 
             compute_score=None, 
             reward_fn_key="data_source", 
-            classmate_cot_reward_configs=None, 
+            code_api_url=None,
+            llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
+            llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
+            classmate_cot_reward_configs=None,
             classmate_generation_configs=None,
-            sandbox_fusion_url=None,
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -73,8 +76,34 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         # Get reward weight for combining actor and classmate rewards
         self.classmate_reward_weight = self.classmate_cot_reward_configs.classmate_reward_weight
 
-        self.sandbox_fusion_url = sandbox_fusion_url
-    
+        self.code_api_url = code_api_url
+        self.llm_judge_config_dict = {
+            "llm_judge_model": llm_judge_model,
+            "llm_judge_timeout": llm_judge_timeout,
+            "llm_judge_max_tokens": llm_judge_max_tokens,
+            "llm_judge_max_context_length": llm_judge_max_context_length,
+            "llm_judge_temperature": llm_judge_temperature,
+            "seed": seed,     # Dropped for deepinfra
+        }
+
+        self.code_verifier_src_to_verifier = {
+            "code": CodeVerifier(
+                verifier_config=CodeVerifierConfig(
+                    code_api_url=code_api_url + "/test_program",
+                    code_max_execution_time=1.0,
+                    code_pass_rate_reward_threshold=0.99,
+                    code_apply_perf_penalty=False,
+                )
+            ),
+            "code_stdio": CodeVerifier(
+                verifier_config=CodeVerifierConfig(
+                    code_api_url=code_api_url + "/test_program_stdio",
+                    code_max_execution_time=1.0,
+                    code_pass_rate_reward_threshold=0.99,
+                    code_apply_perf_penalty=False,
+                )
+            ),
+        }
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """Compute rewards incorporating classmate chain-of-thought outputs."""
@@ -115,6 +144,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
+            classmate_output = data_item.non_tensor_batch["classmate_outputs"]
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
             num_turns = data_item.non_tensor_batch.get("__num_turns__", None)
@@ -132,7 +162,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 ground_truth=ground_truth,
                 extra_info=extra_info,
                 return_dict=True,
-                sandbox_fusion_url=self.sandbox_fusion_url
+                code_api_url=self.code_api_url,
+                llm_judge_config_dict=self.llm_judge_config_dict,
+                code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
             )
 
             if isinstance(actor_score, dict):
@@ -162,12 +194,14 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         # TODO flexible for classmate (not strict requirement on format)
                         method="flexible",
                         return_dict=True,
-                        sandbox_fusion_url=self.sandbox_fusion_url
+                        code_api_url=self.code_api_url,
+                        llm_judge_config_dict=self.llm_judge_config_dict,
+                        code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
                     )
                     for k, v in tmp_classmate_result.items():
-                        if f"classmate_{k}" not in tmp_total_classmate_reward_dict:
-                            tmp_total_classmate_reward_dict[f"classmate_{k}"] = 0.0
-                        tmp_total_classmate_reward_dict[f"classmate_{k}"] += v
+                        if k not in tmp_total_classmate_reward_dict:
+                            tmp_total_classmate_reward_dict[k] = 0.0
+                        tmp_total_classmate_reward_dict[k] += v
 
                     # print(f"""
                     # 🐛 Sample data_source: {data_source}
@@ -180,9 +214,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     # """)
                 # Average over num_return_sequences
                 for k, v in tmp_total_classmate_reward_dict.items():
-                    if f"classmate_{k}" not in tmp_total_classmate_reward_dict:
-                        total_classmate_reward_dict[f"classmate_{k}"] = 0.0
-                    total_classmate_reward_dict[f"classmate_{k}"] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
+                    if k not in total_classmate_reward_dict:
+                        total_classmate_reward_dict[k] = 0.0
+                    total_classmate_reward_dict[k] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
 
             # print(f"🐛classmate_outputs: {classmate_outputs} classmate_reward: {classmate_reward}")
             # breakpoint()
@@ -195,7 +229,10 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             reward_extra_info["final_reward"].append(final_reward)
             # Update total_classmate_reward_dict to reward_extra_info
             for key, value in total_classmate_reward_dict.items():
-                reward_extra_info[f"classmate_{key}"].append(value)
+                if key == "score":
+                    reward_extra_info["classmate_reward"].append(value)
+                else:
+                    reward_extra_info[f"classmate_{key}"].append(value)
 
             reward_tensor[i, valid_response_length - 1] = final_reward
 
@@ -207,6 +244,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 print("[prompt]", prompt_str)
                 print("[actor_response]", response_str)
                 print("[ground_truth]", ground_truth)
+                print("[classmate_output]", classmate_output)
                 # if isinstance(score, dict):
                 #     for key, value in score.items():
                 #         print(f"[{key}]", value)

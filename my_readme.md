@@ -70,9 +70,6 @@
   apt install zsh
   zsh --version
   sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-  
-  hf auth login
-  wandb login
   ```
 - Change ~/.bashrc:
   ```
@@ -82,6 +79,11 @@
 - 
 
 ### Install with miniconda (if not docker):
+- ```
+  curl -LsSf https://astral.sh/uv/0.9.14/install.sh | sh
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+  source ~/.bashrc
+  ```
 - Setup miniconda:
   ```
   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
@@ -100,20 +102,21 @@
     ```
     conda --version
     ```
-- Install dependency with conda:
+- Install dependency with conda + login:
   ```
   conda create -n verl python==3.10.12
   conda activate verl
-  USE_MEGATRON=0 USE_SGLANG=0 bash scripts/install_vllm_sglang_mcore.sh
-  pip install --no-deps -e .
-  ```
-  Note: [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4111.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
-
-# Modify for classmate CoT training
-- Login:
-  ```
+  bash install.sh
   hf auth login
   wandb login
+  ```
+[//]: # (  USE_MEGATRON=0 USE_SGLANG=0 bash scripts/install_vllm_sglang_mcore.sh)
+[//]: # (  pip install --no-deps -e .)
+  - Note:
+    - Currently not supporting megatron and sglang
+    - [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4111.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
+
+# Modify for classmate CoT training
   ```
 - Dataset-specific preprocessing and reward
   - Preprocessing scripts:
@@ -142,10 +145,14 @@
       Use [classmate reward manager](verl/workers/reward_manager/classmate_cot_rm.py) to calculate classmate rewards (built on top of naive reward manager for GRPO)
       - Calculate Classmate Rewards: For each batch item, iterate through all samples from each classmate model, calculate each sample's reward one by one, average across samples for each classmate, and do weighted average across all classmate models (TODO: now the classmate's weights are fixed to be average)
 - Dataset-specific rewards:
-  - [__init__.py](verl/utils/reward_score/__init__.py): def default_compute_score 
-  - [gsm8k.py](verl/utils/reward_score/gsm8k.py)
-  - [hendrycks_math.py](verl/utils/reward_score/hendrycks_math.py)
-  - [code_contests_modify_code.py](verl/utils/reward_score/code_contests_modify_code.py)
+  - Dolci:
+    - [olmo3_verifiers.py](verl/utils/reward_score/olmo3_verifiers.py): verifiers + ```def compute_score```
+    - [olmo3_judge_utils.py](verl/utils/reward_score/olmo3_judge_utils.py)
+  - Old setting:
+    - [__init__.py](verl/utils/reward_score/__init__.py): def default_compute_score
+    - [gsm8k.py](verl/utils/reward_score/gsm8k.py)
+    - [hendrycks_math.py](verl/utils/reward_score/hendrycks_math.py)
+    - [code_contests_modify_code.py](verl/utils/reward_score/code_contests_modify_code.py)
 - Printing training metrics: [metric_utils.py](verl/trainer/ppo/metric_utils.py) -> def compute_data_metrics
 - Train on coding task:
   - Sandbox_fusion: [__init__.py](verl/utils/reward_score/sandbox_fusion/__init__.py): pass in the programming language
@@ -153,6 +160,16 @@
   - compute_score: check the ```elif code_contests_modify_code``` in ```default_compute_score```
 
 # Hosting Sandbox for coding tasks
+- Dolci code/code_stdio:
+  - ```
+    uvicorn verl.code_utils.api:app --host 0.0.0.0 --port 8001
+    ```
+  - Test connection:
+    ```
+    curl -X GET http://localhost:8001/health
+    curl -X POST http://localhost:8001/test_program -H "Content-Type: application/json" -d '{"program": "def add(a, b): return a + b", "tests": ["assert add(1, 2) == 3", "assert add(-1, 1) == 0", "assert add(0, 0) == 1"], "max_execution_time": 1.0}'
+    curl -X POST http://localhost:8001/test_program_stdio -H "Content-Type: application/json" -d '{"program": "import sys\nfor line in sys.stdin.read().splitlines():\n    print(int(line.strip()) + 1)", "tests": [{"input": "1\n", "output": "2\n"}, {"input": "100\n", "output": "101\n"}], "max_execution_time": 1.0}'
+    ```
 - Host [SandBox Fusion](https://bytedance.github.io/SandboxFusion/docs/docs/get-started#local-deployment) (create a sandbox to test code safely):
   - Note: need a machine with root access
   - ```docker run -it -p YOUR_PORT_NUMBER:8080 volcengine/sandbox-fusion:server-20250609``` (Uvicorn always starts on port 8080 in docker. Map it to some port number on your machine)

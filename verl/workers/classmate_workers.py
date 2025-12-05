@@ -300,7 +300,7 @@ class ClassmateWorker(Worker):
                     batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
                     classmate_outputs.extend(batch_completions)
 
-                # print(f"🐛🐛 Classmate completions: {classmate_outputs}")
+                # print(f"🐛🐛🐛 Classmate completions: {classmate_outputs}")
             else:
                 raise NotImplementedError("Only vLLM generation is supported for classmate workers.")
                 # # Fall back to huggingface generation

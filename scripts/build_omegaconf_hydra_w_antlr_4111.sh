@@ -1,7 +1,14 @@
 
 # TODO: temporary fixes for omegaconf/hydra to use antlr 4.11.1 (needed by parse_latex for training on hendrycks math dataset)
 
-sudo apt install -y openjdk-17-jdk
+# Check if Java is installed, if not install OpenJDK 17
+if ! command -v java &> /dev/null
+then
+    echo "Java could not be found, installing OpenJDK 17..."
+    sudo apt update
+    sudo apt install -y openjdk-17-jdk
+fi
+
 
 pip uninstall omegaconf hydra-core
 
