@@ -19,7 +19,7 @@ import torch
 
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
-from verl.utils.reward_score.olmo3_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
+from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
 
@@ -47,33 +47,39 @@ class NaiveRewardManager(AbstractRewardManager):
 
         # TODO Modify
         self.code_api_url = code_api_url
-        self.llm_judge_config_dict = {
-            "llm_judge_model": llm_judge_model,
-            "llm_judge_timeout": llm_judge_timeout,
-            "llm_judge_max_tokens": llm_judge_max_tokens,
-            "llm_judge_max_context_length": llm_judge_max_context_length,
-            "llm_judge_temperature": llm_judge_temperature,
-            "seed": seed,
-        }
-
-        self.code_verifier_src_to_verifier = {
-            "code": CodeVerifier(
-                verifier_config=CodeVerifierConfig(
-                    code_api_url=code_api_url + "/test_program",
-                    code_max_execution_time=1.0,
-                    code_pass_rate_reward_threshold=0.99,
-                    code_apply_perf_penalty=False,
-                )
-            ),
-            "code_stdio": CodeVerifier(
-                verifier_config=CodeVerifierConfig(
-                    code_api_url=code_api_url + "/test_program_stdio",
-                    code_max_execution_time=1.0,
-                    code_pass_rate_reward_threshold=0.99,
-                    code_apply_perf_penalty=False,
-                )
-            ),
-        }
+        # if llm_judge_model is not None:     # TODO may remove later; not used by olmo2
+        #     self.llm_judge_config_dict = {
+        #         "llm_judge_model": llm_judge_model,
+        #         "llm_judge_timeout": llm_judge_timeout,
+        #         "llm_judge_max_tokens": llm_judge_max_tokens,
+        #         "llm_judge_max_context_length": llm_judge_max_context_length,
+        #         "llm_judge_temperature": llm_judge_temperature,
+        #         "seed": seed,
+        #     }
+        # else:
+        #     self.llm_judge_config_dict = None
+        #
+        # if code_api_url is not None:        # TODO may remove later; not used by olmo2
+        #     self.code_verifier_src_to_verifier = {
+        #         "code": CodeVerifier(
+        #             verifier_config=CodeVerifierConfig(
+        #                 code_api_url=code_api_url + "/test_program",
+        #                 code_max_execution_time=1.0,
+        #                 code_pass_rate_reward_threshold=0.99,
+        #                 code_apply_perf_penalty=False,
+        #             )
+        #         ),
+        #         "code_stdio": CodeVerifier(
+        #             verifier_config=CodeVerifierConfig(
+        #                 code_api_url=code_api_url + "/test_program_stdio",
+        #                 code_max_execution_time=1.0,
+        #                 code_pass_rate_reward_threshold=0.99,
+        #                 code_apply_perf_penalty=False,
+        #             )
+        #         ),
+        #     }
+        # else:
+        #     self.code_verifier_src_to_verifier = None
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """We will expand this function gradually based on the available datasets"""
@@ -128,8 +134,8 @@ class NaiveRewardManager(AbstractRewardManager):
                 extra_info=extra_info,
                 return_dict=True,
                 code_api_url=self.code_api_url,
-                llm_judge_config_dict=self.llm_judge_config_dict,
-                code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+                # llm_judge_config_dict=self.llm_judge_config_dict,
+                # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
             )
             # for code_contests_modify_code
             # score = {
@@ -157,6 +163,7 @@ class NaiveRewardManager(AbstractRewardManager):
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
                 print("[prompt]", prompt_str)
+                print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
                 print("[response]", response_str)
                 print("[ground_truth]", ground_truth)
                 if isinstance(score, dict):

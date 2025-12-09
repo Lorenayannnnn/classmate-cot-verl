@@ -374,7 +374,7 @@ class ClassmateCoTTaskRunner:
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
             classmate_vllm_configs=config.reward_model.classmate_vllm_configs,
             seed=config.data.seed,
-            host_classmate_name_to_url_json_fn=config.reward_model.classmate_cot_reward_configs.host_classmate_name_to_url_json_fn,
+            # host_classmate_name_to_url_json_fn=config.reward_model.classmate_cot_reward_configs.host_classmate_name_to_url_json_fn,
         )
         # Initialize the workers of the trainer.
         trainer.init_workers()

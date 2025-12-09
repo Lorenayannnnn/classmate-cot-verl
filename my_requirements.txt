@@ -38,3 +38,4 @@ opencv-python==4.12.0.88
 opencv-fixer==0.2.5
 vllm==0.11.0
 litellm==1.80.7
+together==1.5.31

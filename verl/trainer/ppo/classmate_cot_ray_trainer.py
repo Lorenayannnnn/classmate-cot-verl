@@ -57,7 +57,7 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, shou
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
-from verl.utils.reward_score.olmo3_verifiers import process_code_output
+from verl.utils.reward_score.olmo_verifiers import process_code_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.torch_functional import masked_mean
@@ -298,7 +298,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_generation_configs=None,
         classmate_vllm_configs=None,
         seed=None,
-        host_classmate_name_to_url_json_fn=None,
+        # host_classmate_name_to_url_json_fn=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -367,7 +367,7 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_free_cache_engine = classmate_free_cache_engine
         self.classmate_use_vllm = classmate_use_vllm
         self.classmate_generation_configs = classmate_generation_configs
-        self.host_classmate_name_to_url_json_fn = host_classmate_name_to_url_json_fn
+        # self.host_classmate_name_to_url_json_fn = host_classmate_name_to_url_json_fn
 
         self.classmate_num_return_sequences = classmate_num_return_sequences
         OmegaConf.set_struct(self.classmate_generation_configs, False)
@@ -787,15 +787,16 @@ class ClassmateCoTRayPPOTrainer:
         # TODO modify: create classmates, one worker per model
         model_paths = self.classmate_cot_reward_configs.classmate_model_name_or_path_list
         # Read in host_classmate_name_to_url_json_fn
-        with open(self.host_classmate_name_to_url_json_fn, "r") as f:
-            host_classmate_name_to_url = json.load(f)
+        # with open(self.host_classmate_name_to_url_json_fn, "r") as f:
+        #     host_classmate_name_to_url = json.load(f)
+        # Deprecated. Now using TogetherAI
         for model_idx, model_path in enumerate(model_paths):
             # All classmate workers share the same resource pool
             # For different resource pools per model, modify ResourcePoolManager mapping
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.ClassmateWorker)
 
-            if model_path not in host_classmate_name_to_url:
-                raise ValueError(f"Model path {model_path} not found in host_classmate_name_to_url mapping.")
+            # if model_path not in host_classmate_name_to_url:
+            #     raise ValueError(f"Model path {model_path} not found in host_classmate_name_to_url mapping.")
 
             # Create separate config for each model
             classmate_config = ClassmateWorkerConfig(
@@ -807,8 +808,9 @@ class ClassmateCoTRayPPOTrainer:
                 max_new_tokens=self.classmate_generation_configs.max_new_tokens,
                 generation_config=self.classmate_generation_configs,
                 vllm_config=self.classmate_vllm_configs,
-                api_host=host_classmate_name_to_url[model_path]["local_host"],        # TODO for now only support using the same server
-                api_port=host_classmate_name_to_url[model_path]["port"],
+                # Deprecated. Now using TogetherAI
+                # api_host=host_classmate_name_to_url[model_path]["local_host"],
+                # api_port=host_classmate_name_to_url[model_path]["port"],
             )
 
             # Create unique role name for each classmate model worker group

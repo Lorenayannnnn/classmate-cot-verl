@@ -6,6 +6,7 @@ import torch
 import zlib
 from datasets import load_dataset
 from litellm import acompletion
+from together import Together
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
@@ -182,21 +183,21 @@ if __name__ == "__main__":
     # read in /data/Dolci-Think-RL-7B/train.parquet
     # {'math': 7543, 'code_stdio': 2318, 'code': 3028, 'ifeval': 7453, 'general-quality_ref': 4188, 'general-quality': 970}
     # print number of entries in each subset ['code', 'code_stdio', 'ifeval', 'general-quality', 'general-quality_ref', 'math']
-    def count(dataset, split):
-        subset_counts = {}
-        for entry in dataset:
-            dataset_name = entry["data_source"]
-            if dataset_name not in subset_counts:
-                subset_counts[dataset_name] = 0
-            subset_counts[dataset_name] += 1
-        print(split, subset_counts)
-
-    dir_name = "/home/lorenayan/data/think-wo_general-Dolci-Think-RL-7B_specified_percentage_general-quality-0_general-quality_ref-0_subset_25500"
-    train_dataset = load_dataset("parquet", data_files=f"{dir_name}/train.parquet")["train"]
-    eval_dataset = load_dataset("parquet", data_files=f"{dir_name}/eval.parquet")["train"]
-    count(train_dataset, "train")
-    count(eval_dataset, "eval")
-    breakpoint()
+    # def count(dataset, split):
+    #     subset_counts = {}
+    #     for entry in dataset:
+    #         dataset_name = entry["data_source"]
+    #         if dataset_name not in subset_counts:
+    #             subset_counts[dataset_name] = 0
+    #         subset_counts[dataset_name] += 1
+    #     print(split, subset_counts)
+    #
+    # dir_name = "/home/lorenayan/data/think-wo_general-Dolci-Think-RL-7B_specified_percentage_general-quality-0_general-quality_ref-0_subset_25500"
+    # train_dataset = load_dataset("parquet", data_files=f"{dir_name}/train.parquet")["train"]
+    # eval_dataset = load_dataset("parquet", data_files=f"{dir_name}/eval.parquet")["train"]
+    # count(train_dataset, "train")
+    # count(eval_dataset, "eval")
+    # breakpoint()
     # original_dataset = load_dataset("allenai/Dolci-Think-RL-7B")["train"]
     # Get one entry with dataset == "code_stdio"
     # code_stdio_entry = next(entry for entry in original_dataset if entry["dataset"][0] == "code_stdio" and "eJx9lbtSwzAQRSETHvFXuE" in entry["ground_truth"][0])
@@ -228,8 +229,27 @@ if __name__ == "__main__":
     # from transformers import AutoTokenizer
     # tokenizer = AutoTokenizer.from_pretrained("allenai/Olmo-3-7B-Think-DPO")
 
-    # model_name_path = "allenai/Olmo-3-7B-Think-DPO"
-    # tokenizer = AutoTokenizer.from_pretrained(model_name_path, use_fast=True)
+    # model_name_path = "allenai/Olmo-3-7B-Think"
+    # model_name_path = "allenai/Olmo-3-7B-Think-SFT"
+    # tokenizer = AutoTokenizer.from_pretrained(model_name_path)
+    # model = AutoModelForCausalLM.from_pretrained(model_name_path).to("cuda")
+    # input_ids = [100264,9125,198,2675,527,507,11237,78,11,264,11190,734,1824,17157,15592,18328,5918,555,57086,17,13,4718,2457,45379,374,6841,220,2366,19,11,323,701,1646,14661,527,2561,520,3788,1129,71,36368,1594,6973,32506,268,2192,13,1472,656,539,5131,617,2680,311,904,5865,13,366,22124,1500,22124,29,100265,198,100264,882,198,11135,2234,661,220,1049,19,570,362,44439,706,279,6211,315,264,9518,18255,1139,400,1049,18,1144,15487,220,1049,18,3,12295,11,1093,279,32440,315,264,3544,33819,2541,13,2684,374,264,6134,1990,1403,12295,422,323,1193,422,814,4430,264,7147,13,578,1925,6134,6276,11,5108,505,4994,279,44439,11,311,3810,279,44439,1555,279,3130,7559,520,279,53342,9309,13,362,1732,29933,279,44439,11,21728,1063,315,279,12295,11,1243,11141,279,44439,11,1555,279,20396,6134,11,994,814,471,311,279,53342,9309,3130,369,279,1176,892,13,1102,10800,704,430,814,12263,1855,315,279,1023,12295,7041,220,1041,3115,11,3734,369,279,3130,7559,520,279,42552,9309,13,2650,1690,3115,1550,279,20792,733,1139,279,42552,9309,3130,30,100265,198,100264,78191,198,14023,771,29]
+    # tokenizer.decode(input_ids)
+    # generate_output = model.generate(input_ids=torch.tensor([input_ids]).to("cuda"), attention_mask=torch.tensor([[1]*len(input_ids)]).to("cuda"), max_new_tokens=1024)
+    # decoded_output = tokenizer.decode(generate_output[0][len(input_ids):], skip_special_tokens=True)
+    # # print(tokenizer.decode(model.generate(input_ids=torch.tensor([input_ids]).to("cuda"), attention_mask=torch.tensor([[1]*len(input_ids)]).to("cuda"), temperature=0.6, top_p=0.95, max_new_tokens=32768)[0][len(input_ids):], skip_special_tokens=True))
+    # print(tokenizer.decode(model.generate(input_ids=torch.tensor([input_ids]).to("cuda"), attention_mask=torch.tensor([[1]*len(input_ids)]).to("cuda"), temperature=0.6, top_p=0.95, top_k=50, max_new_tokens=1024)[0][len(input_ids):], skip_special_tokens=True))
+    # breakpoint()
+
+    # messages = [{"role": "user", "content": hoho}]
+    # messages = [hoho]
+    # templated_input_ids = tokenizer(messages)
+    # print(tokenizer.decode(model.generate(input_ids=torch.tensor([templated_input_ids]).to("cuda"), attention_mask=torch.tensor([[1]*len(templated_input_ids)]).to("cuda"), max_new_tokens=1024)[0][len(templated_input_ids):], skip_special_tokens=True))
+    # inputs = tokenizer(messages, return_tensors="pt")
+    # inputs = {k: v.cuda() for k, v in inputs.items()}
+    # print(tokenizer.decode(model.generate(**inputs, max_new_tokens=1024)[0][len(inputs["input_ids"][0]):], skip_special_tokens=True, temperature=0.6, top_p=0.95, max_new_tokens=32768))
+    # breakpoint()
+
     # messages = [
     #     {"role": "system", "content": "You are OLMo, a helpful function-calling AI assistant built by Ai2. Your date cutoff is November 2024, and your model weights are available at https://huggingface.co/allenai."},
     #     {"role": "user", "content": "create 12 fortune telling phrases in style of voice phone calling style."}
@@ -259,6 +279,27 @@ if __name__ == "__main__":
     #     messages=[{"role": "user", "content": "write code for saying hi from LiteLLM"}]
     # )
 
-#CUDA_VISIBLE_DEVICES=3 python test.py
+    # user_prompt = "(Hungary 2004). A palace has the shape of a square divided into $2003 \times 2003$ rooms, like the squares of a large chessboard. There is a door between two rooms if and only if they share a wall. The main door allows, coming from outside the palace, to enter the palace through the room located at the northwest corner. A person enters the palace, visits some of the rooms, then leaves the palace, through the entrance door, when they return to the northwest corner room for the first time. It turns out that they visited each of the other rooms exactly 100 times, except for the room located at the southeast corner. How many times did the visitor go into the southeast corner room?"
+    # system_prompt = "You are OLMo, a helpful function-calling AI assistant built by Ai2. Your date cutoff is November 2024, and your model weights are available at https://huggingface.co/allenai."
+    # # messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+    # messages = [ {"role": "user", "content": user_prompt}]
+    #
+    # templated = tokenizer.apply_chat_template(messages,add_generation_prompt=True, tokenize=False)
+
+    client = Together()
+    messages = [
+        {"role": "user", "content": "write code for saying hi from LiteLLM"},
+        {"role": "user", "content": "haha"},
+        {"role": "user", "content": "Merry Christmas!"},
+    ]
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-3.2-3B-Instruct-Turbo",
+        messages=messages
+    )
+    breakpoint()
+
+
+#TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" python test.py
 #LAMBDA_API_KEY=secret_lorena_88c093e313d24a0d921ecbe0a5332a8d.IErX5Qxijmx0DpxHrwdUyK2G8s61uFR8 HOSTED_VLLM_API_BASE=https://api.lambda.ai/v1 python test.py
 #DEEPINFRA_API_KEY=yafq4uYi5X3T2II8d1aFrBhaYkqy16Ur python test.py

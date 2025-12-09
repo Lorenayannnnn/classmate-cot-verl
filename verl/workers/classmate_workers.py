@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Dict, Any
 import logging
@@ -18,8 +19,8 @@ import os
 import time
 
 import numpy as np
+from together import Together
 from transformers import AutoTokenizer
-from transformers import DataCollatorWithPadding
 
 import ray
 from verl import DataProto
@@ -57,8 +58,9 @@ class ClassmateWorkerConfig:
     """
 
     # API server configuration for vLLM remote serving
-    api_host: str
-    api_port: int
+    # Deprecated. Now using TogetherAI
+    # api_host: str = None
+    # api_port: int = None
 
 
 class ClassmateWorker(Worker):
@@ -100,7 +102,7 @@ class ClassmateWorker(Worker):
         self.special_ids = None
 
         # API server configuration for remote vLLM serving
-        self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
+        # self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
         self.client = None
 
     def _generate_via_remote_api(self, batch_prompts: list, batch_max_token_len: int) -> list:
@@ -114,31 +116,37 @@ class ClassmateWorker(Worker):
         """
         # Convert generation_config to API parameters
         vllm_api_params = {
-            "model": self.model_name_or_path,
-            "prompt": batch_prompts,
+            # "model": self.model_name_or_path,
+            # "prompt": batch_prompts,
             **self.generation_config
         }
 
         vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
 
-        finish = False
-        while not finish:
-            try:
-                # print("🐛🐛🐛 Send request. Wait...")
-                response = self.client.completions.create(**vllm_api_params, timeout=60)
-                # print(f"🐛🐛🐛 Response received: {response}")
-                completions = [choice.text for choice in response.choices]
-                # print("🐛🐛🐛 Successful vLLM API completions:", completions)
-                finish = True
-            except Exception as e:
-                print(f"Error checking model readiness: {e}")
-                time.sleep(5)
+        def generate(tmp_idx, tmp_prompt):
+            finish = False
+            while not finish:
+                try:
+                    response = self.client.chat.completions.create(
+                      model=self.model_name_or_path,
+                      messages=[{"role": "user", "content": tmp_prompt}],
+                      **vllm_api_params
+                    )
+                    tmp_output = response.choices[0].message.content
+                    finish = True
+                except Exception as e:
+                    print(f"Error generating for prompt: {e}. Retrying...")
+                    time.sleep(3)
+            return tmp_idx, tmp_output
 
-        # print("🐛🐛🐛 Send request. Wait...")
-        # response = self.client.completions.create(**vllm_api_params, timeout=60)
-        # print(f"🐛🐛🐛 Response received: {response}")
-        # completions = [choice.text for choice in response.choices]
-        # print("🐛🐛🐛 Successful vLLM API completions:", completions)
+        completions = [None] * len(batch_prompts)
+
+        # Thread pool for synchronous parallelism
+        with ThreadPoolExecutor(max_workers=8) as executor:     # TODO change number of workers if needed
+            futures = [executor.submit(generate, idx, p) for idx, p in enumerate(batch_prompts)]
+            for future in as_completed(futures):
+                idx, output = future.result()
+                completions[idx] = output
 
         return completions
 
@@ -151,7 +159,8 @@ class ClassmateWorker(Worker):
         """
         print(f"Initializing classmate model {self.model_index}: {self.model_name_or_path}")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path.replace("-Turbo", ""))       # TogetherAI models have -Turbo suffix
         # Ensure valid padding token and left padding for causal LM
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -162,11 +171,12 @@ class ClassmateWorker(Worker):
         try:
             if self.use_vllm:
                 # Create OpenAI client
-                from openai import OpenAI
-                self.client = OpenAI(
-                    base_url=self.api_base_url,
-                    api_key="EMPTY",
-                )
+                # from openai import OpenAI
+                # self.client = OpenAI(
+                #     base_url=self.api_base_url,
+                #     api_key="EMPTY",
+                # )
+                self.client = Together()
 
                 # Start vLLM API server process instead of loading model locally
                 # self._start_vllm_server()
@@ -260,11 +270,12 @@ class ClassmateWorker(Worker):
 
             assert self.generation_config.get("num_return_sequences", 1) == 1 or self.generation_config.get("n", 1) == 1, "Classmate worker currently only supports num_return_sequences=1"
 
-            print(f"Start sampling from classmate model {self.model_index} for {len(actor_responses)} inputs")
+            print(f"Start sampling from classmate model {self.model_name_or_path} ({self.model_index}) for {len(actor_responses)} inputs")
 
             if self.use_vllm:
                 # Use vLLM API server for generation
-                print(f"Generating via vLLM API server at {self.api_base_url}")
+                # print(f"Generating via vLLM API server at {self.api_base_url}")
+                print(f"Generating from {self.model_name_or_path} via TogetherAI API")
 
                 # Process in batches to manage API requests
                 total_samples = len(actor_responses)

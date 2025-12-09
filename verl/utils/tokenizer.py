@@ -17,6 +17,8 @@ import warnings
 
 __all__ = ["hf_tokenizer", "hf_processor"]
 
+from verl.data_preprocessing.chat_templates import CHAT_TEMPLATES
+
 
 def set_pad_token_id(tokenizer):
     """Set pad_token_id to eos_token_id if it is None.
@@ -58,6 +60,18 @@ def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kw
         kwargs["eos_token"] = "<end_of_turn>"
         kwargs["eos_token_id"] = 107
     tokenizer = AutoTokenizer.from_pretrained(name_or_path, **kwargs)
+
+    # TODO modify
+    if "Olmo-3-7B-Think" in name_or_path:
+        tokenizer.chat_template = CHAT_TEMPLATES["olmo_thinker"]
+    else:
+        try:
+            tokenizer.chat_template = AutoTokenizer.from_pretrained(
+                name_or_path, **kwargs
+            ).chat_template
+        except Exception:
+            raise ValueError(f"Could not find chat template for {name_or_path}.")
+
     if correct_pad_token:
         set_pad_token_id(tokenizer)
     return tokenizer

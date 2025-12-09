@@ -17,6 +17,7 @@ from litellm import acompletion
 from verl.utils.math_utils import last_boxed_only_string, remove_boxed, normalize_final_answer, get_unnormalized_answer, \
     is_equiv, hendrycks_is_equiv
 from verl.utils.reward_score.IFEvalG import instructions_registry
+from verl.utils.reward_score.if_functions import IF_FUNCTIONS_MAP
 from verl.utils.reward_score.olmo3_judge_utils import JUDGE_PROMPT_MAP, EXTRACTOR_MAP, PRICE_PER_TOKEN, build_messages
 
 logger = logging.getLogger(__name__)
@@ -549,30 +550,21 @@ def verify_math(prediction: str, label: str) -> VerificationResult:
     return VerificationResult(score=0.0)
 
 def verify_ifeval(prediction: str, label: str | dict) -> VerificationResult:
-    instruction_dict = instructions_registry.INSTRUCTION_DICT
-    constraint_dict = ast.literal_eval(label)
-    constraint_dict = constraint_dict[0]
-    if isinstance(constraint_dict, str):
-        constraint_dict = json.loads(constraint_dict)
+    # Copied from IFEvalVerifierOld from open-instruct
+    constraint = label
     answer = remove_thinking_section(prediction)
-    instruction_keys = constraint_dict["instruction_id"]
-    args_list = constraint_dict["kwargs"]
-    rewards = []
-    if len(prediction) == 0 or len(answer) == 0:
-        logger.warning("Empty prediction received for IFEvalVerifier.")
+    if isinstance(constraint, str):
+        # constraint = json.loads(constraint)
+        constraint = eval(constraint)
+    if "func_name" not in constraint:
+        logger.warning("Constraint missing 'func_name': %s", constraint)
         return VerificationResult(score=0.0)
-    for instruction_key, args in zip(instruction_keys, args_list):
-        if args is None:
-            args = {}
-        args = {k: v for k, v in args.items() if v is not None}
-        instruction_cls = instruction_dict[instruction_key]
-        instruction_instance = instruction_cls(instruction_key)
-        instruction_instance.build_description(**args)
-        if prediction.strip() and instruction_instance.check_following(answer):
-            rewards.append(1.0)
-        else:
-            rewards.append(0.0)
-    return VerificationResult(score=sum(rewards) / len(rewards))
+    func_name = constraint.pop("func_name")
+    func = IF_FUNCTIONS_MAP[func_name]
+    non_none_args = {k: v for k, v in constraint.items() if v is not None}
+    if not constraint:
+        return VerificationResult(score=float(func(answer)))
+    return VerificationResult(score=float(func(answer, **non_none_args)))
 
 def compute_score(
     data_source,
@@ -580,65 +572,72 @@ def compute_score(
     ground_truth,
     extra_info=None,
     code_api_url=None,
-    llm_judge_config_dict=None,
+    # llm_judge_config_dict=None,
     concurrent_semaphore=None,
     memory_limit_mb=None,
     method=None,
     return_dict=True,
-    code_verifier_src_to_verifier=None,
+    # code_verifier_src_to_verifier=None,
     **kwargs,
 ):
     start_time = time.time()
-    if data_source == "math":
+    if data_source == "gsm8k":
+        from verl.utils.reward_score import gsm8k
+        res = gsm8k.compute_score(solution_str, ground_truth, method=method)
+        if return_dict:
+            return {
+                "score": res
+            }
+    elif data_source.lower() == "math":
         score = verify_math(solution_str, ground_truth).score
+    elif data_source == "ifeval":
+        score = verify_ifeval(solution_str, ground_truth).score
     elif "code" in data_source:
         # if data_source == "code_stdio":
         #     tmp_url = code_api_url + "/test_program_stdio"
         if data_source == "code":
             # tmp_url = code_api_url + "/test_program"
             ground_truth = eval(ground_truth)
-        if code_verifier_src_to_verifier is None:
-            print("WARNING: creating new code verifier inside compute_score")
-            code_verifier_src_to_verifier = {
-                "code": CodeVerifier(
-                    verifier_config=CodeVerifierConfig(
-                        code_api_url=code_api_url + "/test_program",
-                        code_max_execution_time=1.0,
-                        code_pass_rate_reward_threshold=0.99,
-                        code_apply_perf_penalty=False,
-                    )
-                ),
-                "code_stdio": CodeVerifier(
-                    verifier_config=CodeVerifierConfig(
-                        code_api_url=code_api_url + "/test_program_stdio",
-                        code_max_execution_time=1.0,
-                        code_pass_rate_reward_threshold=0.99,
-                        code_apply_perf_penalty=False,
-                    )
-                ),
-            }
-        score = code_verifier_src_to_verifier[data_source](prediction=solution_str, label=ground_truth).score
-    elif data_source == "ifeval":
-        score = verify_ifeval(solution_str, ground_truth).score
+        # if code_verifier_src_to_verifier is None:
+        #     print("WARNING: creating new code verifier inside compute_score")
+        #     code_verifier_src_to_verifier = {
+        #         "code": CodeVerifier(
+        #             verifier_config=CodeVerifierConfig(
+        #                 code_api_url=code_api_url + "/test_program",
+        #                 code_max_execution_time=1.0,
+        #                 code_pass_rate_reward_threshold=0.99,
+        #                 code_apply_perf_penalty=False,
+        #             )
+        #         ),
+        #         "code_stdio": CodeVerifier(
+        #             verifier_config=CodeVerifierConfig(
+        #                 code_api_url=code_api_url + "/test_program_stdio",
+        #                 code_max_execution_time=1.0,
+        #                 code_pass_rate_reward_threshold=0.99,
+        #                 code_apply_perf_penalty=False,
+        #             )
+        #         ),
+        #     }
+        # score = code_verifier_src_to_verifier[data_source](prediction=solution_str, label=ground_truth).score
     elif "general" in data_source:
         raise NotImplementedError("Not training on this subset for now due to long sampling time")
-        judge_type = data_source.split("general-")[-1]
-        # llm_judge_config_dict = {
-        #   "llm_judge_model": null,
-        #   "llm_judge_timeout": 600,
-        #   "llm_judge_max_tokens": 2048,
-        #   "llm_judge_max_context_length": 32768,
-        #   "llm_judge_temperature": 1.0,
-        #   "seed": 42,
-        # }
-        verifier = LMJudgeVerifier(
-            judge_type=judge_type,
-            verifier_config=LMJudgeVerifierConfig(**llm_judge_config_dict)
-        )
-        # prediction: str, label: str, query: str
-        result = verifier(prediction=solution_str, label=ground_truth, query=extra_info["raw_prompt"])
-        score = result.score
-        print(f"🐛🐛🐛 cost for {data_source} verifier: {result.cost:.6f} USD")
+        # judge_type = data_source.split("general-")[-1]
+        # # llm_judge_config_dict = {
+        # #   "llm_judge_model": null,
+        # #   "llm_judge_timeout": 600,
+        # #   "llm_judge_max_tokens": 2048,
+        # #   "llm_judge_max_context_length": 32768,
+        # #   "llm_judge_temperature": 1.0,
+        # #   "seed": 42,
+        # # }
+        # verifier = LMJudgeVerifier(
+        #     judge_type=judge_type,
+        #     verifier_config=LMJudgeVerifierConfig(**llm_judge_config_dict)
+        # )
+        # # prediction: str, label: str, query: str
+        # result = verifier(prediction=solution_str, label=ground_truth, query=extra_info["raw_prompt"])
+        # score = result.score
+        # print(f"🐛🐛🐛 cost for {data_source} verifier: {result.cost:.6f} USD")
     else:
         raise NotImplementedError(f"unknown data source for olmo3 verifier: {data_source}")
 

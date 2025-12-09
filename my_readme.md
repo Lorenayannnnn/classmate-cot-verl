@@ -89,10 +89,14 @@
   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
   bash miniconda.sh -b -p $HOME/miniconda
   ```
-  - to ~/.bashrc / ~/.zshrc, add:
+  - ```vim ~/.bashrc```:
     ```
     export PATH="$HOME/miniconda/bin:$PATH"
     ```
+    - For my lambda gpu:
+      ```
+      export PATH="$HOME/east/miniconda/bin:$PATH"
+      ```
   - restart terminal or run:
     ```
     source ~/.bashrc
@@ -101,6 +105,11 @@
   - Verify installation:
     ```
     conda --version
+    ```
+  - Modify bashrc:
+    ```
+    conda activate verl
+    cd $HOME/east/classmate-cot-verl
     ```
 - Install dependency with conda + login:
   ```
@@ -145,7 +154,7 @@
       - Calculate Classmate Rewards: For each batch item, iterate through all samples from each classmate model, calculate each sample's reward one by one, average across samples for each classmate, and do weighted average across all classmate models (TODO: now the classmate's weights are fixed to be average)
 - Dataset-specific rewards:
   - Dolci:
-    - [olmo3_verifiers.py](verl/utils/reward_score/olmo3_verifiers.py): verifiers + ```def compute_score```
+    - [olmo_verifiers.py](verl/utils/reward_score/olmo_verifiers.py): verifiers + ```def compute_score```
     - [olmo3_judge_utils.py](verl/utils/reward_score/olmo3_judge_utils.py)
   - Old setting:
     - [__init__.py](verl/utils/reward_score/__init__.py): def default_compute_score
