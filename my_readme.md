@@ -227,6 +227,7 @@
   ```
   bash my_scripts/run_olmo_hendrycks_classmate_cot.sh
   ```
+- Merge ckpts: [merge_fsdp_ckpts.sh](my_scripts/merge_fsdp_ckpts.sh)
 
 
 # Others

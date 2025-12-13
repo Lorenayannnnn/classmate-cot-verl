@@ -47,7 +47,7 @@ gpu_for_train=${gpu_num}
 #base_model_name_path=allenai/Olmo-3-7B-Think
 #base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 #base_model_name_path=allenai/OLMo-2-1124-7B-DPO
-base_model_name_path=allenai/OLMo-2-0425-1B-DPO
+#base_model_name_path=allenai/OLMo-2-0425-1B-DPO
 base_model_name_path=allenai/OLMo-2-1124-7B-DPO
 
 #HYDRA_FULL_ERROR=1

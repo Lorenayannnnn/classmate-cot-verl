@@ -37,8 +37,14 @@ def upload_ckpts_to_huggingface():
     # ROOT = Path("/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_1112/grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes")
     # REPO_NAME = "20251112-grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes"
 
-    ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes")
-    REPO_NAME = "20251122-grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes"
+    # ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes")
+    # REPO_NAME = "20251122-grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes"
+
+    # ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_allenai/OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_baseline_237392_episodes")
+    # REPO_NAME = "20251210-OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_baseline_237392_episodes"
+
+    ROOT = Path("/local/data/lorena/classmate_cot_w_verl/outputs/grpo_allenai/OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_with_classmate_reward_llama_237400_episodes")
+    REPO_NAME = "20251210-OLMo-2-7B-DPO-Mixed-Constraints_with_classmate_reward_llama_237400_episodes"
 
     PRIVATE = False                                # set False to make public
 
@@ -164,7 +170,7 @@ def download_huggingface_ckpt():
 
 
 if __name__ == "__main__":
-    # upload_ckpts_to_huggingface()
+    upload_ckpts_to_huggingface()
     # download_huggingface_ckpt()
     # test()
 
@@ -285,19 +291,6 @@ if __name__ == "__main__":
     # messages = [ {"role": "user", "content": user_prompt}]
     #
     # templated = tokenizer.apply_chat_template(messages,add_generation_prompt=True, tokenize=False)
-
-    client = Together()
-    messages = [
-        {"role": "user", "content": "write code for saying hi from LiteLLM"},
-        {"role": "user", "content": "haha"},
-        {"role": "user", "content": "Merry Christmas!"},
-    ]
-
-    response = client.chat.completions.create(
-        model="meta-llama/Llama-3.2-3B-Instruct-Turbo",
-        messages=messages
-    )
-    breakpoint()
 
 
 #TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" python test.py

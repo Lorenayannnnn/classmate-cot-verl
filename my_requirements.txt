@@ -39,3 +39,6 @@ opencv-fixer==0.2.5
 vllm==0.11.0
 litellm==1.80.7
 together==1.5.31
+lm_eval==0.4.9.2
+lm-eval[math]
+seaborn==0.13.2
