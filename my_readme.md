@@ -88,6 +88,7 @@
   ```
   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
   bash miniconda.sh -b -p $HOME/miniconda
+  bash miniconda.sh -b -p $HOME/midwest/miniconda
   ```
   - ```vim ~/.bashrc```:
     ```
@@ -96,6 +97,7 @@
     - For my lambda gpu:
       ```
       export PATH="$HOME/east/miniconda/bin:$PATH"
+      export PATH="$HOME/midwest/miniconda/bin:$PATH"
       ```
   - restart terminal or run:
     ```
@@ -110,6 +112,7 @@
     ```
     conda activate verl
     cd $HOME/east/classmate-cot-verl
+    cd $HOME/midwest/classmate-cot-verl
     ```
 - Install dependency with conda + login:
   ```
@@ -123,7 +126,7 @@
 [//]: # (  pip install --no-deps -e .)
   - Note:
     - Currently not supporting megatron and sglang
-    - [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4111.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
+    - [build_omegaconf_hydra_w_antlr_4111.sh](scripts/build_omegaconf_hydra_w_antlr_4110.sh) is called in install_vllm_sglang_mcore.sh to build compatible omegaconf and hydra versions with antlr 4.11.1 for using parse_latex for hendrycks math
 
 # Modify for classmate CoT training
 - Dataset-specific preprocessing and reward

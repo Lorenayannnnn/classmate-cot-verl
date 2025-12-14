@@ -643,7 +643,6 @@ def compute_score(
 
     # if "code" in data_source:
     #     end_time = time.time()
-        # TODO haha
         # print(f"🐛🐛🐛 {data_source} compute score took {end_time - start_time:.2f} seconds.")
 
     # print("🐛🐛🐛 prompt:", extra_info["raw_prompt"])

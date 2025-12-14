@@ -43,8 +43,11 @@ def upload_ckpts_to_huggingface():
     # ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_allenai/OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_baseline_237392_episodes")
     # REPO_NAME = "20251210-OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_baseline_237392_episodes"
 
-    ROOT = Path("/local/data/lorena/classmate_cot_w_verl/outputs/grpo_allenai/OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_with_classmate_reward_llama_237400_episodes")
-    REPO_NAME = "20251210-OLMo-2-7B-DPO-Mixed-Constraints_with_classmate_reward_llama_237400_episodes"
+    # ROOT = Path("/local/data/lorena/classmate_cot_w_verl/outputs/grpo_allenai/OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_with_classmate_reward_llama_237400_episodes")
+    # REPO_NAME = "20251210-OLMo-2-7B-DPO-Mixed-Constraints_with_classmate_reward_llama_237400_episodes"
+
+    ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-4B-Base_DeepScaleR_baseline_322512_episodes")
+    REPO_NAME = "20251217-Qwen3-4B-Base_DeepScaleR_baseline_322512_episodes"
 
     PRIVATE = False                                # set False to make public
 
@@ -291,6 +294,21 @@ if __name__ == "__main__":
     # messages = [ {"role": "user", "content": user_prompt}]
     #
     # templated = tokenizer.apply_chat_template(messages,add_generation_prompt=True, tokenize=False)
+
+    # train_json_fn = "/Users/lorenayan/Desktop/classmate-cot-verl/data/DeepScaleR/train.json"
+    # test_json_fn = "/Users/lorenayan/Desktop/classmate-cot-verl/data/DeepScaleR/test.json"
+    # dataset = load_dataset("json", data_files=train_json_fn)["train"]
+    # test_dataset = load_dataset("json", data_files=test_json_fn)["train"]
+    # print(len(dataset))
+    # print(len(test_dataset))
+    # # DAtasource to frequency
+    # subset_counts = {}
+    # for entry in dataset:
+    #     dataset_name = entry["source"]
+    #     if dataset_name not in subset_counts:
+    #         subset_counts[dataset_name] = 0
+    #     subset_counts[dataset_name] += 1
+    # print("train", subset_counts)
 
 
 #TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" python test.py

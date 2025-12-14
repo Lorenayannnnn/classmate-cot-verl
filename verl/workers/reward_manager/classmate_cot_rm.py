@@ -167,6 +167,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 # llm_judge_config_dict=self.llm_judge_config_dict,
                 # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
             )
+            # Debugging
+            extracted_solution = actor_score.pop("extracted_solution", None)
 
             if isinstance(actor_score, dict):
                 base_reward = actor_score["score"]
@@ -184,8 +186,12 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             # TODO weight for each classmate model
             classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
 
+            # Debug
+            extracted_classmate_sol = []
+
             for classmate_idx, classmate_output in enumerate(classmate_outputs):   # Iterate over num_classmate_models
                 tmp_total_classmate_reward_dict = {}
+                tmp_extracted_classmate_sol_list = []
                 for classmate_output_sample in classmate_output:   # Iterate over num_return_sequences
                     tmp_classmate_result = self.compute_score(
                         data_source=data_source,
@@ -199,6 +205,11 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         # llm_judge_config_dict=self.llm_judge_config_dict,
                         # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
                     )
+
+                    # Debug
+                    tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
+                    tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
+
                     for k, v in tmp_classmate_result.items():
                         if k not in tmp_total_classmate_reward_dict:
                             tmp_total_classmate_reward_dict[k] = 0.0
@@ -214,6 +225,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     # 🐛 Sample tmp_classmate_reward: {tmp_classmate_reward}
                     # """)
                 # Average over num_return_sequences
+
+                extracted_classmate_sol.append(tmp_extracted_classmate_sol_list)
+
                 for k, v in tmp_total_classmate_reward_dict.items():
                     if k not in total_classmate_reward_dict:
                         total_classmate_reward_dict[k] = 0.0
@@ -242,18 +256,22 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print("[prompt]", prompt_str)
-                print("[actor_response]", response_str)
-                print("[ground_truth]", ground_truth)
-                print("[classmate_output]", data_item.non_tensor_batch["classmate_outputs"][0])     # 0th classmate model
+                print("🐛[prompt]", prompt_str)
+                print("🐛[actor_response]", response_str)
+                if extracted_solution is not None:
+                    print("🐛[extracted_actor_solution]", extracted_solution)
+                print("🐛[ground_truth]", ground_truth)
+                import numpy as np
+                print("🐛[classmate_output]", classmate_outputs[0])     # 0th classmate model
+                print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
                 # if isinstance(score, dict):
                 #     for key, value in score.items():
                 #         print(f"[{key}]", value)
                 # else:
                 #     print("[score]", score)
-                print("[base_reward]", base_reward)
-                print("[classmate_reward]", classmate_reward)
-                print("[final_reward]", final_reward)
+                print("🐛[base_reward]", base_reward)
+                print("🐛[classmate_reward]", classmate_reward)
+                print("🐛[final_reward]", final_reward)
                 if "classmate_outputs" in data_item.non_tensor_batch:
                     print(f"[num_classmate_outputs]", len(data_item.non_tensor_batch["classmate_outputs"]))
 

@@ -137,6 +137,10 @@ class NaiveRewardManager(AbstractRewardManager):
                 # llm_judge_config_dict=self.llm_judge_config_dict,
                 # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
             )
+
+            # Debug
+            extracted_sol = score.pop("extracted_solution", None)
+
             # for code_contests_modify_code
             # score = {
             #     "cot": reasoning_str,
@@ -162,16 +166,17 @@ class NaiveRewardManager(AbstractRewardManager):
 
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print("[prompt]", prompt_str)
-                print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
-                print("[response]", response_str)
-                print("[ground_truth]", ground_truth)
+                print("🐛[prompt]", prompt_str)
+                # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
+                print("🐛[response]", response_str)
+                if extracted_sol is not None:
+                    print("🐛[extracted_solution]", extracted_sol)
+                print("🐛[ground_truth]", ground_truth)
                 if isinstance(score, dict):
                     for key, value in score.items():
                         print(f"[{key}]", value)
                 else:
                     print("[score]", score)
-
         if return_dict:
             return {
                 "reward_tensor": reward_tensor,
