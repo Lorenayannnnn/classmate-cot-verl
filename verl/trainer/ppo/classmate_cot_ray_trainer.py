@@ -987,45 +987,47 @@ class ClassmateCoTRayPPOTrainer:
 
         bsz = len(batch)
         num_models = len(self.classmate_workers)
-        outputs = [[None] * num_models for _ in range(bsz)]  # (bsz, num_models)
 
-        # Launch each classmate model via the registered wrapper (non-blocking)
-        # Pad per-worker to its world size to satisfy equal chunk requirement, and remember pad_size for unpadding.
-        futures = []  # list[(model_idx, ObjectRef[DataProto])]
-        pad_sizes: dict[int, int] = {}
+        futures = []  # list[(classmate_idx, future, pad_size)]
         for classmate_idx, worker_group in enumerate(self.classmate_workers):
             size_divisor = getattr(worker_group, "world_size", 1)
-            if size_divisor is None:
-                size_divisor = 1
             if size_divisor > 1:
-                cls_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor)
+                # Pad the entire batch once to be divisible by world_size
+                # Worker group internally handles distribution across workers
+                classmate_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor, pad_val=None)
+                fut = worker_group.generate_classmate_continuations(data=classmate_batch_padded)
+                futures.append((classmate_idx, fut, pad_size))
             else:
-                cls_batch_padded, pad_size = classmate_batch, 0
-            pad_sizes[classmate_idx] = pad_size
-            # Pass as keyword to avoid any binding issues through the worker group wrappers
-            fut = worker_group.generate_classmate_continuations(data=cls_batch_padded)
-            futures.append((classmate_idx, fut))
+                # No padding needed for single worker
+                fut = worker_group.generate_classmate_continuations(data=classmate_batch)
+                futures.append((classmate_idx, fut, 0))
 
         # Resolve all models in parallel (DataProtoFuture -> DataProto)
-        resolved = [f.get() for _, f in futures]
+        resolved = [f.get() for _, f, _ in futures]
 
-        # Stitch results by model index (unpad each model's result individually)
-        for (classmate_idx, _), result_dp in zip(futures, resolved):
-            pad_size = pad_sizes.get(classmate_idx, 0)
-            if pad_size and pad_size > 0:
-                result_dp = unpad_dataproto(result_dp, pad_size=pad_size)
-            cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz, num_return_sequences)
+        # Collect results - use NumPy array for efficient assignment
+        outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
+        for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
+            cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz_padded, num_return_sequences)
+            
+            # Remove padding if present
+            # print("🐛 before cls_out", cls_out, cls_out.shape)
+            # print("🐛 before cls_out", cls_out.shape)
+            if pad_size > 0:
+                cls_out = cls_out[:-pad_size]
+            # print("🐛 after cls_out", cls_out, cls_out.shape)
+            # print("🐛 after cls_out", cls_out.shape)
+
+            # Assign to output array
             assert len(cls_out) == bsz, (
                 f"Expected {bsz} outputs from model {classmate_idx}, got {len(cls_out)}"
             )
-            for i in range(bsz):
-                outputs[i][classmate_idx] = cls_out[i]
+            outputs[:, classmate_idx] = cls_out
 
-        batch.non_tensor_batch["classmate_outputs"] = np.array(outputs)
         # Expected shape: (bsz, num_models, num_return_sequences)
-        assert batch.non_tensor_batch["classmate_outputs"].shape == (bsz, num_models, self.classmate_num_return_sequences), \
+        assert outputs.shape == (bsz, num_models, self.classmate_num_return_sequences), \
             f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
-
+        batch.non_tensor_batch["classmate_outputs"] = outputs
         return batch
 
     def _save_checkpoint(self):

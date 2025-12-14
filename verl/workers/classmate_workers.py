@@ -248,7 +248,6 @@ class ClassmateWorker(Worker):
         """
         # data.non_tensor_batch = {
         #     "prompts": all_prompts,
-        #     "prompt_plus_actor_responses": all_prompt_plus_actor_responses
         # }
         classmate_outputs = []
         try:
@@ -257,6 +256,7 @@ class ClassmateWorker(Worker):
             log_gpu_memory_usage(f"After onloading classmate model {self.model_index} for generation", logger=logger)
 
             # prompt_plus_actor_responses = data.non_tensor_batch["prompt_plus_actor_responses"]
+            # Handle padding: only slice if pad_size is a positive integer
             prompts = data.non_tensor_batch["prompts"]
             actor_responses = data.non_tensor_batch["actor_responses"]
 
@@ -268,6 +268,11 @@ class ClassmateWorker(Worker):
             if isinstance(actor_responses, np.ndarray):
                 actor_responses = actor_responses.tolist()
 
+            # Filter out None
+            original_length = len(prompts)
+            prompts = [p for p in prompts if p is not None]
+            actor_responses = [r for r in actor_responses if r is not None]
+
             assert self.generation_config.get("num_return_sequences", 1) == 1 or self.generation_config.get("n", 1) == 1, "Classmate worker currently only supports num_return_sequences=1"
 
             print(f"Start sampling from classmate model {self.model_name_or_path} ({self.model_index}) for {len(actor_responses)} inputs")
@@ -275,7 +280,7 @@ class ClassmateWorker(Worker):
             if self.use_vllm:
                 # Use vLLM API server for generation
                 # print(f"Generating via vLLM API server at {self.api_base_url}")
-                print(f"Generating from {self.model_name_or_path} via TogetherAI API")
+                # print(f"Generating from {self.model_name_or_path} via TogetherAI API")
 
                 # Process in batches to manage API requests
                 total_samples = len(actor_responses)
@@ -309,6 +314,7 @@ class ClassmateWorker(Worker):
 
                     # Generate via API for this batch
                     batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
+                    # Extend back to with padding
                     classmate_outputs.extend(batch_completions)
 
                 # print(f"🐛🐛🐛 Classmate completions: {classmate_outputs}")
@@ -405,6 +411,9 @@ class ClassmateWorker(Worker):
 
         # TODO need to fix this to support num_return_sequences > 1
         classmate_outputs = [[output] for output in classmate_outputs]  # Wrap each output in a list
+
+        # Add padding back
+        classmate_outputs += [[None]] * (original_length - len(classmate_outputs))
 
         result_non_tensor_batch = {
             "classmate_output": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
