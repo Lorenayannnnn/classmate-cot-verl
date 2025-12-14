@@ -70,7 +70,7 @@ class DataProtoConfig(metaclass=_DataProtoConfigMeta):
 _padding_size_key = "_padding_size_key_x123d"
 
 
-def pad_dataproto_to_divisor(data: "DataProto", size_divisor: int):
+def pad_dataproto_to_divisor(data: "DataProto", size_divisor: int, pad_val="data"):
     """Pad a DataProto to size divisible by size_divisor
 
     Args:
@@ -87,7 +87,15 @@ def pad_dataproto_to_divisor(data: "DataProto", size_divisor: int):
         remaining_pad = pad_size
         while remaining_pad > 0:
             take_size = min(remaining_pad, len(data))
-            padding_protos.append(data[:take_size])
+            if pad_val == "data":
+                padding_protos.append(data[:take_size])
+            else:
+                padding_protos.append(DataProto(
+                    batch=None,
+                    non_tensor_batch={
+                        key: np.array([pad_val] * take_size, dtype=object) for key in data.non_tensor_batch.keys()
+                    },
+                ))
             remaining_pad -= take_size
         data_padded = DataProto.concat([data] + padding_protos)
     else:
