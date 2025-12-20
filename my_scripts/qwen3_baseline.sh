@@ -28,7 +28,9 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-base_model_name_path=Qwen/Qwen3-4B-Base
+#base_model_name_path=Qwen/Qwen3-4B-Base
+#base_model_name_path=Qwen/Qwen3-4B-Thinking-2507
+base_model_name_path=Qwen/Qwen3-4B
 
 #HYDRA_FULL_ERROR=1
 #CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \

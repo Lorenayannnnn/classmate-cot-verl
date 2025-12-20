@@ -20,6 +20,7 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import json
 import os
+import re
 import uuid
 from collections import defaultdict
 from copy import deepcopy
@@ -894,6 +895,40 @@ class ClassmateCoTRayPPOTrainer:
                 config=self.config, worker_group=self.actor_rollout_wg, rm_wg=self.rm_wg
             )
 
+    def _process_main_cot_helper(self, data_source, main_pred, keep_ratio):
+        """
+        Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
+        """
+        # TODO haha double check for code_contests_modify_code
+        if data_source == "code_contests_modify_code":
+            breakpoint()
+            reason_section_name = "### Reasoning"
+            test_case_section_name = "### Test Inputs and Outputs"
+            main_pred = reason_section_name + "\n" + main_pred.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
+        # elif data_source == "code_stdio" or data_source == "code":
+        #     used in olmo3 CodeVerifier
+            # main_pred = process_code_output(main_pred)
+
+        _SPLIT_WS = re.compile(r"\S+|\s+")
+        num_to_keep = int(len(main_pred.split()) * keep_ratio)  # counts non-whitespace tokens
+        if num_to_keep <= 0:
+            return ""
+        kept = []
+        count = 0
+        for m in _SPLIT_WS.finditer(main_pred):
+            t = m.group(0)
+            # whitespace tokens start with a whitespace char
+            if t[0].isspace():
+                if count > 0:  # optional: avoid leading whitespace if truncating from start
+                    kept.append(t)
+            else:
+                count += 1
+                if count > num_to_keep:
+                    break
+                kept.append(t)
+
+        return "".join(kept)
+
     def _prepare_classmate_batch(self, data: DataProto) -> DataProto:
         """
         Prepare batch data for classmate generation. Each worker will handle its own tokenization.
@@ -920,43 +955,21 @@ class ClassmateCoTRayPPOTrainer:
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
-        # TODO modify: For code_contests_modify_code
-        def process_response(data_source, response_str):
-            if data_source == "code_contests_modify_code":
-                reason_section_name = "### Reasoning"
-                test_case_section_name = "### Test Inputs and Outputs"
-                return reason_section_name + "\n" + response_str.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
-            elif data_source == "code_stdio" or data_source == "code":
-                # used in olmo3 CodeVerifier
-                return process_code_output(response_str)
-            else:
-                return response_str
-
         # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
         data_source_list = data.non_tensor_batch.get("data_source", ["unknown"] * len(all_actor_responses))
         # TODO: split by " " for now
         if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
             keep_rate = 0.8     # TODO
             for res_idx, response in enumerate(all_actor_responses):
-                processed_response = process_response(data_source_list[res_idx], response)
-                split_response = processed_response.split(" ")
-                num_to_keep = int(len(split_response) * keep_rate)
-                modified_response = " ".join(split_response[:num_to_keep])
-                # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + modified_response)
-                all_processed_actor_responses.append(modified_response)
+                all_processed_actor_responses.append(self._process_main_cot_helper(data_source_list[res_idx], response, keep_rate))
                 # if "code" in data_source_list[res_idx]:
                 #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
                 #     print(f"🐛🐛🐛 original response {processed_response}")
                     # print(f"🐛🐛🐛 sample modified_response {modified_response}")
         elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
             for res_idx, response in enumerate(all_actor_responses):
-                response = process_response(data_source_list[res_idx], response)
-                split_response = response.split(" ")
                 rand_keep_rate = random.uniform(0.3, 0.95)
-                num_to_keep = int(len(split_response) * rand_keep_rate)
-                truncated_response = " ".join(split_response[:num_to_keep])
-                # all_prompt_plus_actor_responses.append(all_prompts[res_idx] + truncated_response)
-                all_processed_actor_responses.append(modified_response)
+                all_processed_actor_responses.append(self._process_main_cot_helper(data_source_list[res_idx], response, rand_keep_rate))
         else:
             raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 

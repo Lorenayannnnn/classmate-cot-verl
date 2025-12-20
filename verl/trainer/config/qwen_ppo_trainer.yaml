@@ -19,7 +19,8 @@ defaults:
   - ref@actor_rollout_ref.ref: dp_ref
 
   # Rollout model config.
-  - rollout@actor_rollout_ref.rollout: rollout
+#  - rollout@actor_rollout_ref.rollout: rollout
+  - rollout@actor_rollout_ref.rollout: qwen_rollout
 
   # Model config.
   - model@actor_rollout_ref.model: hf_model

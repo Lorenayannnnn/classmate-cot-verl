@@ -33,7 +33,9 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #base_model_name_path=allenai/OLMo-2-0425-1B-DPO
-base_model_name_path=Qwen/Qwen3-4B-Base
+#base_model_name_path=Qwen/Qwen3-4B-Base
+#base_model_name_path=Qwen/Qwen3-4B-Thinking-2507
+base_model_name_path=Qwen/Qwen3-4B
 
 #HYDRA_FULL_ERROR=1
 #CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
@@ -42,8 +44,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
-    data.max_prompt_length=2048 \
-    data.max_response_length=2048 \
+    data.max_prompt_length=1024 \
+    data.max_response_length=4906 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=${base_model_name_path} \
