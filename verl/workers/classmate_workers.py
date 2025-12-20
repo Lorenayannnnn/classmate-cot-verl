@@ -37,7 +37,8 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 class ClassmateWorkerConfig:
     model_name_or_path: str
     model_index: int
-    max_new_tokens: int
+    # max_new_tokens: int
+    max_tokens: int
     classmate_batch_size: int
     classmate_free_cache_engine: bool
     classmate_use_vllm: bool
@@ -91,6 +92,8 @@ class ClassmateWorker(Worker):
 
         self.batch_size = config.classmate_batch_size
         self.generation_config = config.generation_config
+        if type(self.generation_config["max_tokens"]) == str:
+            self.generation_config["max_tokens"] = int(eval(self.generation_config["max_tokens"]))
 
         self.use_vllm = config.classmate_use_vllm
         self.free_cache_engine = config.classmate_free_cache_engine
@@ -105,7 +108,8 @@ class ClassmateWorker(Worker):
         # self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
         self.client = None
 
-    def _generate_via_remote_api(self, batch_prompts: list, batch_max_token_len: int) -> list:
+    # def _generate_via_remote_api(self, batch_prompts: list, batch_max_token_len: int) -> list:
+    def _generate_via_remote_api(self, batch_prompts: list) -> list:
         """Generate completions via remote vLLM API.
 
         Args:
@@ -120,8 +124,8 @@ class ClassmateWorker(Worker):
             # "prompt": batch_prompts,
             **self.generation_config
         }
+        # vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
 
-        vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
 
         def generate(tmp_idx, tmp_prompt):
             finish = False
@@ -250,6 +254,7 @@ class ClassmateWorker(Worker):
         #     "prompts": all_prompts,
         # }
         classmate_outputs = []
+        prompts = []
         try:
             # ONLOAD: Load model to GPU before generation (no-op for vLLM API mode)
             self._onload_model()
@@ -310,10 +315,11 @@ class ClassmateWorker(Worker):
                         padding=True,
                         return_tensors="pt",
                     )["attention_mask"]
-                    batch_max_token_len = prompt_attn_mask.sum(dim=1).max().item()
+                    # batch_max_token_len = prompt_attn_mask.sum(dim=1).max().item()
 
                     # Generate via API for this batch
-                    batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
+                    # batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
+                    batch_completions = self._generate_via_remote_api(batch_input_prompts)
                     # Extend back to with padding
                     classmate_outputs.extend(batch_completions)
 

@@ -181,6 +181,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             reward_extra_info["main_model_reward"].append(base_reward)
             # -------------------- Calculate Classmate Rewards --------------------
             total_classmate_reward_dict = {}
+            classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
             classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
 
             # TODO weight for each classmate model
@@ -257,20 +258,21 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
                 print("🐛[prompt]", prompt_str)
-                print("🐛[actor_response]", response_str)
-                if extracted_solution is not None:
-                    print("🐛[extracted_actor_solution]", extracted_solution)
                 print("🐛[ground_truth]", ground_truth)
+                print("🐛[main_response]", response_str)
+                if extracted_solution is not None:
+                    print("🐛[main_extracted]", extracted_solution)
+                print("🐛[main_reward]", base_reward)
                 import numpy as np
+                print("🐛[classmate_prompt]", classmate_prompts[0])
                 print("🐛[classmate_output]", classmate_outputs[0])     # 0th classmate model
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
+                print("🐛[classmate_reward]", classmate_reward)
                 # if isinstance(score, dict):
                 #     for key, value in score.items():
                 #         print(f"[{key}]", value)
                 # else:
                 #     print("[score]", score)
-                print("🐛[base_reward]", base_reward)
-                print("🐛[classmate_reward]", classmate_reward)
                 print("🐛[final_reward]", final_reward)
                 if "classmate_outputs" in data_item.non_tensor_batch:
                     print(f"[num_classmate_outputs]", len(data_item.non_tensor_batch["classmate_outputs"]))

@@ -305,7 +305,7 @@ class ClassmateCoTTaskRunner:
 
         # Load the reward manager for training and validation.
         reward_fn = load_reward_manager(
-            config, tokenizer, num_examine=5,
+            config, tokenizer, num_examine=0,
             code_api_url=config.reward_model.sandbox_fusion_url,
             llm_judge_model=config.reward_model.llm_judge_model,
             llm_judge_timeout=config.reward_model.llm_judge_timeout,
@@ -367,11 +367,11 @@ class ClassmateCoTTaskRunner:
             train_sampler=train_sampler,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_batch_size=config.reward_model.classmate_batch_size,
-            classmate_free_cache_engine=config.reward_model.classmate_free_cache_engine,
+            # classmate_free_cache_engine=config.reward_model.classmate_free_cache_engine,
             classmate_use_vllm=config.reward_model.classmate_use_vllm,
             classmate_num_return_sequences=config.reward_model.classmate_num_return_sequences,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
-            classmate_vllm_configs=config.reward_model.classmate_vllm_configs,
+            # classmate_vllm_configs=config.reward_model.classmate_vllm_configs,
             seed=config.data.seed,
             # host_classmate_name_to_url_json_fn=config.reward_model.classmate_cot_reward_configs.host_classmate_name_to_url_json_fn,
         )

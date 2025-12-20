@@ -12,16 +12,26 @@ def compute_score(
     **kwargs,
 ):
     if data_source == "deepscaler" or data_source == "aime":
-        from math_verify import parse, verify
-        solution_str = parse(solution_str)
-        ground_truth = parse(ground_truth)
-        score = 1 if verify(solution_str, ground_truth) else 0
-        if return_dict:
-            return {
-                "score": score,
-                "extracted_solution": solution_str
-            }
-        else:
-            return score
+        try:
+            from math_verify import parse, verify
+            solution_str = parse(solution_str)
+            ground_truth = parse(ground_truth)
+            score = 1 if verify(solution_str, ground_truth) else 0
+            if return_dict:
+                return {
+                    "score": score,
+                    "extracted_solution": solution_str
+                }
+            else:
+                return score
+        except Exception as e:
+            print("Error during verification:", e)
+            if return_dict:
+                return {
+                    "score": 0,
+                    "extracted_solution": None
+                }
+            else:
+                return 0
     else:
         raise NotImplementedError(f"Data source {data_source} not supported in qwen_verifier.")

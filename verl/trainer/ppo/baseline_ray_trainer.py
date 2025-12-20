@@ -20,7 +20,6 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import json
 import os
-import re
 import uuid
 from collections import defaultdict
 from copy import deepcopy
@@ -28,7 +27,6 @@ from dataclasses import dataclass, field
 from pprint import pprint
 from typing import Optional
 
-import random
 import numpy as np
 import ray
 import torch
@@ -58,12 +56,10 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, shou
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
-from verl.utils.reward_score.olmo_verifiers import process_code_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.torch_functional import masked_mean
 from verl.utils.tracking import ValidationGenerationsLogger
-from verl.workers.classmate_workers import ClassmateWorker, ClassmateWorkerConfig
 
 
 @dataclass
@@ -264,7 +260,7 @@ def compute_advantage(
     return data
 
 
-class ClassmateCoTRayPPOTrainer:
+class RayPPOTrainer:
     """Distributed PPO trainer using Ray for scalable reinforcement learning.
 
     This trainer orchestrates distributed PPO training across multiple nodes and GPUs,
@@ -289,17 +285,6 @@ class ClassmateCoTRayPPOTrainer:
         collate_fn=None,
         train_sampler: Optional[Sampler] = None,
         device_name=None,
-
-        # TODO modify
-        classmate_cot_reward_configs=None,
-        classmate_batch_size=None,
-        classmate_free_cache_engine=None,
-        classmate_use_vllm=None,
-        classmate_num_return_sequences=None,
-        classmate_generation_configs=None,
-        classmate_vllm_configs=None,
-        seed=None,
-        # host_classmate_name_to_url_json_fn=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -319,26 +304,10 @@ class ClassmateCoTRayPPOTrainer:
             collate_fn: Function to collate data samples into batches.
             train_sampler (Optional[Sampler], optional): Sampler for the training dataset. Defaults to None.
             device_name (str, optional): Device name for training (e.g., "cuda", "cpu"). Defaults to None.
-
-            classmate_cot_reward_configs:
-                - classmate_model_name_or_path_list: ["meta-llama/Llama-3.2-1B-Instruct"]
-                - classmate_reward_weight: 1
-                - classmate_reward_type: vanilla_reward
-                - classmate_continue_mode: continue_cot
-            classmate_generation_configs:
-                - do_sample: False
-                - max_new_tokens: 256
-                - temperature: 0.7
-                - top_p: 0.9
-                - num_return_sequences: 1
         """
 
         # Store the tokenizer for text processing
         self.tokenizer = tokenizer
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.tokenizer.padding_side = "left"
-
         self.processor = processor
         self.config = config
         self.reward_fn = reward_fn
@@ -361,29 +330,6 @@ class ClassmateCoTRayPPOTrainer:
             project_name=self.config.trainer.project_name,
             experiment_name=self.config.trainer.experiment_name,
         )
-
-        # Store classmate configurations
-        self.classmate_cot_reward_configs = classmate_cot_reward_configs
-        self.classmate_batch_size = classmate_batch_size
-        self.classmate_free_cache_engine = classmate_free_cache_engine
-        self.classmate_use_vllm = classmate_use_vllm
-        self.classmate_generation_configs = classmate_generation_configs
-        # self.host_classmate_name_to_url_json_fn = host_classmate_name_to_url_json_fn
-
-        self.classmate_num_return_sequences = classmate_num_return_sequences
-        OmegaConf.set_struct(self.classmate_generation_configs, False)
-        if not self.classmate_generation_configs.do_sample:
-            self.classmate_generation_configs["temperature"] = 0.0
-            self.classmate_generation_configs["top_p"] = 1.0
-        if classmate_use_vllm:
-            self.classmate_generation_configs.n = classmate_num_return_sequences
-            self.classmate_generation_configs.seed = seed
-            self.classmate_generation_configs.pop("do_sample")
-        else:
-            self.classmate_generation_configs.num_return_sequences = classmate_num_return_sequences
-        OmegaConf.set_struct(self.classmate_generation_configs, True)
-
-        self.classmate_vllm_configs = classmate_vllm_configs
 
         # if ref_in_actor is True, the reference policy will be actor without lora applied
         self.ref_in_actor = config.actor_rollout_ref.model.get("lora_rank", 0) > 0
@@ -655,10 +601,6 @@ class ClassmateCoTRayPPOTrainer:
             test_batch = test_batch.union(test_output_gen_batch)
             test_batch.meta_info["validate"] = True
 
-            # Generate classmate continuations for validation
-            print("Generating classmate continuations for validation...")
-            test_batch = self._generate_classmate_continuations(test_batch)
-
             # evaluate using reward_function
             if self.val_reward_fn is None:
                 raise ValueError("val_reward_fn must be provided for validation.")
@@ -700,25 +642,27 @@ class ClassmateCoTRayPPOTrainer:
         data_src2var2metric2val = process_validation_metrics(data_sources, sample_uids, reward_extra_infos_dict)
         metric_dict = {}
         for data_source, var2metric2val in data_src2var2metric2val.items():
-            # Determine core variable: prefer acc, then check for final_reward, fallback to reward
-            # if "acc" in var2metric2val:
-            #     core_var = "acc"
-            # elif "final_reward" in var2metric2val:
-            #     core_var = "final_reward"
-            # else:
-            #     core_var = "reward"
-            
+            # core_var = "acc" if "acc" in var2metric2val else "reward"
             core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "final_reward", "reward"}
-            # TODO haha for code & test case generation
-            code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
+
+            # Modify for code_contests_modify_code
+            # result = {
+            #     "cot": reasoning_str,
+            #     "generated_test_pass_correct_sol": 0.0,
+            #     "generated_test_pass_incorrect_sol": 0.0,
+            #     "generated_code_pass_gt_test": 0.0,
+            #     "generated_code_pass_generated_test": 0.0,
+            # }
+            code_test_case_reward_keys = [k for k in var2metric2val.keys() if
+                                          "generated_test_pass_correct_sol" in k or
+                                          "generated_test_pass_incorrect_sol" in k or
+                                          "generated_code_pass_gt_test" in k or
+                                          "generated_code_pass_generated_test" in k]
             core_reward_vars.update(code_test_case_reward_keys)
-            
+
             for var_name, metric2val in var2metric2val.items():
                 n_max = max([int(name.split("@")[-1].split("/")[0]) for name in metric2val.keys()])
                 for metric_name, metric_val in metric2val.items():
-                    # A metric goes to val-core if:
-                    # 1. It's one of the core reward variables AND
-                    # 2. It's a summary metric (mean/maj/best) at max sample size
                     if (
                         (var_name in core_reward_vars)
                         and any(metric_name.startswith(pfx) for pfx in ["mean", "maj", "best"])
@@ -785,46 +729,6 @@ class ClassmateCoTRayPPOTrainer:
             rm_cls = RayClassWithInitArgs(self.role_worker_mapping[Role.RewardModel], config=self.config.reward_model)
             self.resource_pool_to_cls[resource_pool][str(Role.RewardModel)] = rm_cls
 
-        # TODO modify: create classmates, one worker per model
-        model_paths = self.classmate_cot_reward_configs.classmate_model_name_or_path_list
-        # Read in host_classmate_name_to_url_json_fn
-        # with open(self.host_classmate_name_to_url_json_fn, "r") as f:
-        #     host_classmate_name_to_url = json.load(f)
-        # Deprecated. Now using TogetherAI
-        for model_idx, model_path in enumerate(model_paths):
-            # All classmate workers share the same resource pool
-            # For different resource pools per model, modify ResourcePoolManager mapping
-            resource_pool = self.resource_pool_manager.get_resource_pool(Role.ClassmateWorker)
-
-            # if model_path not in host_classmate_name_to_url:
-            #     raise ValueError(f"Model path {model_path} not found in host_classmate_name_to_url mapping.")
-
-            # Create separate config for each model
-            classmate_config = ClassmateWorkerConfig(
-                model_name_or_path=model_path,
-                model_index=model_idx,
-                classmate_batch_size=self.classmate_batch_size,
-                classmate_free_cache_engine=self.classmate_free_cache_engine,
-                classmate_use_vllm=self.classmate_use_vllm,
-                # max_new_tokens=self.classmate_generation_configs.max_new_tokens,
-                max_tokens=self.classmate_generation_configs.max_tokens,
-                generation_config=self.classmate_generation_configs,
-                vllm_config=self.classmate_vllm_configs,
-                # Deprecated. Now using TogetherAI
-                # api_host=host_classmate_name_to_url[model_path]["local_host"],
-                # api_port=host_classmate_name_to_url[model_path]["port"],
-            )
-
-            # Create unique role name for each classmate model worker group
-            classmate_role_name = f"{str(Role.ClassmateWorker)}_{model_idx}"
-
-            classmate_worker_cls = RayClassWithInitArgs(
-                cls=self.role_worker_mapping[Role.ClassmateWorker],
-                config=classmate_config,
-                role=classmate_role_name,
-            )
-            self.resource_pool_to_cls[resource_pool][classmate_role_name] = classmate_worker_cls
-
         # initialize WorkerGroup
         # NOTE: if you want to use a different resource pool for each role, which can support different parallel size,
         # you should not use `create_colocated_worker_cls`.
@@ -875,17 +779,6 @@ class ClassmateCoTRayPPOTrainer:
         self.actor_rollout_wg = all_wg[str(Role.ActorRollout)]
         self.actor_rollout_wg.init_model()
 
-        # TODO modify: Initialize classmate workers using VERL's worker group pattern
-        # Now there should be enough GPU memory available since actor's vLLM is offloaded
-        self.classmate_workers = []
-        model_paths = self.classmate_cot_reward_configs.classmate_model_name_or_path_list
-        for model_idx, model_path in enumerate(model_paths):
-            classmate_role_name = f"{str(Role.ClassmateWorker)}_{model_idx}"
-            classmate_wg = all_wg[classmate_role_name]
-            classmate_wg.init_model()
-            self.classmate_workers.append(classmate_wg)
-        print(f"Initialized {len(self.classmate_workers)} classmate")
-
         # create async rollout manager and request scheduler
         self.async_rollout_mode = False
         if self.config.actor_rollout_ref.rollout.mode == "async":
@@ -895,154 +788,6 @@ class ClassmateCoTRayPPOTrainer:
             self.async_rollout_manager = AgentLoopManager(
                 config=self.config, worker_group=self.actor_rollout_wg, rm_wg=self.rm_wg
             )
-
-    def _process_main_cot_helper(self, data_source, main_pred, keep_ratio):
-        """
-        Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
-        """
-        # TODO haha double check for code_contests_modify_code
-        if data_source == "code_contests_modify_code":
-            breakpoint()
-            reason_section_name = "### Reasoning"
-            test_case_section_name = "### Test Inputs and Outputs"
-            main_pred = reason_section_name + "\n" + main_pred.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
-        # elif data_source == "code_stdio" or data_source == "code":
-        #     used in olmo3 CodeVerifier
-            # main_pred = process_code_output(main_pred)
-
-        _SPLIT_WS = re.compile(r"\S+|\s+")
-        num_to_keep = int(len(main_pred.split()) * keep_ratio)  # counts non-whitespace tokens
-        if num_to_keep <= 0:
-            return ""
-        kept = []
-        count = 0
-        for m in _SPLIT_WS.finditer(main_pred):
-            t = m.group(0)
-            # whitespace tokens start with a whitespace char
-            if t[0].isspace():
-                if count > 0:  # optional: avoid leading whitespace if truncating from start
-                    kept.append(t)
-            else:
-                count += 1
-                if count > num_to_keep:
-                    break
-                kept.append(t)
-
-        return "".join(kept)
-
-    def _prepare_classmate_batch(self, data: DataProto) -> DataProto:
-        """
-        Prepare batch data for classmate generation. Each worker will handle its own tokenization.
-        This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
-        given we need to apply chat template
-        """
-        
-        # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
-        all_prompts = self.tokenizer.batch_decode(
-            data.batch["prompts"], skip_special_tokens=True
-        )
-        all_actor_responses = self.tokenizer.batch_decode(
-            data.batch["responses"], skip_special_tokens=True
-        )
-        # print("🐛 sample prompt id", data.batch["prompts"][0])
-        # print("🐛 sample prompt", all_prompts[0])
-        # print("🐛 sample prompt id", data.batch["prompts"][0])
-        # print("🐛 sample response", all_actor_responses[0])
-        # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
-
-
-        # all_prompt_plus_actor_responses = []
-        all_processed_actor_responses = []
-
-        assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
-
-        # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
-        data_source_list = data.non_tensor_batch.get("data_source", ["unknown"] * len(all_actor_responses))
-        if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
-            keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
-            for res_idx, response in enumerate(all_actor_responses):
-                all_processed_actor_responses.append(self._process_main_cot_helper(data_source_list[res_idx], response, keep_rate))
-                # if "code" in data_source_list[res_idx]:
-                #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
-                #     print(f"🐛🐛🐛 original response {processed_response}")
-                    # print(f"🐛🐛🐛 sample modified_response {modified_response}")
-        elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
-            for res_idx, response in enumerate(all_actor_responses):
-                rand_keep_rate = random.uniform(0.3, 0.95)
-                all_processed_actor_responses.append(self._process_main_cot_helper(data_source_list[res_idx], response, rand_keep_rate))
-        else:
-            raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
-
-        classmate_non_tensor_batch = {
-            "prompts": np.array(all_prompts),
-            "actor_responses": np.array(all_processed_actor_responses),
-            # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
-        }
-        # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[0])
-        # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[1])
-
-        return DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
-
-    def _generate_classmate_continuations(self, batch: DataProto) -> DataProto:
-        """
-        Launch sampling on each classmate model in parallel and collect results.
-
-        Expects each worker group to return a result with `.non_tensor_batch["classmate_output"]`
-        where `classmate_output` has shape (bsz_per_worker, num_return_sequences).
-
-        For worker groups with multiple workers (data parallel), results are collected
-        and concatenated across workers.
-
-        Reshape (num_classmates, bsz, num_return_sequences) -> (bsz, num_classmates, num_return_sequences)
-        """
-        # Build the shared input for all classmates
-        classmate_batch = self._prepare_classmate_batch(batch)
-
-        bsz = len(batch)
-        num_models = len(self.classmate_workers)
-
-        futures = []  # list[(classmate_idx, future, pad_size)]
-        for classmate_idx, worker_group in enumerate(self.classmate_workers):
-            size_divisor = getattr(worker_group, "world_size", 1)
-            if size_divisor > 1:
-                # Pad the entire batch once to be divisible by world_size
-                # Worker group internally handles distribution across workers
-                classmate_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor, pad_val=None)
-                fut = worker_group.generate_classmate_continuations(data=classmate_batch_padded)
-                futures.append((classmate_idx, fut, pad_size))
-            else:
-                # No padding needed for single worker
-                fut = worker_group.generate_classmate_continuations(data=classmate_batch)
-                futures.append((classmate_idx, fut, 0))
-
-        # Resolve all models in parallel (DataProtoFuture -> DataProto)
-        resolved = [f.get() for _, f, _ in futures]
-
-        # Collect results - use NumPy array for efficient assignment
-        outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
-        for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
-            cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz_padded, num_return_sequences)
-
-            # Remove padding if present
-            # print("🐛 before cls_out", cls_out, cls_out.shape)
-            # print("🐛 before cls_out", cls_out.shape)
-            if pad_size > 0:
-                cls_out = cls_out[:-pad_size]
-            # print("🐛 after cls_out", cls_out, cls_out.shape)
-            # print("🐛 after cls_out", cls_out.shape)
-
-            # Assign to output array
-            assert len(cls_out) == bsz, (
-                f"Expected {bsz} outputs from model {classmate_idx}, got {len(cls_out)}"
-            )
-            outputs[:, classmate_idx] = cls_out
-
-        # Expected shape: (bsz, num_models, num_return_sequences)
-        assert outputs.shape == (bsz, num_models, self.classmate_num_return_sequences), \
-            f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
-        batch.non_tensor_batch["classmate_prompts"] = classmate_batch.non_tensor_batch["prompts"]
-        batch.non_tensor_batch["classmate_outputs"] = outputs
-        return batch
 
     def _save_checkpoint(self):
         from verl.utils.fs import local_mkdir_safe
@@ -1386,14 +1131,9 @@ class ClassmateCoTRayPPOTrainer:
                             batch.batch["reward_baselines"] = reward_baseline_tensor
 
                             del rm_scores, gen_baseline_batch, gen_baseline_output
-
                     # repeat to align with repeated responses in rollout
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     batch = batch.union(gen_batch_output)
-
-                    # TODO modify Generate classmate continuations if workers are available
-                    with marked_timer("classmate_cot", timing_raw, color="magenta"):
-                        batch = self._generate_classmate_continuations(batch)
 
                     if "response_mask" not in batch.batch.keys():
                         batch.batch["response_mask"] = compute_response_mask(batch)

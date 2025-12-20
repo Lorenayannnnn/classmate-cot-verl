@@ -9,19 +9,19 @@ data_dir=./data   # run on lambda
 dataset_name="DeepScaleR"
 train_path=${data_dir}/${dataset_name}/train.parquet    # 40215
 eval_path=${data_dir}/${dataset_name}/test.parquet    # 30 AIME
-train_size=40314   # After filtering out too long prompts
+train_size=40306   # After filtering out too long prompts
 epoch_num=1    # to make it about 400000 * 8 episodes
 
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-train_batch_size=128
+train_batch_size=256
 #train_batch_size=1
-mini_batch_size_per_gpu=32
-gpu_num=8
+mini_batch_size_per_gpu=16
+gpu_num=4
 
-total_ckpts=10
-total_test_times=10
+total_ckpts=7
+total_test_times=7
 
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
@@ -30,17 +30,18 @@ gpu_for_train=${gpu_num}
 
 #base_model_name_path=Qwen/Qwen3-4B-Base
 #base_model_name_path=Qwen/Qwen3-4B-Thinking-2507
-base_model_name_path=Qwen/Qwen3-4B
+#base_model_name_path=Qwen/Qwen3-4B
+base_model_name_path=Qwen/Qwen3-1.7B
 
 #HYDRA_FULL_ERROR=1
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
+#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
-    data.max_prompt_length=2048 \
-    data.max_response_length=2048 \
+    data.max_prompt_length=1024 \
+    data.max_response_length=4096 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=${base_model_name_path} \
@@ -72,7 +73,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
     trainer.save_freq=$((train_steps / total_ckpts)) \
     trainer.test_freq=$((train_steps / total_test_times)) \
     trainer.total_epochs=${epoch_num} $@ \
-    data.seed=42 \
+    data.seed=42
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model} \
 #    actor_rollout_ref.model.lora_rank=32 \

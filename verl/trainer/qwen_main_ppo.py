@@ -24,7 +24,7 @@ from omegaconf import OmegaConf
 
 from verl.experimental.dataset.sampler import AbstractSampler
 from verl.trainer.constants_ppo import get_ppo_ray_runtime_env
-from verl.trainer.ppo.ray_trainer import RayPPOTrainer
+from verl.trainer.ppo.baseline_ray_trainer import RayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
 from verl.trainer.ppo.utils import need_critic, need_reference_policy, set_seed
 from verl.utils.config import validate_config
@@ -285,7 +285,7 @@ class TaskRunner:
 
         # Load the reward manager for training and validation.
         reward_fn = load_reward_manager(
-            config, tokenizer, num_examine=5,
+            config, tokenizer, num_examine=0,
             code_api_url=config.reward_model.sandbox_fusion_url,
             llm_judge_model=config.reward_model.llm_judge_model,
             llm_judge_timeout=config.reward_model.llm_judge_timeout,

@@ -168,9 +168,9 @@ class NaiveRewardManager(AbstractRewardManager):
                 already_print_data_sources[data_source] += 1
                 print("🐛[prompt]", prompt_str)
                 # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
-                print("🐛[response]", response_str)
+                print("🐛[main response]", response_str)
                 if extracted_sol is not None:
-                    print("🐛[extracted_solution]", extracted_sol)
+                    print("🐛[main extracted_solution]", extracted_sol)
                 print("🐛[ground_truth]", ground_truth)
                 if isinstance(score, dict):
                     for key, value in score.items():

@@ -61,6 +61,7 @@ def generate(model, tokenizer, prompt, sample_param, is_qwen=False):
         raw_token_ids = outputs[0].outputs[0].token_ids
         start_think_token_id = tokenizer.convert_tokens_to_ids("<think>")
         end_think_token_id = tokenizer.convert_tokens_to_ids("</think>")
+        breakpoint()
         # remove segment between <think> and </think>
         if start_think_token_id in raw_token_ids and end_think_token_id in raw_token_ids:
             start_idx = raw_token_ids.index(start_think_token_id)

@@ -12,7 +12,7 @@ defaults:
   - actor@actor_rollout_ref.actor: dp_actor
 
   # data: trainer/config/data/legacy_data.yaml
-  - data@data: legacy_data
+  - data@data: qwen_data
 
   # Reference model config.
   # Reference model will be enabled when actor.use_kl_loss or/and algorithm.use_kl_in_reward is/are True.
@@ -80,24 +80,26 @@ reward_model:
 
     # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
     classmate_reward_type: vanilla_reward
+    main_cot_keep_rate: 0.8   # only effective for vanilla_reward
 
     # "immediate_answer", "continue_cot"
     classmate_continue_mode: continue_cot
-    host_classmate_name_to_url_json_fn: "outputs/host_classmate_models/classmate_model_mapping.json"
+#    host_classmate_name_to_url_json_fn: "outputs/host_classmate_models/classmate_model_mapping.json"
   classmate_batch_size: 32
-  classmate_free_cache_engine: True
+#  classmate_free_cache_engine: True
   classmate_use_vllm: True
   classmate_num_return_sequences: 1
   classmate_generation_configs:
-    max_new_tokens: 450   # TODO might change it to (1 - random_keep_rate) * actor's data.max_response_length
+#    max_new_tokens: 450   # TODO: 1. need to fix this for vllm. 2. Might change it to (1 - random_keep_rate) * actor's data.max_response_length
+    max_tokens: ${data.max_response_length} * (1 - ${reward_model.classmate_cot_reward_configs.main_cot_keep_rate})
     do_sample: False   # If false, then temperature and top_p have no effect
-    temperature: 1
+    temperature: 0.0
 #    top_p: 0.9
-  classmate_vllm_configs:
-    gpu_memory_utilization: 0.8
-    tensor_parallel_size: 1
-    max_model_len: null
-    enable_sleep_mode: True
+#  classmate_vllm_configs:
+#    gpu_memory_utilization: 1
+#    tensor_parallel_size: null
+#    max_model_len: null
+#    enable_sleep_mode: True
 
   seed: ${data.seed}
   sandbox_fusion_url: null
