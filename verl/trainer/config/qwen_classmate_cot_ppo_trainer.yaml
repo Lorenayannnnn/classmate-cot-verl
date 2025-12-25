@@ -282,7 +282,6 @@ trainer:
   #  mode: "auto", "enable", or "disable"
   use_legacy_worker_impl: auto
 
-# TODO modify
 hydra:
   run:
     dir: ${trainer.default_local_dir}

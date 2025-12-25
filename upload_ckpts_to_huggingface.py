@@ -1,3 +1,4 @@
+import argparse
 import base64
 import os
 import pickle
@@ -10,7 +11,7 @@ from together import Together
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
-def upload_ckpts_to_huggingface():
+def upload_ckpts_to_huggingface(args):
     from pathlib import Path
     from huggingface_hub import HfApi, create_repo
     from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
@@ -52,9 +53,20 @@ def upload_ckpts_to_huggingface():
     # ROOT = Path("/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-4B-Base_DeepScaleR_w_classmate_llama_322512_episodes")
     # REPO_NAME = "20251217-Qwen3-4B-Base_DeepScaleR_w_classmate_llama_322512_episodes"
 
-    ROOT = Path(
-        "/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes")
-    REPO_NAME = "20251217-Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes"
+    # ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes")
+    # REPO_NAME = "20251217-Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes"
+
+    # ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_GSM_MATH_baseline_357024_episodes")
+    # REPO_NAME = "20251224-Qwen3-0.6B_GSM_MATH_baseline_357024_episodes"
+
+    # ROOT = Path("/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-1.7B_GSM_MATH_baseline_357024_episodes")
+    # REPO_NAME = "20251224-Qwen3-1.7B_GSM_MATH_baseline_357024_episodes"
+
+    # ROOT = Path("/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-1.7B_GSM_MATH_w_1_classmate_llama_357024_episodes")
+    # REPO_NAME = "20251224-Qwen3-1.7B_GSM_MATH_w_1_classmate_llama_357024_episodes"
+
+    ROOT = Path(args.root_path)
+    REPO_NAME = args.repo_name
 
     PRIVATE = False  # set False to make public
 
@@ -71,7 +83,7 @@ def upload_ckpts_to_huggingface():
 
     # Discover candidate subdirs (e.g., global_step_114, global_step_133, ...)
     sub_dirs = sorted([p for p in ROOT.iterdir() if p.is_dir()])
-    skip_dir = [".hydra"]
+    skip_dir = [".hydra", "wandb"]
     sub_dirs = [p for p in sub_dirs if p.name not in skip_dir]
     sub_dirs.sort(key=lambda p: int(p.name.split('_')[-1]))
     # total_cnt = len(sub_dirs)
@@ -180,6 +192,15 @@ def download_huggingface_ckpt():
 
 
 if __name__ == "__main__":
-    upload_ckpts_to_huggingface()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument(
+        "--root_path", type=str, required=True, help="Root path to model ckpts."
+    )
+    arg_parser.add_argument(
+        "--repo_name", type=str, required=True, help="Name of the HuggingFace repository."
+    )
+    upload_ckpts_to_huggingface(arg_parser.parse_args())
     # download_huggingface_ckpt()
     # test()
+
+#python upload_ckpts_to_huggingface.py

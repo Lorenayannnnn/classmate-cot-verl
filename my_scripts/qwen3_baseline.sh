@@ -6,42 +6,49 @@ export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47
 #data_dir=/data    # run with docker
 #data_dir=$HOME/data   # run withconda
 data_dir=./data   # run on lambda
-dataset_name="DeepScaleR"
-train_path=${data_dir}/${dataset_name}/train.parquet    # 40215
-eval_path=${data_dir}/${dataset_name}/test.parquet    # 30 AIME
-train_size=40306   # After filtering out too long prompts
-epoch_num=1    # to make it about 400000 * 8 episodes
-
+dataset_name="GSM_MATH"
+train_path=${data_dir}/${dataset_name}/train.parquet
+eval_path=${data_dir}/${dataset_name}/eval.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-train_batch_size=256
-#train_batch_size=1
-mini_batch_size_per_gpu=16
+#base_model_name_path=Qwen/Qwen3-4B
+#base_model_name_path=Qwen/Qwen3-4B-Thinking-2507
+#base_model_name_path=Qwen/Qwen3-4B-Base
+#base_model_name_path=Qwen/Qwen3-4B-Instruct-2507
+#train_size=40306   # After filtering out too long prompts
+#max_response_length=2048
+
+#base_model_name_path=Qwen/Qwen3-1.7B
+#train_size=14876   # After filtering out too long prompts
+base_model_name_path=Qwen/Qwen3-0.6B
+train_size=14876   # After filtering out too long prompts
+
+max_response_length=2048
+
 gpu_num=4
+train_batch_size=128
+mini_batch_size_per_gpu=16
 
-total_ckpts=7
-total_test_times=7
+total_ckpts=14
+total_test_times=14
 
+epoch_num=3
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-#base_model_name_path=Qwen/Qwen3-4B-Base
-#base_model_name_path=Qwen/Qwen3-4B-Thinking-2507
-#base_model_name_path=Qwen/Qwen3-4B
-base_model_name_path=Qwen/Qwen3-1.7B
-
 #HYDRA_FULL_ERROR=1
 #CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
+#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
     data.max_prompt_length=1024 \
-    data.max_response_length=4096 \
+    data.max_response_length=${max_response_length} \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=${base_model_name_path} \
@@ -50,7 +57,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
     actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.kl_loss_coef=0.1 \
+    actor_rollout_ref.actor.kl_loss_coef=0 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
@@ -73,7 +80,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     trainer.save_freq=$((train_steps / total_ckpts)) \
     trainer.test_freq=$((train_steps / total_test_times)) \
     trainer.total_epochs=${epoch_num} $@ \
-    data.seed=42
+    data.seed=42 \
+    data.return_raw_chat=True
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model} \
 #    actor_rollout_ref.model.lora_rank=32 \

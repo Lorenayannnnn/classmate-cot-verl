@@ -114,11 +114,14 @@
     cd $HOME/east/classmate-cot-verl
     cd $HOME/midwest/classmate-cot-verl
     ```
-- Install dependency with conda + login:
+- Install dependency:
   ```
   conda create -n verl python==3.10.12
   conda activate verl
   bash install.sh
+  ```
+- Login to HF and wandb:
+  ```
   hf auth login
   wandb login
   ```
