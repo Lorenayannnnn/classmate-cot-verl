@@ -101,6 +101,7 @@ class NaiveRewardManager(AbstractRewardManager):
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
+            raw_prompt = data_item.non_tensor_batch["raw_prompt"]
             prompt_ids = data_item.batch["prompts"]
 
             prompt_length = prompt_ids.shape[-1]
@@ -154,11 +155,14 @@ class NaiveRewardManager(AbstractRewardManager):
                 reward = score["score"]
                 # Store the information including original reward
                 for key, value in score.items():
-                    reward_extra_info[f"main_model_{key}"].append(value)
+                    if key == "score":
+                        reward_extra_info["main_model_reward"].append(value)
+                    else:
+                        reward_extra_info[f"main_model_{key}"].append(value)
             else:
                 reward = score
 
-            reward_extra_info["main_model_reward"].append(reward)     # Modify: Temporarily added for plotting main model's reward of baseline and one trained with classmate in the same figure
+            # reward_extra_info["main_model_reward"].append(reward)     # Modify: Temporarily added for plotting main model's reward of baseline and one trained with classmate in the same figure
             reward_tensor[i, valid_response_length - 1] = reward
 
             if data_source not in already_print_data_sources:
@@ -166,17 +170,18 @@ class NaiveRewardManager(AbstractRewardManager):
 
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print("🐛[prompt]", prompt_str)
-                # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
-                print("🐛[main response]", response_str)
-                if extracted_sol is not None:
-                    print("🐛[main extracted_solution]", extracted_sol)
+                print("🐛[raw_prompt]", raw_prompt)
+                print("🐛[main_prompt]", prompt_str)
+                print("🐛[main_response]", response_str)
                 print("🐛[ground_truth]", ground_truth)
+                # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
+                if extracted_sol is not None:
+                    print("🐛[main_extracted]", extracted_sol)
                 if isinstance(score, dict):
                     for key, value in score.items():
-                        print(f"[{key}]", value)
+                        print(f"🐛[{key}]", value)
                 else:
-                    print("[score]", score)
+                    print("[main_reward]", score)
         if return_dict:
             return {
                 "reward_tensor": reward_tensor,
