@@ -173,10 +173,10 @@ class NaiveRewardManager(AbstractRewardManager):
                 print("🐛[raw_prompt]", raw_prompt)
                 print("🐛[main_prompt]", prompt_str)
                 print("🐛[main_response]", response_str)
-                print("🐛[ground_truth]", ground_truth)
-                # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
                 if extracted_sol is not None:
                     print("🐛[main_extracted]", extracted_sol)
+                print("🐛[ground_truth]", ground_truth)
+                # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
                 if isinstance(score, dict):
                     for key, value in score.items():
                         print(f"🐛[{key}]", value)

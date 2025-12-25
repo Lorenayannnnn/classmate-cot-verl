@@ -950,7 +950,8 @@ class ClassmateCoTRayPPOTrainer:
         # all_prompts = self.tokenizer.batch_decode(
         #     data.non_tensor_batch["raw_prompt"], skip_special_tokens=True
         # )
-        all_prompts = [message[0]["content"] for message in data.non_tensor_batch["raw_prompt"]]
+        # all_prompts = [message[0]["content"] for message in data.non_tensor_batch["raw_prompt"]]
+        all_prompts = data.non_tensor_batch["raw_prompt"]
 
         # print("🐛🐛🐛 raw_prompt cnt", len(data.non_tensor_batch["raw_prompt"]))
         # print("🐛🐛🐛 raw_messages", data.non_tensor_batch["raw_prompt"])

@@ -378,7 +378,8 @@ class RLHFDataset(Dataset):
         row_dict["raw_prompt_ids"] = raw_prompt_ids
         # encode prompts without chat template
         if self.return_raw_chat:
-            row_dict["raw_prompt"] = messages
+            # row_dict["raw_prompt"] = messages
+            row_dict["raw_prompt"] = messages[0]["content"]
 
         # get prompts with chat template
         if self.return_full_prompt:
