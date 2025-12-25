@@ -130,6 +130,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
+            raw_prompt = data_item.non_tensor_batch["raw_prompt"]
             prompt_ids = data_item.batch["prompts"]
 
             prompt_length = prompt_ids.shape[-1]
@@ -174,7 +175,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 base_reward = actor_score["score"]
                 # Store the information including original reward
                 for key, value in actor_score.items():
-                    reward_extra_info[f"base_{key}"].append(value)
+                    reward_extra_info[f"main_model_{key}"].append(value)
             else:
                 base_reward = actor_score
 
@@ -257,16 +258,18 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print("🐛[prompt]", prompt_str)
-                print("🐛[ground_truth]", ground_truth)
+                print("🐛[raw_prompt]", raw_prompt)
+                print("🐛[main_prompt]", prompt_str)
                 print("🐛[main_response]", response_str)
+                print("🐛[ground_truth]", ground_truth)
                 if extracted_solution is not None:
                     print("🐛[main_extracted]", extracted_solution)
                 print("🐛[main_reward]", base_reward)
                 import numpy as np
-                print("🐛[classmate_prompt]", classmate_prompts[0])
-                print("🐛[classmate_output]", classmate_outputs[0])     # 0th classmate model
+                print("🐛[classmate_prompt]", classmate_prompts[0])   # 0th classmate model
+                print("🐛[classmate_output]", classmate_outputs[0][0])     # 0th classmate model
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
+                print("🐛[ground_truth]", ground_truth)
                 print("🐛[classmate_reward]", classmate_reward)
                 # if isinstance(score, dict):
                 #     for key, value in score.items():

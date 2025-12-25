@@ -21,6 +21,7 @@ import time
 import numpy as np
 from together import Together
 from transformers import AutoTokenizer
+import requests
 
 import ray
 from verl import DataProto
@@ -92,8 +93,6 @@ class ClassmateWorker(Worker):
 
         self.batch_size = config.classmate_batch_size
         self.generation_config = config.generation_config
-        if type(self.generation_config["max_tokens"]) == str:
-            self.generation_config["max_tokens"] = int(eval(self.generation_config["max_tokens"]))
 
         self.use_vllm = config.classmate_use_vllm
         self.free_cache_engine = config.classmate_free_cache_engine
@@ -129,14 +128,15 @@ class ClassmateWorker(Worker):
 
         def generate(tmp_idx, tmp_prompt):
             finish = False
+            tmp_output = None
             while not finish:
                 try:
-                    response = self.client.chat.completions.create(
+                    response = self.client.completions.create(
                       model=self.model_name_or_path,
-                      messages=[{"role": "user", "content": tmp_prompt}],
+                      prompt=tmp_prompt,
                       **vllm_api_params
                     )
-                    tmp_output = response.choices[0].message.content
+                    tmp_output = response.choices[0].text
                     finish = True
                 except Exception as e:
                     print(f"Error generating for prompt: {e}. Retrying...")
@@ -254,7 +254,7 @@ class ClassmateWorker(Worker):
         #     "prompts": all_prompts,
         # }
         classmate_outputs = []
-        prompts = []
+        classmate_prompts = []
         try:
             # ONLOAD: Load model to GPU before generation (no-op for vLLM API mode)
             self._onload_model()
@@ -262,8 +262,8 @@ class ClassmateWorker(Worker):
 
             # prompt_plus_actor_responses = data.non_tensor_batch["prompt_plus_actor_responses"]
             # Handle padding: only slice if pad_size is a positive integer
-            prompts = data.non_tensor_batch["prompts"]
-            actor_responses = data.non_tensor_batch["actor_responses"]
+            prompts = data.non_tensor_batch["raw_prompts"]
+            actor_responses = data.non_tensor_batch["main_model_responses"]
 
             # Convert numpy array to list if needed
             # if isinstance(prompt_plus_actor_responses, np.ndarray):
@@ -307,19 +307,20 @@ class ClassmateWorker(Worker):
                         while end > 0 and token_ids[end - 1] in self.special_ids:
                             end -= 1
                         token_ids = token_ids[:end]
-                        batch_input_prompts.append(self.tokenizer.decode(token_ids))
+                        batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
 
                     # Get batch-wise max token len
-                    prompt_attn_mask = self.tokenizer(
-                        batch_input_prompts,
-                        padding=True,
-                        return_tensors="pt",
-                    )["attention_mask"]
+                    # prompt_attn_mask = self.tokenizer(
+                    #     batch_input_prompts,
+                    #     padding=True,
+                    #     return_tensors="pt",
+                    # )["attention_mask"]
                     # batch_max_token_len = prompt_attn_mask.sum(dim=1).max().item()
 
                     # Generate via API for this batch
                     # batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
                     batch_completions = self._generate_via_remote_api(batch_input_prompts)
+                    classmate_prompts.extend(batch_input_prompts)
                     # Extend back to with padding
                     classmate_outputs.extend(batch_completions)
 
@@ -422,6 +423,7 @@ class ClassmateWorker(Worker):
         classmate_outputs += [[None]] * (original_length - len(classmate_outputs))
 
         result_non_tensor_batch = {
+            "classmate_prompts": np.array(classmate_prompts),    # Should have shape (bsz,)
             "classmate_output": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
         }
 

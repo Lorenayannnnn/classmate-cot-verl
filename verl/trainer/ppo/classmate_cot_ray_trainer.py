@@ -373,14 +373,23 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_num_return_sequences = classmate_num_return_sequences
         OmegaConf.set_struct(self.classmate_generation_configs, False)
         if not self.classmate_generation_configs.do_sample:
-            self.classmate_generation_configs["temperature"] = 0.0
-            self.classmate_generation_configs["top_p"] = 1.0
+            self.classmate_generation_configs.update({
+                "temperature": 0.0,
+                "top_k": 1,
+                "top_p": 1.0,
+                "seed": seed
+            })
+
+            if type(self.classmate_generation_configs["max_tokens"]) == str:
+                self.classmate_generation_configs["max_tokens"] = int(eval(self.classmate_generation_configs["max_tokens"]))
+
         if classmate_use_vllm:
             self.classmate_generation_configs.n = classmate_num_return_sequences
             self.classmate_generation_configs.seed = seed
             self.classmate_generation_configs.pop("do_sample")
         else:
-            self.classmate_generation_configs.num_return_sequences = classmate_num_return_sequences
+            raise NotImplementedError("Only vLLM-based classmate is supported now.")
+            # self.classmate_generation_configs.num_return_sequences = classmate_num_return_sequences
         OmegaConf.set_struct(self.classmate_generation_configs, True)
 
         self.classmate_vllm_configs = classmate_vllm_configs
@@ -938,9 +947,15 @@ class ClassmateCoTRayPPOTrainer:
         """
         
         # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
-        all_prompts = self.tokenizer.batch_decode(
-            data.batch["prompts"], skip_special_tokens=True
-        )
+        # all_prompts = self.tokenizer.batch_decode(
+        #     data.non_tensor_batch["raw_prompt"], skip_special_tokens=True
+        # )
+        all_prompts = [message[0]["content"] for message in data.non_tensor_batch["raw_prompt"]]
+
+        # print("🐛🐛🐛 raw_prompt cnt", len(data.non_tensor_batch["raw_prompt"]))
+        # print("🐛🐛🐛 raw_messages", data.non_tensor_batch["raw_prompt"])
+        # print("🐛🐛🐛 raw_prompts", all_prompts)
+
         all_actor_responses = self.tokenizer.batch_decode(
             data.batch["responses"], skip_special_tokens=True
         )
@@ -974,8 +989,8 @@ class ClassmateCoTRayPPOTrainer:
             raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 
         classmate_non_tensor_batch = {
-            "prompts": np.array(all_prompts),
-            "actor_responses": np.array(all_processed_actor_responses),
+            "raw_prompts": np.array(all_prompts),
+            "main_model_responses": np.array(all_processed_actor_responses),
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[0])
@@ -1019,8 +1034,10 @@ class ClassmateCoTRayPPOTrainer:
         resolved = [f.get() for _, f, _ in futures]
 
         # Collect results - use NumPy array for efficient assignment
+        classmate_prompts = np.empty((bsz, num_models), dtype=object)
         outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
         for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
+            cls_prompts = result_dp.non_tensor_batch["classmate_prompts"]  # (bsz_padded, )
             cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz_padded, num_return_sequences)
 
             # Remove padding if present
@@ -1036,11 +1053,12 @@ class ClassmateCoTRayPPOTrainer:
                 f"Expected {bsz} outputs from model {classmate_idx}, got {len(cls_out)}"
             )
             outputs[:, classmate_idx] = cls_out
+            classmate_prompts[:, classmate_idx] = cls_prompts
 
         # Expected shape: (bsz, num_models, num_return_sequences)
         assert outputs.shape == (bsz, num_models, self.classmate_num_return_sequences), \
             f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
-        batch.non_tensor_batch["classmate_prompts"] = classmate_batch.non_tensor_batch["prompts"]
+        batch.non_tensor_batch["classmate_prompts"] = classmate_prompts
         batch.non_tensor_batch["classmate_outputs"] = outputs
         return batch
 
