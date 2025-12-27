@@ -36,6 +36,7 @@ from omegaconf import OmegaConf, open_dict
 from torch.utils.data import Dataset, Sampler
 from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 from verl import DataProto
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
@@ -382,6 +383,8 @@ class ClassmateCoTRayPPOTrainer:
 
             if type(self.classmate_generation_configs["max_tokens"]) == str:
                 self.classmate_generation_configs["max_tokens"] = int(eval(self.classmate_generation_configs["max_tokens"]))
+
+        self.classmate_tokenizers = {}
 
         if classmate_use_vllm:
             self.classmate_generation_configs.n = classmate_num_return_sequences
@@ -834,6 +837,8 @@ class ClassmateCoTRayPPOTrainer:
             )
             self.resource_pool_to_cls[resource_pool][classmate_role_name] = classmate_worker_cls
 
+            self.classmate_tokenizers[model_idx] = AutoTokenizer.from_pretrained(model_path.replace("-Turbo", ""))
+
         # initialize WorkerGroup
         # NOTE: if you want to use a different resource pool for each role, which can support different parallel size,
         # you should not use `create_colocated_worker_cls`.
@@ -1037,6 +1042,8 @@ class ClassmateCoTRayPPOTrainer:
         # Collect results - use NumPy array for efficient assignment
         classmate_prompts = np.empty((bsz, num_models), dtype=object)
         outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
+        # classmate_response_length = np.empty((bsz, num_models), dtype=np.int32)
+        classmate_response_length = []
         for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
             cls_prompts = result_dp.non_tensor_batch["classmate_prompts"]  # (bsz_padded, )
             cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz_padded, num_return_sequences)
@@ -1056,11 +1063,18 @@ class ClassmateCoTRayPPOTrainer:
             outputs[:, classmate_idx] = cls_out
             classmate_prompts[:, classmate_idx] = cls_prompts
 
+            # Log classmate output length TODO haha (wandb plot doesn't add up)
+            tokenized_output = self.classmate_tokenizers[classmate_idx](outputs.flatten().tolist())["input_ids"]
+            classmate_response_length.extend([len(ids) for ids in tokenized_output])
+
         # Expected shape: (bsz, num_models, num_return_sequences)
         assert outputs.shape == (bsz, num_models, self.classmate_num_return_sequences), \
             f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
         batch.non_tensor_batch["classmate_prompts"] = classmate_prompts
         batch.non_tensor_batch["classmate_outputs"] = outputs
+
+        batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
+        batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
         return batch
 
     def _save_checkpoint(self):

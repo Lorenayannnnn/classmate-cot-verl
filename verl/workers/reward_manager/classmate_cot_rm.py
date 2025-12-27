@@ -251,6 +251,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 else:
                     reward_extra_info[f"classmate_{key}"].append(value)
 
+            reward_extra_info[f"classmate_response_length"].append(data_item.non_tensor_batch["classmate_response_length"])
+            reward_extra_info[f"classmate_max_tokens_len"].append(data_item.non_tensor_batch["classmate_max_tokens_len"])
+
             reward_tensor[i, valid_response_length - 1] = final_reward
 
             if data_source not in already_print_data_sources:

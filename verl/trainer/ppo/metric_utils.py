@@ -196,18 +196,18 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
             else {}
         ),
         # response length
-        "response_length/mean": torch.mean(response_length).detach().item(),
-        "response_length/max": torch.max(response_length).detach().item(),
-        "response_length/min": torch.min(response_length).detach().item(),
-        "response_length/clip_ratio": torch.mean(torch.eq(response_length, max_response_length).float())
+        "response_length/main_model/mean": torch.mean(response_length).detach().item(),
+        "response_length/main_model/max": torch.max(response_length).detach().item(),
+        "response_length/main_model/min": torch.min(response_length).detach().item(),
+        "response_length/main_model/clip_ratio": torch.mean(torch.eq(response_length, max_response_length).float())
         .detach()
         .item(),
         # response length (non-aborted only)
         # These statistics exclude aborted samples to avoid skew from zeros
-        "response_length_non_aborted/mean": non_aborted_response_length_mean,
-        "response_length_non_aborted/max": non_aborted_response_length_max,
-        "response_length_non_aborted/min": non_aborted_response_length_min,
-        "response_length_non_aborted/clip_ratio": non_aborted_response_length_clip_ratio,
+        "response_length/main_model_non_aborted/mean": non_aborted_response_length_mean,
+        "response_length/main_model_non_aborted/max": non_aborted_response_length_max,
+        "response_length/main_model_non_aborted/min": non_aborted_response_length_min,
+        "response_length/main_model_non_aborted/clip_ratio": non_aborted_response_length_clip_ratio,
         # aborted ratio
         # Fraction of samples whose response length is zero
         "response/aborted_ratio": aborted_ratio,
@@ -263,6 +263,24 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
 
     # Train with classmate models
     print_if_exists("classmate_reward", "classmate_reward")
+
+    # classmate_response_length, classmate_max_tokens_len
+    # TODO haha
+    if "classmate_response_length" in batch.non_tensor_batch:
+        classmate_response_length = batch.non_tensor_batch["classmate_response_length"]
+        classmate_max_tokens_len = batch.non_tensor_batch["classmate_max_tokens_len"]
+        classmate_aborted_mask = classmate_response_length == 0
+        non_aborted_classmate_response_length = classmate_response_length[~classmate_aborted_mask]
+        if len(non_aborted_classmate_response_length) > 0:
+            metrics["response_length/classmate/mean"] = float(np.mean(non_aborted_classmate_response_length))
+            metrics["response_length/classmate/max"] = float(np.max(non_aborted_classmate_response_length))
+            metrics["response_length/classmate/min"] = float(np.min(non_aborted_classmate_response_length))
+            metrics["response_length/classmate/clip_ratio"] = float(
+                np.mean(
+                    non_aborted_classmate_response_length == classmate_max_tokens_len[~classmate_aborted_mask]
+                )
+            )
+
     # For code_contests_modify_code
     # result = {
     #     "generated_test_pass_correct_sol": 0.0,
