@@ -8,30 +8,30 @@ export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2
 # Now using Together AI
 
 data_dir=./data   # run on lambda
-dataset_name="hendrycks_math_think_step_by_step"
+dataset_name="gsm8k_think_prompt"
 train_path=${data_dir}/${dataset_name}/train.parquet
 eval_path=${data_dir}/${dataset_name}/test.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 #base_model_name_path=Qwen/Qwen3-1.7B
-#train_size=7500   # After filtering out too long prompts
+#train_size=7473   # After filtering out too long prompts
 base_model_name_path=Qwen/Qwen3-0.6B
-train_size=7493   # After filtering out too long prompts
+train_size=7473   # After filtering out too long prompts
 
-max_response_length=4096
+max_response_length=3072
 
 classmate_reward_weight=1
 
 gpu_num=8
 seed=42
 train_batch_size=256
-mini_batch_size_per_gpu=16
+mini_batch_size_per_gpu=32
 
-total_ckpts=28
-total_test_times=28
+total_ckpts=14
+total_test_times=14
 
-epoch_num=12
+epoch_num=6
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
@@ -88,4 +88,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate.sh
+#bash my_scripts/qwen3_classmate_gsm8k.sh

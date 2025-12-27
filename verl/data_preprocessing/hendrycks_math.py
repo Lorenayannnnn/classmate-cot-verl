@@ -24,8 +24,9 @@ from verl.utils.hdfs_io import copy, makedirs
 from verl.utils.math_utils import hendrycks_math_extract_solution
 
 
+from math_verify import parse
 def extract_solution(solution_str):
-    return hendrycks_math_extract_solution(solution_str)
+    return parse(solution_str)[-1]
 
 
 if __name__ == "__main__":
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--local_dataset_path", default=None, help="The local path to the raw dataset, if it exists.")
     parser.add_argument(
-        "--local_save_dir", default="~/data/hendrycks_math", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/hendrycks_math", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -51,22 +52,24 @@ if __name__ == "__main__":
     for category in categories:
         all_train_datasets.append(datasets.load_dataset(data_source, category, split="train"))
     train_dataset = datasets.concatenate_datasets(all_train_datasets)
+
     # For test, select 200 samples from each subset and merge them
     all_test_datasets = []
     for category in categories:
         subset_test = datasets.load_dataset(data_source, category, split="test")
-        subset_test = subset_test.select(range(200))        # TODO: select first 200 samples for now
+        subset_test = subset_test.select(range(10))
         all_test_datasets.append(subset_test)
     test_dataset = datasets.concatenate_datasets(all_test_datasets)
 
-    instruction_following = "Let's think step by step and output the final answer within \\boxed{}."
+    instruction_following = "Please reason step by step, and put your final answer within \\boxed{}."
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
         def process_fn(example, idx):
             question_raw = example.pop("problem")
 
-            question = question_raw + " " + instruction_following
+            # question = question_raw + " " + instruction_following
+            question = question_raw
 
             answer_raw = example.pop("solution")
             solution = extract_solution(answer_raw)

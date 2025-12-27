@@ -90,8 +90,7 @@ reward_model:
   classmate_use_vllm: True
   classmate_num_return_sequences: 1
   classmate_generation_configs:
-#    max_new_tokens: 450   # TODO: 1. need to fix this for vllm. 2. Might change it to (1 - random_keep_rate) * actor's data.max_response_length
-    max_tokens: ${data.max_response_length} * (1 - ${reward_model.classmate_cot_reward_configs.main_cot_keep_rate})
+    max_tokens: 1024
     do_sample: False   # If false, then temperature and top_p have no effect
     temperature: 0.0
 #    top_p: 0.9
@@ -262,9 +261,9 @@ trainer:
 
   # Default local directory for saving checkpoints
   # TODO modify
-  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
+#  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
 #  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
-#  default_local_dir: /local/data/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
+  default_local_dir: /local/data/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
 
   # Maximum number of actor checkpoints to keep
   max_actor_ckpt_to_keep: null
@@ -305,9 +304,9 @@ global_profiler:
 
   # Path to save profiling contents
   # TODO modify
-  save_path: "outputs/profile"
+#  save_path: "outputs/profile"
 #  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
-#  save_path: "/local/data/lorena/${trainer.project_name}/outputs/profile"
+  save_path: "/local/data/lorena/${trainer.project_name}/outputs/profile"
 
   # Specific tool configs, can use +profiler.tool_config.[tool].xxx to config
   global_tool_config:

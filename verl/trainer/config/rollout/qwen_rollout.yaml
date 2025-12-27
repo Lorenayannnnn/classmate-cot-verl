@@ -133,7 +133,7 @@ val_kwargs:
   top_k: -1
 
   # Top-p sampling parameter. Default 1.0.
-  top_p: 1
+  top_p: 1.0
 
   # Sampling temperature for rollout.
   temperature: 0

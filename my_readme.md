@@ -95,7 +95,7 @@
     export PATH="$HOME/miniconda/bin:$PATH"
     ```
     - For my lambda gpu:
-      ```
+      ``` 
       export PATH="$HOME/east/miniconda/bin:$PATH"
       export PATH="$HOME/midwest/miniconda/bin:$PATH"
       ```

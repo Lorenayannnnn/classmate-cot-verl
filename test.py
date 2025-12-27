@@ -172,9 +172,13 @@ def main():
     # dataset_name = "DeepScaleR"
     # data_source = None
 
-    dataset_name = "GSM_MATH"
+    # dataset_name = "GSM_MATH"
     # data_source = "gsm8k"
-    data_source = "MATH"
+    # data_source = "MATH"
+
+    dataset_name = "hendrycks_math"
+    # dataset_name = "hendrycks_math_think_step_by_step"
+    data_source = None
 
     data_split = "train"
     max_sample_num = 100
@@ -200,8 +204,9 @@ def main():
     max_main_input_len = 1024
     # main_max_response_len = 2048
     # main_max_response_len = 2048
+    main_max_response_len = 3072
     # main_max_response_len = 4096
-    main_max_response_len = 8192
+    # main_max_response_len = 8192
     max_main_model_len = max_main_input_len + main_max_response_len
 
     main_cot_keep_ratio = 0.8
@@ -214,15 +219,13 @@ def main():
     # Filter too long examples for main model
     model_len_filtered_data_fn = f"data/{dataset_name}/{main_model_name_path}_{max_main_input_len}_{data_split}_filtered.json"
     if not os.path.exists(model_len_filtered_data_fn):
-        if dataset_name == "GSM_MATH":
-            # load from parquet
-            test_json_fn = f"data/GSM_MATH/{data_split}.parquet"
-            test_dataset = load_dataset("parquet", data_files=test_json_fn)["train"]
-        elif dataset_name == "DeepScaleR":
+        if dataset_name == "DeepScaleR":
             test_json_fn = f"data/{dataset_name}/{data_split}.json"
             test_dataset = load_dataset("json", data_files=test_json_fn)["train"]
         else:
-            raise NotImplementedError(f"Dataset {dataset_name} not implemented.")
+            # load from parquet
+            test_json_fn = f"data/{dataset_name}/{data_split}.parquet"
+            test_dataset = load_dataset("parquet", data_files=test_json_fn)["train"]
         test_dataset = filter_too_long_examples(test_dataset, main_tokenizer, max_main_input_len)
         # save filtered dataset
         os.makedirs(os.path.dirname(model_len_filtered_data_fn), exist_ok=True)
@@ -558,17 +561,14 @@ Then, the quadratic"""
     # print(chat_completion.usage.prompt_tokens, chat_completion.usage.completion_tokens)
 
 if __name__ == "__main__":
-    fn = "/home/lorenayan/classmate-cot-verl/data/GSM_MATH/train.parquet"
-    dataset = load_dataset("parquet", data_files=fn)["train"]
-    print(len(dataset))
-    # main()
+    main()
     # test_togetherai_api()
 
-# TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=2 python test.py
-# TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=3 python test.py
-# TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=4 python test.py
-# TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=5 python test.py
-# TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=6 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=2 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=3 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=4 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=5 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=6 python test.py
 #CUDA_VISIBLE_DEVICES=0 python test.py
 #CUDA_VISIBLE_DEVICES=1 python test.py
 #CUDA_VISIBLE_DEVICES=2 python test.py

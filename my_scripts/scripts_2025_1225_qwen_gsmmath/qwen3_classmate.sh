@@ -1,44 +1,55 @@
 set -x
 
-export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
+export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 # Classmate model: Change url and port number in classmate-cot-verl/outputs/host_classmate_models/classmate_model_mapping.json
 #CUDA_VISIBLE_DEVICES=0,1 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 2 --gpu-memory-utilization 0.9 --port 8003
 #CUDA_VISIBLE_DEVICES=0 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 1 --gpu-memory-utilization 0.9 --port 8003
 # Now using Together AI
 
+#TODO change dataset
+#data_dir=/data    # run with docker
+#data_dir=$HOME/data   # run with conda
 data_dir=./data   # run on lambda
-dataset_name="hendrycks_math_think_step_by_step"
+dataset_name="GSM_MATH"
 train_path=${data_dir}/${dataset_name}/train.parquet
-eval_path=${data_dir}/${dataset_name}/test.parquet
+eval_path=${data_dir}/${dataset_name}/eval.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-#base_model_name_path=Qwen/Qwen3-1.7B
-#train_size=7500   # After filtering out too long prompts
-base_model_name_path=Qwen/Qwen3-0.6B
-train_size=7493   # After filtering out too long prompts
+#base_model_name_path=Qwen/Qwen3-4B-Base
+#base_model_name_path=Qwen/Qwen3-4B-Thinking-2507
+#base_model_name_path=Qwen/Qwen3-4B
+#train_size=40306   # After filtering out too long prompts
+#max_response_length=2048
 
-max_response_length=4096
+#base_model_name_path=Qwen/Qwen3-1.7B
+#train_size=14876   # After filtering out too long prompts
+base_model_name_path=Qwen/Qwen3-0.6B
+train_size=14876   # After filtering out too long prompts
+
+max_response_length=2048
 
 classmate_reward_weight=1
 
-gpu_num=8
+gpu_num=4
 seed=42
-train_batch_size=256
+train_batch_size=128
 mini_batch_size_per_gpu=16
 
-total_ckpts=28
-total_test_times=28
+total_ckpts=14
+total_test_times=14
 
-epoch_num=12
+epoch_num=3    # to make it about 400000 * 8 episodes
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
+#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -53,9 +64,9 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
     actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_coef=0 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.001 \
+    actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -78,7 +89,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True
-    reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight}
+    reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
 #    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model}

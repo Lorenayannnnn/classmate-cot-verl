@@ -190,11 +190,48 @@ def test():
 
 
 if __name__ == '__main__':
-    # main()
-    # dataset = load_dataset("deepmind/code_contests", split="test")
-    # test = dataset[0]
-    # test = dataset[1]
-    # print(dataset[0])
+    # test()
+
+    # fn = "/home/ubuntu/east/classmate-cot-verl/data/gsm8k_think_prompt/train.parquet"
+    # dataset = load_dataset("parquet", data_files=fn)["train"]
+    # breakpoint()
+    # test_fn = "data/math/test.parquet"
+    # test_dataset = load_dataset("parquet", data_files=test_fn)["train"]
     # breakpoint()
 
-    test()
+    model_name = "Qwen/Qwen3-0.6B"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    import numpy as np
+    output_message = np.array([
+        [["""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+Cutting Knowledge Date: December 2023
+Today Date: 25 Dec 2025
+
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+How many vertical asymptotes does the graph of $y=\\frac{2}{"""]],
+        [["""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+    Cutting Knowledge Date: December 2023
+    Today Date: 25 Dec 2025
+
+    <|eot_id|><|start_header_id|>user<|end_header_id|>
+
+    How many vertical asymptotes does the gra{"""]],
+        [["""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+    Cutting Knowledge Date: December 2023
+    Today Date: 25 Dec 2025
+
+    <|eot_id|><|start_header_id|>user<|end_header_id|>
+
+    How many vertice graph of $y=\\frac{2}{"""]]
+    ])
+    tokenized_output = tokenizer.batch_encode_plus(output_message.flatten().tolist())["input_ids"]
+    tokenizer.batch_decode(tokenizer.batch_encode_plus(output_message.flatten().tolist())["input_ids"])
+    assert tokenizer.batch_decode(tokenizer.batch_encode_plus(output_message.flatten().tolist())["input_ids"]) == output_message.flatten().tolist()
+    output_length_list = [len(ids) for ids in tokenized_output]
+    breakpoint()
+    tokenized_output = tokenizer.batch_encode_plus(output_message.flatten().tolist())["input_ids"]
+    output_length_list = [len(ids) for ids in tokenized_output]
