@@ -143,7 +143,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             valid_response_ids = response_ids[:valid_response_length]
 
             # decode
-            prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
+            raw_prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False)
+            raw_response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=False)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
@@ -154,7 +155,6 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
 
-            # TODO modify
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
             # Compute base actor reward
@@ -262,8 +262,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
                 print("🐛[raw_prompt]", raw_prompt)
-                print("🐛[main_prompt]", prompt_str)
-                print("🐛[main_response]", response_str)
+                print("🐛[main_prompt]", raw_prompt_str)
+                print("🐛[main_response]", raw_response_str)
                 print("🐛[ground_truth]", ground_truth)
                 if extracted_solution is not None:
                     print("🐛[main_extracted]", extracted_solution)
