@@ -376,7 +376,7 @@ class ClassmateCoTRayPPOTrainer:
         if not self.classmate_generation_configs.do_sample:
             self.classmate_generation_configs.update({
                 "temperature": 0.0,
-                "top_k": 1,
+                "top_k": -1,
                 "top_p": 1.0,
                 "seed": seed
             })

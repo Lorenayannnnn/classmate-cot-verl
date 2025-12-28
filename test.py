@@ -79,7 +79,12 @@ def generate(model, model_name_or_path, tokenizer, prompt, sample_param, is_qwen
         # outputs.choices[0].text
         # breakpoint()
     else:
-        outputs = model.generate(prompt, sampling_params=sample_param)
+
+        # batch_prompts = [prompt, prompt, prompt, prompt, prompt]
+        # batch_outputs = model.generate(batch_prompts, sampling_params=sample_param, use_tqdm=False)
+        # breakpoint()
+        # texts = [output.outputs[0].text for output in batch_outputs]
+        outputs = model.generate(prompt, sampling_params=sample_param, use_tqdm=False)
 
     if is_qwen:
         raw_token_ids = outputs[0].outputs[0].token_ids
@@ -176,8 +181,10 @@ def main():
     # data_source = "gsm8k"
     # data_source = "MATH"
 
-    dataset_name = "hendrycks_math"
+    # dataset_name = "hendrycks_math"
     # dataset_name = "hendrycks_math_think_step_by_step"
+    # dataset_name = "gsm8k_no_think_prompt"
+    dataset_name = "gsm8k_minimal_answer_box_prompt"
     data_source = None
 
     data_split = "train"
@@ -189,15 +196,15 @@ def main():
     # main_model_name_path="Qwen/Qwen2.5-Math-1.5B"
     # main_model_name_path="Qwen/Qwen3-4B-Base"
 
-    # main_model_name_path="Qwen/Qwen3-0.6B"
-    main_model_name_path="Qwen/Qwen3-1.7B"
+    main_model_name_path="Qwen/Qwen3-0.6B"
+    # main_model_name_path="Qwen/Qwen3-1.7B"
     # main_model_name_path="Qwen/Qwen3-4B"
     # main_model_name_path = "Qwen/Qwen3-4B-Instruct-2507"
 
-    # classmate_model_name_path = "meta-llama/Llama-3.2-3B-Instruct"
+    classmate_model_name_path = "meta-llama/Llama-3.2-1B-Instruct"
     # use_together = False
-    classmate_model_name_path = "meta-llama/Llama-3.2-3B-Instruct-Turbo"
-    use_together = True
+    # classmate_model_name_path = "meta-llama/Llama-3.2-3B-Instruct-Turbo"
+    use_together = False
 
     print(f"Start testing {dataset_name} with main model: {main_model_name_path} and classmate model: {classmate_model_name_path}")
 
@@ -212,7 +219,10 @@ def main():
     main_cot_keep_ratio = 0.8
     classmate_max_input_len = int(max_main_input_len + main_max_response_len * main_cot_keep_ratio)
     classmate_max_response_len = int(main_max_response_len * (1 - main_cot_keep_ratio))
-    classmate_max_len = classmate_max_input_len + classmate_max_response_len
+    # classmate_max_len = classmate_max_input_len + classmate_max_response_len
+    classmate_max_len = 99999
+
+    breakpoint()
 
     main_tokenizer = create_tokenizer(main_model_name_path)
     classmate_tokenizer = create_tokenizer(classmate_model_name_path)
@@ -247,7 +257,7 @@ def main():
 
     if use_together:
         main_model = create_vllm(main_model_name_path, max_main_model_len, gpu_memory_utilization=0.9)
-        classmate_model = create_vllm(classmate_model_name_path, classmate_max_len, use_together=use_together)
+        classmate_model = create_vllm(classmate_model_name_path, classmate_max_len, 0.3, use_together=use_together)
         classmate_sampling_params = {
             "temperature": 0.0,
             "top_k": 1,
@@ -261,7 +271,7 @@ def main():
         classmate_sampling_params = SamplingParams(temperature=0.0, top_k=-1, top_p=1.0, max_tokens=classmate_max_response_len, seed=seed)
 
     if use_temperature:
-        main_sampling_params = SamplingParams(temperature=0.7, top_k=20, top_p=0.8, max_tokens=main_max_response_len, seed=seed)
+        main_sampling_params = SamplingParams(temperature=1, top_k=-1, top_p=1, max_tokens=main_max_response_len, seed=seed)
     else:
         main_sampling_params = SamplingParams(temperature=0.0, top_k=-1, top_p=1.0, max_tokens=main_max_response_len, seed=seed)
 
@@ -303,6 +313,10 @@ def main():
         # classmate_ids = classmate_tokenizer.apply_chat_template(classmate_messages, return_tensors="pt", tokenize=True, add_generation_prompt=False)
         # classmate_prompt = classmate_tokenizer.apply_chat_template(classmate_messages, return_tensors="pt", tokenize=False, add_generation_prompt=False, add_special_tokens=False)
 
+        breakpoint()
+        # classmate_messages = prompt
+        # classmate_prompt = classmate_tokenizer.apply_chat_template(classmate_messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False)
+        # classmate_prompt = classmate_tokenizer.apply_chat_template(prompt, tokenize=False)
         main_prompt = tokenize_input(main_tokenizer, prompt, tokenize=False)
         main_pred, main_pred_token_ids = generate(main_model, main_model_name_path, main_tokenizer, main_prompt, main_sampling_params, is_qwen=True)
         classmate_prompt, truncated_main_pred = get_classmate_prompt(prompt, main_pred, keep_ratio=main_cot_keep_ratio)
@@ -564,11 +578,11 @@ if __name__ == "__main__":
     main()
     # test_togetherai_api()
 
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=2 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=3 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=4 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=5 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1" CUDA_VISIBLE_DEVICES=6 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=2 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=3 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=4 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=5 python test.py
+#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=6 python test.py
 #CUDA_VISIBLE_DEVICES=0 python test.py
 #CUDA_VISIBLE_DEVICES=1 python test.py
 #CUDA_VISIBLE_DEVICES=2 python test.py

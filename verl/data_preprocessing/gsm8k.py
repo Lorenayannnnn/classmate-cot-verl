@@ -38,7 +38,9 @@ if __name__ == "__main__":
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--local_dataset_path", default=None, help="The local path to the raw dataset, if it exists.")
     parser.add_argument(
-        "--local_save_dir", default="./data/gsm8k_think_prompt", help="The save directory for the preprocessed dataset."
+        # "--local_save_dir", default="./data/gsm8k_think_prompt", help="The save directory for the preprocessed dataset."
+        # "--local_save_dir", default="./data/gsm8k_no_think_prompt", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/gsm8k_minimal_answer_box_prompt", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -54,15 +56,17 @@ if __name__ == "__main__":
     train_dataset = dataset["train"]
     test_dataset = dataset["test"].select(range(100))
 
-    instruction_following = "Please reason step by step, and put your final answer within \\boxed{}."
-    # instruction_following = 'Let\'s think step by step and output the final answer after "####".'
+    # instruction_following = " Please reason step by step, and put your final answer within \\boxed{}."
+    # instruction_following = ""
+    instruction_following = " Put your final answer within \\boxed{}."
+    # instruction_following = ' Let\'s think step by step and output the final answer after "####".'
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
         def process_fn(example, idx):
             question_raw = example.pop("question")
 
-            question = question_raw + " " + instruction_following
+            question = question_raw + instruction_following
             # question = question_raw
 
             answer_raw = example.pop("answer")

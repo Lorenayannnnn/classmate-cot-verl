@@ -8,7 +8,8 @@ export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2
 # Now using Together AI
 
 data_dir=./data   # run on lambda
-dataset_name="gsm8k_think_prompt"
+#dataset_name="gsm8k_think_prompt"
+dataset_name="gsm8k_minimal_answer_box_prompt"
 train_path=${data_dir}/${dataset_name}/train.parquet
 eval_path=${data_dir}/${dataset_name}/test.parquet
 train_files="['$train_path']"
@@ -28,10 +29,10 @@ seed=42
 train_batch_size=256
 mini_batch_size_per_gpu=32
 
-total_ckpts=14
-total_test_times=14
+total_ckpts=28
+total_test_times=28
 
-epoch_num=6
+epoch_num=12
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))

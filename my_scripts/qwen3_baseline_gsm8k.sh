@@ -3,7 +3,8 @@ set -x
 export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 data_dir=./data   # run on lambda
-dataset_name="gsm8k_think_prompt"
+dataset_name="gsm8k_minimal_answer_box_prompt"
+#dataset_name="gsm8k_think_prompt"
 #dataset_name="gsm8k_wo_steo_by_step"
 #dataset_name="gsm8k_after_hash_prompt"
 
@@ -25,10 +26,10 @@ seed=42
 train_batch_size=256
 mini_batch_size_per_gpu=32
 
-total_ckpts=14
-total_test_times=14
+total_ckpts=28
+total_test_times=28
 
-epoch_num=6
+epoch_num=12
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
