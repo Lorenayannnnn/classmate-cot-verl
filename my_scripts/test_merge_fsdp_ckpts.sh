@@ -12,9 +12,11 @@
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-1.7B_GSM_MATH_w_1_classmate_llama_357024_episodes"
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_GSM_MATH_w_1_classmate_llama_357024_episodes_seed_1"
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_hendrycks_math_think_step_by_step_baseline_359664_episodes_seed_42"
-main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_hendrycks_math_think_step_by_step_w_1_classmate_llama_359664_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_think_prompt_w_1_classmate_llama_358704_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_w_1_classmate_llama_717408_episodes_seed_42"
+main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_baseline_717408_episodes_seed_42"
 
-repo_name="20251225-Qwen3-0.6B_hendrycks_math_step_by_step_w_1_classmate_llama_359664_episodes_seed_42"
+repo_name="20251228-Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_baseline_717408_episodes_seed_42"
 
 #start_idx=0
 #max_idx=13
@@ -39,8 +41,13 @@ repo_name="20251225-Qwen3-0.6B_hendrycks_math_step_by_step_w_1_classmate_llama_3
 #done
 #python -m verl.model_merger merge \
 #  --backend fsdp \
-#  --local_dir /local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_hendrycks_math_think_step_by_step_w_1_classmate_llama_359664_episodes_seed_42/global_step_174/actor \
-#  --target_dir /local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_hendrycks_math_think_step_by_step_w_1_classmate_llama_359664_episodes_seed_42/global_step_174/actor/huggingface
+#  --local_dir ${main_dir}/global_step_174/actor \
+#  --target_dir ${main_dir}/global_step_174/actor/huggingface
+
+#python -m verl.model_merger merge \
+#  --backend fsdp \
+#  --local_dir ${main_dir}/global_step_175/actor \
+#  --target_dir ${main_dir}/global_step_175/actor/huggingface
 
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \

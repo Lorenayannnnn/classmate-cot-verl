@@ -35,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--local_dataset_path", default=None, help="The local path to the raw dataset, if it exists.")
     parser.add_argument(
-        "--local_save_dir", default="./data/hendrycks_math", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/hendrycks_math_minimal_answer_box_prompt_105_test", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -57,11 +57,12 @@ if __name__ == "__main__":
     all_test_datasets = []
     for category in categories:
         subset_test = datasets.load_dataset(data_source, category, split="test")
-        subset_test = subset_test.select(range(10))
+        subset_test = subset_test.select(range(15))
         all_test_datasets.append(subset_test)
     test_dataset = datasets.concatenate_datasets(all_test_datasets)
 
-    instruction_following = "Please reason step by step, and put your final answer within \\boxed{}."
+    # instruction_following = "Please reason step by step, and put your final answer within \\boxed{}."
+    instruction_following = " Put your final answer within \\boxed{}."
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -69,7 +70,7 @@ if __name__ == "__main__":
             question_raw = example.pop("problem")
 
             # question = question_raw + " " + instruction_following
-            question = question_raw
+            question = question_raw + instruction_following
 
             answer_raw = example.pop("solution")
             solution = extract_solution(answer_raw)
@@ -110,3 +111,4 @@ if __name__ == "__main__":
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
         copy(src=local_save_dir, dst=hdfs_dir)
+

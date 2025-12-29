@@ -1,18 +1,14 @@
 set -x
 
-export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
-
-# Classmate model: Change url and port number in classmate-cot-verl/outputs/host_classmate_models/classmate_model_mapping.json
-#CUDA_VISIBLE_DEVICES=0,1 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 2 --gpu-memory-utilization 0.9 --port 8003
-#CUDA_VISIBLE_DEVICES=0 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 1 --gpu-memory-utilization 0.9 --port 8003
-# Now using Together AI
+export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 data_dir=./data   # run on lambda
-dataset_name="hendrycks_math_think_step_by_step"
+dataset_name="hendrycks_math_minimal_answer_box_prompt_105_test"
 train_path=${data_dir}/${dataset_name}/train.parquet
 eval_path=${data_dir}/${dataset_name}/test.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
+
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 #train_size=7500   # After filtering out too long prompts
@@ -20,8 +16,6 @@ base_model_name_path=Qwen/Qwen3-0.6B
 train_size=7493   # After filtering out too long prompts
 
 max_response_length=4096
-
-classmate_reward_weight=1
 
 gpu_num=8
 seed=42
@@ -38,7 +32,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -52,6 +46,10 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
+    actor_rollout_ref.actor.use_dynamic_bsz=True \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
+    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=16384 \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=16384 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
@@ -70,7 +68,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_w_${classmate_reward_weight}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_baseline_${total_episodes}_episodes_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=$((train_steps / total_ckpts)) \
@@ -78,14 +76,12 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True
-    reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight}
-#    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
-#    reward_model.llm_judge_model=${llm_judge_model}
+#    reward_model.llm_judge_model=${llm_judge_model} \
 #    actor_rollout_ref.model.lora_rank=32 \
 #    actor_rollout_ref.model.lora_alpha=32 \
 #    actor_rollout_ref.model.target_modules=all-linear \
 #    actor_rollout_ref.model.use_shm=True
-#    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate.sh
+
+#bash my_scripts/qwen3_baseline_hendrycks_math.sh

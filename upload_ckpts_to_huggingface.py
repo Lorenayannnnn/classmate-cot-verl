@@ -14,7 +14,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 def upload_ckpts_to_huggingface(args):
     from pathlib import Path
     from huggingface_hub import HfApi, create_repo
-    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, AutoConfig
 
     USER_OR_ORG = "LorenaYannnnn"  # <-- change if needed
     # ROOT = Path("outputs/classmate_cot_w_verl/grpo_olmo_1B_gsm8k_baseline")
@@ -103,13 +103,18 @@ def upload_ckpts_to_huggingface(args):
         # Load tokenizer (if present)
         tokenizer = None
         try:
-            tokenizer = AutoTokenizer.from_pretrained(hf_dir, use_fast=True)
+            tokenizer = AutoTokenizer.from_pretrained(hf_dir)
         except Exception as e:
             print(f"[warn] tokenizer load failed for {step_dir.name}: {e}")
 
         # Load model (CPU; avoid GPU OOM on many checkpoints)
         try:
-            model = AutoModelForCausalLM.from_pretrained(hf_dir)
+            config = AutoConfig.from_pretrained(hf_dir)
+            model = AutoModelForCausalLM.from_pretrained(
+                hf_dir,
+                config=config,
+                torch_dtype=config.dtype,
+            )
         except Exception as e:
             print(f"[error] model load failed for {step_dir.name}: {e}")
             continue

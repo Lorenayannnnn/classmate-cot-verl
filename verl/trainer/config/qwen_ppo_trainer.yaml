@@ -41,8 +41,8 @@ actor_rollout_ref:
   actor:
     # TODO modify
     checkpoint:
-#       save_contents: ['model', 'optimizer', 'extra']
-      save_contents: [ 'hf_model' ]
+       save_contents: ['model', 'optimizer', 'extra']
+#      save_contents: [ 'hf_model' ]
 
   # Whether it's a hybrid engine, currently only supports hybrid engine
   hybrid_engine: true
