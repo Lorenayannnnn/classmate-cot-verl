@@ -18,6 +18,7 @@ def create_vllm(model_name_path, max_model_len, gpu_memory_utilization=None, use
     if use_together:
         model = Together()
     else:
+        breakpoint()
         model = LLM(
             model=model_name_path,
             gpu_memory_utilization=gpu_memory_utilization,
@@ -219,11 +220,7 @@ def main():
     main_cot_keep_ratio = 0.8
     classmate_max_input_len = int(max_main_input_len + main_max_response_len * main_cot_keep_ratio)
     classmate_max_response_len = int(main_max_response_len * (1 - main_cot_keep_ratio))
-    # classmate_max_len = classmate_max_input_len + classmate_max_response_len
-    classmate_max_len = 99999
-
-    breakpoint()
-
+    classmate_max_len = classmate_max_input_len + classmate_max_response_len
     main_tokenizer = create_tokenizer(main_model_name_path)
     classmate_tokenizer = create_tokenizer(classmate_model_name_path)
     # Filter too long examples for main model
@@ -578,11 +575,12 @@ if __name__ == "__main__":
     main()
     # test_togetherai_api()
 
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=2 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=3 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=4 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=5 python test.py
-#VLLM_CONFIGURE_LOGGING=0 TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56" CUDA_VISIBLE_DEVICES=6 python test.py
+# TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
+#CUDA_VISIBLE_DEVICES=2 python test.py
+#CUDA_VISIBLE_DEVICES=3 python test.py
+#CUDA_VISIBLE_DEVICES=4 python test.py
+#CUDA_VISIBLE_DEVICES=5 python test.py
+#CUDA_VISIBLE_DEVICES=6 python test.py
 #CUDA_VISIBLE_DEVICES=0 python test.py
 #CUDA_VISIBLE_DEVICES=1 python test.py
 #CUDA_VISIBLE_DEVICES=2 python test.py
