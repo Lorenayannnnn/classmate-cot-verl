@@ -106,7 +106,7 @@ class ClassmateWorker(Worker):
 
         # API server configuration for remote vLLM serving
         # self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
-        self.client = None
+        # self.client = None
 
         # TODO haha
         classmate_vllm_configs = {
@@ -130,52 +130,52 @@ class ClassmateWorker(Worker):
         completions = [output.outputs[0].text for output in outputs]
         return completions
 
-    def _generate_via_remote_api(self, batch_prompts: list) -> list:
-        """Generate completions via remote vLLM API.
-
-        Args:
-            batch_prompts: List of input prompts
-
-        Returns:
-            List of generated completions
-        """
-        # Convert generation_config to API parameters
-        vllm_api_params = {
-            # "model": self.model_name_or_path,
-            # "prompt": batch_prompts,
-            **self.generation_config
-        }
-
-        # vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
-
-
-        def generate(tmp_idx, tmp_prompt):
-            finish = False
-            tmp_output = None
-            while not finish:
-                try:
-                    response = self.client.completions.create(
-                      model=self.model_name_or_path,
-                      prompt=tmp_prompt,
-                      **vllm_api_params
-                    )
-                    tmp_output = response.choices[0].text
-                    finish = True
-                except Exception as e:
-                    print(f"Error generating for prompt: {e}. Retrying...")
-                    time.sleep(3)
-            return tmp_idx, tmp_output
-
-        completions = [None] * len(batch_prompts)
-
-        # Thread pool for synchronous parallelism
-        with ThreadPoolExecutor(max_workers=8) as executor:     # TODO change number of workers if needed
-            futures = [executor.submit(generate, idx, p) for idx, p in enumerate(batch_prompts)]
-            for future in as_completed(futures):
-                idx, output = future.result()
-                completions[idx] = output
-
-        return completions
+    # def _generate_via_remote_api(self, batch_prompts: list) -> list:
+    #     """Generate completions via remote vLLM API.
+    #
+    #     Args:
+    #         batch_prompts: List of input prompts
+    #
+    #     Returns:
+    #         List of generated completions
+    #     """
+    #     # Convert generation_config to API parameters
+    #     vllm_api_params = {
+    #         # "model": self.model_name_or_path,
+    #         # "prompt": batch_prompts,
+    #         **self.generation_config
+    #     }
+    #
+    #     # vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
+    #
+    #
+    #     def generate(tmp_idx, tmp_prompt):
+    #         finish = False
+    #         tmp_output = None
+    #         while not finish:
+    #             try:
+    #                 response = self.client.completions.create(
+    #                   model=self.model_name_or_path,
+    #                   prompt=tmp_prompt,
+    #                   **vllm_api_params
+    #                 )
+    #                 tmp_output = response.choices[0].text
+    #                 finish = True
+    #             except Exception as e:
+    #                 print(f"Error generating for prompt: {e}. Retrying...")
+    #                 time.sleep(3)
+    #         return tmp_idx, tmp_output
+    #
+    #     completions = [None] * len(batch_prompts)
+    #
+    #     # Thread pool for synchronous parallelism
+    #     with ThreadPoolExecutor(max_workers=8) as executor:     # TODO change number of workers if needed
+    #         futures = [executor.submit(generate, idx, p) for idx, p in enumerate(batch_prompts)]
+    #         for future in as_completed(futures):
+    #             idx, output = future.result()
+    #             completions[idx] = output
+    #
+    #     return completions
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
@@ -203,7 +203,8 @@ class ClassmateWorker(Worker):
                 #     base_url=self.api_base_url,
                 #     api_key="EMPTY",
                 # )
-                self.client = Together()
+                # self.client = Together()
+                pass
 
                 # Start vLLM API server process instead of loading model locally
                 # self._start_vllm_server()
