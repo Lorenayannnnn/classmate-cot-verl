@@ -231,7 +231,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
 
     print_if_exists("main_model_reward", "main_model_reward")
 
-    # TODO haha check if these metrics get printed
+    # TODO haha check for coding task generation if these metrics get printed
     # Modify for code_contests_modify_code
     # result = {
     #     "generated_test_pass_correct_sol": 0.0,
@@ -265,7 +265,6 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     print_if_exists("classmate_reward", "classmate_reward")
 
     # classmate_response_length, classmate_max_tokens_len
-    # TODO haha
     if "classmate_response_length" in batch.non_tensor_batch:
         classmate_response_length = batch.non_tensor_batch["classmate_response_length"]
         classmate_max_tokens_len = batch.non_tensor_batch["classmate_max_tokens_len"]

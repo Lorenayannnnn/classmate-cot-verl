@@ -1063,7 +1063,6 @@ class ClassmateCoTRayPPOTrainer:
             outputs[:, classmate_idx] = cls_out
             classmate_prompts[:, classmate_idx] = cls_prompts
 
-            # Log classmate output length TODO haha (wandb plot doesn't add up)
             tokenized_output = self.classmate_tokenizers[classmate_idx](outputs.flatten().tolist())["input_ids"]
             classmate_response_length.extend([len(ids) for ids in tokenized_output])
 

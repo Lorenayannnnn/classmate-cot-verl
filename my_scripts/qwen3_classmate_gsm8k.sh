@@ -23,6 +23,7 @@ train_size=7473   # After filtering out too long prompts
 max_response_length=3072
 
 classmate_reward_weight=1
+use_classmate_main_cond=no_classmate_when_main_incorrect  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 
 gpu_num=8
 seed=42
@@ -71,7 +72,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_w_${classmate_reward_weight}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_${use_classmate_main_cond}_w_${classmate_reward_weight}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=$((train_steps / total_ckpts)) \
@@ -80,6 +81,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     data.seed=${seed} \
     data.return_raw_chat=True
     reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight}
+    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond}
 #    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model}

@@ -242,15 +242,30 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             # final_reward = base_reward + classmate_reward * self.classmate_reward_weight
             # final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
             classmate_reward = total_classmate_reward_dict["score"]
-            final_reward = base_reward + self.classmate_reward_weight * classmate_reward
+
+            weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
+            if self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate_when_main_incorrect":
+                weighted_classmate_reward *= 0 if base_reward <= 0 else 1
+            elif self.classmate_cot_reward_configs.use_classmate_main_cond == "neg_classmate_when_main_incorrect":
+                if base_reward <= 0:
+                    weighted_classmate_reward = -weighted_classmate_reward
+
+            # print(f"🐛🐛🐛use_classmate_main_cond", self.classmate_cot_reward_configs.use_classmate_main_cond, type(self.classmate_cot_reward_configs.use_classmate_main_cond))
+            # print(f"🐛🐛🐛base_reward", base_reward, type(base_reward))
+            # print(f"🐛🐛🐛classmate_reward", classmate_reward, type(classmate_reward))
+            # print(f"🐛🐛🐛weighted_classmate_reward", weighted_classmate_reward, type(weighted_classmate_reward))
+
+            final_reward = base_reward + weighted_classmate_reward
+
             reward_extra_info["final_reward"].append(final_reward)
             # Update total_classmate_reward_dict to reward_extra_info
             for key, value in total_classmate_reward_dict.items():
                 if key == "score":
-                    reward_extra_info["classmate_reward"].append(value)
+                    reward_extra_info["classmate_reward"].append(classmate_reward)
                 else:
                     reward_extra_info[f"classmate_{key}"].append(value)
 
+            reward_extra_info[f"weighted_classmate_reward"].append(weighted_classmate_reward)
             reward_extra_info[f"classmate_response_length"].append(data_item.non_tensor_batch["classmate_response_length"])
             reward_extra_info[f"classmate_max_tokens_len"].append(data_item.non_tensor_batch["classmate_max_tokens_len"])
 

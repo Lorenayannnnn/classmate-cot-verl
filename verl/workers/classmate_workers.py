@@ -108,7 +108,6 @@ class ClassmateWorker(Worker):
         # self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
         # self.client = None
 
-        # TODO haha
         classmate_vllm_configs = {
             "model": self.model_name_or_path,
             "gpu_memory_utilization": 0.8,
@@ -238,7 +237,6 @@ class ClassmateWorker(Worker):
         """
         if self.use_vllm:
             # No-op for vLLM API mode - model is managed by separate server process
-            # TODO haha
             self.classmate_vllm.wake_up()
             # return
         else:
@@ -258,7 +256,6 @@ class ClassmateWorker(Worker):
         For HuggingFace mode: Move model to CPU and clear cache
         """
         if self.use_vllm:
-            # TODO haha
             self.classmate_vllm.sleep(level=1)
         else:
             self.llm.to("cpu")

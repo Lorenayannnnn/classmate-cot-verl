@@ -81,6 +81,7 @@ reward_model:
 
     # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
     classmate_reward_type: vanilla_reward
+    use_classmate_main_cond: no_classmate_when_main_incorrect   # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
     main_cot_keep_rate: 0.8   # only effective for vanilla_reward
 
     # "immediate_answer", "continue_cot"
