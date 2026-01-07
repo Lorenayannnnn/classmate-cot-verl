@@ -263,6 +263,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
 
     # Train with classmate models
     print_if_exists("classmate_reward", "classmate_reward")
+    print_if_exists("weighted_classmate_reward", "weighted_classmate_reward")
 
     # classmate_response_length, classmate_max_tokens_len
     if "classmate_response_length" in batch.non_tensor_batch:

@@ -245,7 +245,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
             if self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate_when_main_incorrect":
-                weighted_classmate_reward *= 0 if base_reward <= 0 else 1
+                weighted_classmate_reward = 0 if base_reward <= 0 else 1
             elif self.classmate_cot_reward_configs.use_classmate_main_cond == "neg_classmate_when_main_incorrect":
                 if base_reward <= 0:
                     weighted_classmate_reward = -weighted_classmate_reward

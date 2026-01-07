@@ -16,12 +16,13 @@
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_w_1_classmate_llama_717408_episodes_seed_42"
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_hendrycks_math_minimal_answer_box_prompt_105_test_baseline_719328_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_hendrycks_math_minimal_answer_box_prompt_105_test_w_1_classmate_llama_719328_episodes_seed_42"
-main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_w_1_classmate_llama_1434816_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_w_1_classmate_llama_1434816_episodes_seed_42"
+main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_no_classmate_when_main_incorrect_w_1_classmate_llama_1434816_episodes_seed_42"
 
-repo_name="20260105-Qwen3-0.6B_gsm8k_minimal_answer_box_w_1_classmate_llama_1434816_episodes_seed_42"
+repo_name="20260105-Qwen3-0.6B_gsm8k_no_classmate_main_incorrect_1_llama_1434816_episodes_seed_42"
 
 #start_idx=0
-#max_idx=27
+#max_idx=26
 #step_size=25
 #for (( i=start_idx; i<=max_idx; i++ )); do
 #  echo "== Starting group beginning at index ${i} =="
