@@ -17,35 +17,36 @@
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_hendrycks_math_minimal_answer_box_prompt_105_test_baseline_719328_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_hendrycks_math_minimal_answer_box_prompt_105_test_w_1_classmate_llama_719328_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_w_1_classmate_llama_1434816_episodes_seed_42"
-main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_no_classmate_when_main_incorrect_w_1_classmate_llama_1434816_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_no_classmate_when_main_incorrect_w_1_classmate_llama_1434816_episodes_seed_42"
+main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-0.6B_gsm8k_minimal_answer_box_prompt_vanilla_truncate_main_classmate_separate_no_classmate_when_main_incorrect_w_1_classmate_llama_1434816_episodes_seed_42"
 
-repo_name="20260105-Qwen3-0.6B_gsm8k_no_classmate_main_incorrect_1_llama_1434816_episodes_seed_42"
+repo_name="20260112-Qwen3-0.6B_gsm8k_main_cl_separate_no_cl_main_incorrect_1_llama_1434816_episodes_seed_42"
 
-#start_idx=0
-#max_idx=26
-#step_size=25
-#for (( i=start_idx; i<=max_idx; i++ )); do
-#  echo "== Starting group beginning at index ${i} =="
-#  # Launch a parallel job for each j in the current group [i, i+multiple_of-1], clipped to max_idx
-#  for (( j=i; j<i+1 && j<=max_idx; j++ )); do
-#    # Example step mapping; adjust as needed
-#    step_idx=$((step_size * (j + 1)))
-#    (
-#      echo "[j=${j}] Merge FSDP at step ${step_idx}"
-#      python -m verl.model_merger merge \
-#        --backend fsdp \
-#        --local_dir ${main_dir}/global_step_${step_idx}/actor \
-#        --target_dir ${main_dir}/global_step_${step_idx}/actor/huggingface
-#      echo "[j=${j}] Merge FSDP at step ${step_idx}"
-#    )
-#  done
-#  # Wait for all jobs in this group to finish before moving to the next group
-#  echo "== Finished group starting at ${i} =="
-#done
-#python -m verl.model_merger merge \
-#  --backend fsdp \
-#  --local_dir ${main_dir}/global_step_696/actor \
-#  --target_dir ${main_dir}/global_step_696/actor/huggingface
+start_idx=0
+max_idx=26
+step_size=25
+for (( i=start_idx; i<=max_idx; i++ )); do
+  echo "== Starting group beginning at index ${i} =="
+  # Launch a parallel job for each j in the current group [i, i+multiple_of-1], clipped to max_idx
+  for (( j=i; j<i+1 && j<=max_idx; j++ )); do
+    # Example step mapping; adjust as needed
+    step_idx=$((step_size * (j + 1)))
+    (
+      echo "[j=${j}] Merge FSDP at step ${step_idx}"
+      python -m verl.model_merger merge \
+        --backend fsdp \
+        --local_dir ${main_dir}/global_step_${step_idx}/actor \
+        --target_dir ${main_dir}/global_step_${step_idx}/actor/huggingface
+      echo "[j=${j}] Merge FSDP at step ${step_idx}"
+    )
+  done
+  # Wait for all jobs in this group to finish before moving to the next group
+  echo "== Finished group starting at ${i} =="
+done
+python -m verl.model_merger merge \
+  --backend fsdp \
+  --local_dir ${main_dir}/global_step_696/actor \
+  --target_dir ${main_dir}/global_step_696/actor/huggingface
 
 
 python upload_ckpts_to_huggingface.py \
