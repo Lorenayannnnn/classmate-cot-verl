@@ -246,7 +246,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
             if self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate_when_main_incorrect":
-                weighted_classmate_reward = 0 if base_reward <= 0 else 1
+                # Multiply 0!!! Don't set it to 0!! Or it's possible that you are setting classmate reward to 1 when main & classmate are incorrect
+                weighted_classmate_reward *= 0 if base_reward <= 0 else 1        # TODO assuming RLVR binary reward: 0 classmate reward when main is incorrect
             elif self.classmate_cot_reward_configs.use_classmate_main_cond == "neg_classmate_when_main_incorrect":
                 if base_reward <= 0:
                     weighted_classmate_reward = -weighted_classmate_reward
