@@ -32,6 +32,7 @@ import random
 import numpy as np
 import ray
 import torch
+from tensordict import TensorDict
 from omegaconf import OmegaConf, open_dict
 from torch.utils.data import Dataset, Sampler
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -53,7 +54,7 @@ from verl.trainer.ppo.metric_utils import (
     process_validation_metrics,
 )
 from verl.trainer.ppo.mismatch_helper import compute_rollout_importance_weights
-from verl.trainer.ppo.reward import compute_reward, compute_reward_async
+from verl.trainer.ppo.reward import compute_reward, compute_reward_async, compute_main_classmate_reward
 from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference_policy, need_reward_model
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
@@ -240,6 +241,25 @@ def compute_advantage(
         advantages, returns = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
+            index=data.non_tensor_batch["uid"],
+            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
+    elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+        # Initialize the mask for GRPO calculation
+
+        main_calculation_mask = data.batch["response_mask"]
+        classmate_calculation_mask = data.batch["classmate_input_mask"]
+
+        # Call compute_grpo_outcome_advantage with parameters matching its definition
+        advantages, returns = core_algos.compute_grpo_main_classmate_separated_outcome_advantage(
+            # token_level_rewards=data.batch["token_level_rewards"],
+            # response_mask=grpo_calculation_mask,
+            main_token_level_rewards=data.batch["main_token_level_rewards"],
+            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+            main_response_mask=main_calculation_mask,
+            classmate_input_mask=classmate_calculation_mask,
             index=data.non_tensor_batch["uid"],
             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
         )
@@ -675,7 +695,10 @@ class ClassmateCoTRayPPOTrainer:
             if self.val_reward_fn is None:
                 raise ValueError("val_reward_fn must be provided for validation.")
             result = self.val_reward_fn(test_batch, return_dict=True)
-            reward_tensor = result["reward_tensor"]
+
+            # main_reward_tensor, classmate_reward_tensor, reward_extra_info
+            # reward_tensor = result["reward_tensor"]
+            reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
             scores = reward_tensor.sum(-1).cpu().tolist()
             sample_scores.extend(scores)
 
@@ -910,7 +933,42 @@ class ClassmateCoTRayPPOTrainer:
                 config=self.config, worker_group=self.actor_rollout_wg, rm_wg=self.rm_wg
             )
 
-    def _process_main_cot_helper(self, data_source, main_pred, keep_ratio):
+    def _find_token_subsequence_for_string(self, token_ids, target_string):
+        """
+        Find the shortest subsequence of token_ids that decodes to target_string.
+
+        Args:
+            token_ids: Sequence of token IDs (list or tensor)
+            target_string: Target string to match
+
+        Returns:
+            int: Index i such that tokenizer.decode(token_ids[:i]) == target_string.
+                 Returns -1 if no match found.
+        """
+        right_ptr = 1
+        while right_ptr < len(token_ids):
+            decoded = self.tokenizer.decode(token_ids[:right_ptr], skip_special_tokens=False)
+            # Exact match found - try to extend to include trailing whitespace tokens
+            if decoded.strip() == target_string.strip():
+                # Check if we can include additional whitespace tokens
+                while right_ptr < len(token_ids):
+                    decoded = self.tokenizer.decode(token_ids[:right_ptr + 1], skip_special_tokens=False)
+                    # Stop if we exceed target length or lose the match
+                    if len(decoded) > len(target_string) or decoded.strip() != target_string.strip():
+                        break
+                    right_ptr += 1
+                return right_ptr
+
+            # Early exit
+            if len(decoded) > len(target_string):
+                # Decoded is already longer than target, won't find match
+                break
+
+            right_ptr += 1
+
+        return -1
+
+    def _process_main_cot_helper(self, data_source, main_pred, main_pred_token_ids, main_response_mask, keep_ratio):
         """
         Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
         """
@@ -927,24 +985,50 @@ class ClassmateCoTRayPPOTrainer:
         _SPLIT_WS = re.compile(r"\S+|\s+")
         num_to_keep = int(len(main_pred.split()) * keep_ratio)  # counts non-whitespace tokens
         if num_to_keep <= 0:
-            return ""
+            return "", []
+        
         kept = []
         count = 0
         for m in _SPLIT_WS.finditer(main_pred):
             t = m.group(0)
             # whitespace tokens start with a whitespace char
             if t[0].isspace():
-                if count > 0:  # optional: avoid leading whitespace if truncating from start
-                    kept.append(t)
+                kept.append(t)
             else:
                 count += 1
                 if count > num_to_keep:
                     break
                 kept.append(t)
 
-        return "".join(kept)
+        truncated_text = "".join(kept)
+        
+        # Find the token index that corresponds to the truncated text
+        token_index = self._find_token_subsequence_for_string(main_pred_token_ids, truncated_text)
+        
+        if token_index == -1:
+            # # store to output file
+            # with open("debug_truncation_failure.txt", "a") as f:
+            #     f.write(f"Data source: {data_source}\n")
+            #     f.write(f"Original main_pred: {main_pred}\n")
+            #     f.write(f"Truncated text: {truncated_text}\n")
+            #     f.write(f"Token IDs: {main_pred_token_ids.tolist()}\n")
+            #     f.write("\n" + "="*80 + "\n\n")
+            raise ValueError(
+                f"Could not find token subsequence matching truncated text.\n"
+                f"Truncated text: {truncated_text}\n"
+                f"Token IDs: {main_pred_token_ids.tolist()}"
+            )
 
-    def _prepare_classmate_batch(self, data: DataProto) -> DataProto:
+        # print("🐛🐛🐛 original main_pred", main_pred)
+        # print("🐛🐛🐛 truncated_text", truncated_text)
+        # print("🐛🐛🐛 token_index", token_index)
+        # print("🐛🐛🐛 main_response_mask", main_response_mask)
+        # print("🐛🐛🐛 classmate_input_mask", main_response_mask[:token_index].tolist())
+        # print("🐛🐛🐛 final_classmate_input_mask", main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index))
+
+        return truncated_text, main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index)
+
+    def _prepare_classmate_batch(self, data: DataProto):
         """
         Prepare batch data for classmate generation. Each worker will handle its own tokenization.
         This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
@@ -974,25 +1058,38 @@ class ClassmateCoTRayPPOTrainer:
 
         # all_prompt_plus_actor_responses = []
         all_processed_actor_responses = []
+        all_classmate_input_mask = []
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
-        # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
-        data_source_list = data.non_tensor_batch.get("data_source", ["unknown"] * len(all_actor_responses))
-        if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
-            keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
-            for res_idx, response in enumerate(all_actor_responses):
-                all_processed_actor_responses.append(self._process_main_cot_helper(data_source_list[res_idx], response, keep_rate))
+        # TODO haha: need to mark which tokens belong to the 80%
+        if "response_mask" not in data.batch.keys():
+            data.batch["response_mask"] = compute_response_mask(data)
+        data_source_list = data.non_tensor_batch.get("data_source")
+
+        for res_idx, response in enumerate(all_actor_responses):
+            if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot" \
+                or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_truncate_main_classmate_separate":
+                keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
                 # if "code" in data_source_list[res_idx]:
                 #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
                 #     print(f"🐛🐛🐛 original response {processed_response}")
                     # print(f"🐛🐛🐛 sample modified_response {modified_response}")
-        elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
-            for res_idx, response in enumerate(all_actor_responses):
-                rand_keep_rate = random.uniform(0.3, 0.95)
-                all_processed_actor_responses.append(self._process_main_cot_helper(data_source_list[res_idx], response, rand_keep_rate))
-        else:
-            raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
+            elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
+                keep_rate = random.uniform(0.3, 0.95)
+            else:
+                raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
+
+            truncated_main_cot, classmate_input_mask = self._process_main_cot_helper(
+                data_source_list[res_idx],
+                response,
+                data.batch["responses"][res_idx],
+                data.batch["response_mask"][res_idx],
+                keep_rate
+            )
+            all_processed_actor_responses.append(truncated_main_cot)
+
+            all_classmate_input_mask.append(classmate_input_mask)
 
         classmate_non_tensor_batch = {
             "raw_prompts": np.array(all_prompts),
@@ -1002,7 +1099,7 @@ class ClassmateCoTRayPPOTrainer:
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[0])
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[1])
 
-        return DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
+        return torch.tensor(all_classmate_input_mask), DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
 
     def _generate_classmate_continuations(self, batch: DataProto) -> DataProto:
         """
@@ -1017,7 +1114,7 @@ class ClassmateCoTRayPPOTrainer:
         Reshape (num_classmates, bsz, num_return_sequences) -> (bsz, num_classmates, num_return_sequences)
         """
         # Build the shared input for all classmates
-        classmate_batch = self._prepare_classmate_batch(batch)
+        classmate_input_mask, classmate_batch = self._prepare_classmate_batch(batch)
 
         bsz = len(batch)
         num_models = len(self.classmate_workers)
@@ -1074,6 +1171,8 @@ class ClassmateCoTRayPPOTrainer:
 
         batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
         batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
+
+        batch.batch["classmate_input_mask"] = classmate_input_mask
         return batch
 
     def _save_checkpoint(self):
@@ -1442,15 +1541,19 @@ class ClassmateCoTRayPPOTrainer:
                     with marked_timer("reward", timing_raw, color="yellow"):
                         # compute reward model score
                         if self.use_rm and "rm_scores" not in batch.batch.keys():
-                            reward_tensor = self.rm_wg.compute_rm_score(batch)
-                            batch = batch.union(reward_tensor)
+                            # reward_tensor = self.rm_wg.compute_rm_score(batch)
+                            # batch = batch.union(reward_tensor)
+                            main_reward_tensor, classmate_reward_tensor = self.rm_wg.compute_rm_score(batch)
+                            batch = batch.union(main_reward_tensor)
+                            batch = batch.union(classmate_reward_tensor)
 
                         if self.config.reward_model.launch_reward_fn_async:
                             future_reward = compute_reward_async.remote(
                                 data=batch, config=self.config, tokenizer=self.tokenizer
                             )
                         else:
-                            reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
+                            # reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
+                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = compute_main_classmate_reward(batch, self.reward_fn)
 
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
@@ -1489,20 +1592,34 @@ class ClassmateCoTRayPPOTrainer:
                         # we combine with rule-based rm
                         reward_extra_infos_dict: dict[str, list]
                         if self.config.reward_model.launch_reward_fn_async:
-                            reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
-                        batch.batch["token_level_scores"] = reward_tensor
+                            # reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                        # batch.batch["token_level_scores"] = reward_tensor
+
+                        if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+                            batch.batch["main_token_level_scores"] = main_reward_tensor
+                            batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
+                        else:
+                            reward_tensor = main_reward_tensor + classmate_reward_tensor
+                            batch.batch["token_level_scores"] = reward_tensor
 
                         if reward_extra_infos_dict:
                             batch.non_tensor_batch.update({k: np.array(v) for k, v in reward_extra_infos_dict.items()})
 
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:
+                            if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+                                raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED with KL in reward not implemented yet.")
                             batch, kl_metrics = apply_kl_penalty(
                                 batch, kl_ctrl=self.kl_ctrl_in_reward, kl_penalty=self.config.algorithm.kl_penalty
                             )
                             metrics.update(kl_metrics)
                         else:
-                            batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+                            if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+                                batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
+                                batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
+                            else:
+                                batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
                         # Compute rollout importance sampling weights centrally (once per batch)
                         # This corrects for mismatch between rollout policy and training policy

@@ -165,6 +165,28 @@ def load_reward_manager(
         **reward_kwargs,
     )
 
+@tqbridge(put_data=False)
+def compute_main_classmate_reward(data: DataProto, reward_fn: AbstractRewardManager):
+    """
+    Compute reward for a batch of data.
+    Args:
+        data: DataProto object containing the input data.
+        reward_fn: Reward function to compute the reward.
+    Returns:
+        Tuple of reward tensor and extra info dictionary.
+    """
+    try:
+        reward_result = reward_fn(data, return_dict=True)
+        main_reward_tensor = reward_result["main_reward_tensor"]
+        classmate_reward_tensor = reward_result["classmate_reward_tensor"]
+        reward_extra_infos_dict = reward_result.get("reward_extra_info", {})
+    except Exception as e:
+        print(f"Error in reward_fn: {e}")
+        main_reward_tensor, classmate_reward_tensor = reward_fn(data)
+        reward_extra_infos_dict = {}
+
+    return main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict
+
 
 @tqbridge(put_data=False)
 def compute_reward(data: DataProto, reward_fn: AbstractRewardManager) -> tuple[torch.Tensor, dict[str, Any]]:

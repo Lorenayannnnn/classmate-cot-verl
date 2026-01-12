@@ -103,8 +103,13 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
             - prompt_length/mean, max, min, clip_ratio: Statistics about prompt lengths
             - num_turns/mean, max, min: Statistics about the number of multi-turn conversations
     """
-    sequence_score = batch.batch["token_level_scores"].sum(-1)
-    sequence_reward = batch.batch["token_level_rewards"].sum(-1)
+    if "main_token_level_rewards" in batch.batch:
+        sequence_score = (batch.batch["main_token_level_rewards"] + batch.batch["classmate_token_level_scores"]).sum(-1)
+        sequence_reward = (batch.batch["main_token_level_rewards"] + batch.batch["classmate_token_level_rewards"]).sum(-1)
+    else:
+        sequence_score = batch.batch["token_level_scores"].sum(-1)
+        sequence_reward = batch.batch["token_level_rewards"].sum(-1)
+
 
     advantages = batch.batch["advantages"]
     returns = batch.batch["returns"]

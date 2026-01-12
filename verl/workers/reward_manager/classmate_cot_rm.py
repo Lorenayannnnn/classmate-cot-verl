@@ -119,7 +119,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             else:
                 return data.batch["rm_scores"]
 
-        reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
+        main_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
+        classmate_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         reward_extra_info = defaultdict(list)
 
         already_print_data_sources = {}
@@ -212,7 +213,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
                     tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
 
-                    for k, v in tmp_classmate_result.items():
+                    for k, v in tmp_classmate_result.items():       # Should only have "score"
                         if k not in tmp_total_classmate_reward_dict:
                             tmp_total_classmate_reward_dict[k] = 0.0
                         tmp_total_classmate_reward_dict[k] += v
@@ -250,14 +251,6 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 if base_reward <= 0:
                     weighted_classmate_reward = -weighted_classmate_reward
 
-            # print(f"🐛🐛🐛use_classmate_main_cond", self.classmate_cot_reward_configs.use_classmate_main_cond, type(self.classmate_cot_reward_configs.use_classmate_main_cond))
-            # print(f"🐛🐛🐛base_reward", base_reward, type(base_reward))
-            # print(f"🐛🐛🐛classmate_reward", classmate_reward, type(classmate_reward))
-            # print(f"🐛🐛🐛weighted_classmate_reward", weighted_classmate_reward, type(weighted_classmate_reward))
-
-            final_reward = base_reward + weighted_classmate_reward
-
-            reward_extra_info["final_reward"].append(final_reward)
             # Update total_classmate_reward_dict to reward_extra_info
             for key, value in total_classmate_reward_dict.items():
                 if key == "score":
@@ -269,7 +262,17 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             reward_extra_info[f"classmate_response_length"].append(data_item.non_tensor_batch["classmate_response_length"])
             reward_extra_info[f"classmate_max_tokens_len"].append(data_item.non_tensor_batch["classmate_max_tokens_len"])
 
-            reward_tensor[i, valid_response_length - 1] = final_reward
+            # print(f"🐛🐛🐛use_classmate_main_cond", self.classmate_cot_reward_configs.use_classmate_main_cond, type(self.classmate_cot_reward_configs.use_classmate_main_cond))
+            # print(f"🐛🐛🐛base_reward", base_reward, type(base_reward))
+            # print(f"🐛🐛🐛classmate_reward", classmate_reward, type(classmate_reward))
+            # print(f"🐛🐛🐛weighted_classmate_reward", weighted_classmate_reward, type(weighted_classmate_reward))
+
+            # Note: this is only for logging; token-level reward might be different
+            final_reward = base_reward + weighted_classmate_reward
+            reward_extra_info["final_reward"].append(final_reward)
+
+            main_reward_tensor[i, valid_response_length - 1] = base_reward
+            classmate_reward_tensor[i, valid_response_length - 1] = weighted_classmate_reward
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
@@ -289,6 +292,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
                 print("🐛[ground_truth]", ground_truth)
                 print("🐛[classmate_reward]", classmate_reward)
+                print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
                 # if isinstance(score, dict):
                 #     for key, value in score.items():
                 #         print(f"[{key}]", value)
@@ -300,10 +304,11 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         if return_dict:
             return {
-                "reward_tensor": reward_tensor,
+                "main_reward_tensor": main_reward_tensor,
+                "classmate_reward_tensor": classmate_reward_tensor,
                 "reward_extra_info": reward_extra_info,
             }
         else:
-            return reward_tensor
+            return main_reward_tensor, classmate_reward_tensor
 
 

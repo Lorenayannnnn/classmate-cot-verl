@@ -106,6 +106,8 @@ class AdvantageEstimator(str, Enum):
     RLOO_VECTORIZED = "rloo_vectorized"
     GRPO_VECTORIZED = "grpo_vectorized"
 
+    GRPO_MAIN_CLASSMATE_SEPARATED = "grpo_main_classmate_separated"
+
 
 ADV_ESTIMATOR_REGISTRY: dict[str, Any] = {}
 
@@ -324,6 +326,74 @@ def compute_grpo_outcome_advantage(
             else:
                 scores[i] = scores[i] - id2mean[index[i]]
         scores = scores.unsqueeze(-1) * response_mask
+
+    return scores, scores
+
+
+@register_adv_est(AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED)  # or simply: @register_adv_est("grpo")
+def compute_grpo_main_classmate_separated_outcome_advantage(
+    main_token_level_rewards: torch.Tensor,
+    classmate_token_level_rewards: torch.Tensor,
+    main_response_mask: torch.Tensor,
+    classmate_input_mask: torch.Tensor,
+    index: np.ndarray,
+    epsilon: float = 1e-6,
+    norm_adv_by_std_in_grpo: bool = True,
+    config: Optional[AlgoConfig] = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute advantage for GRPO, operating only on Outcome reward
+    (with only one scalar reward for each response).
+
+    Args:
+        main_token_level_rewards: `(torch.Tensor)`
+            shape is (bs, response_length)
+        classmate_token_level_rewards: `(torch.Tensor)`
+            shape is (bs, response_length)
+        main_response_mask: `(torch.Tensor)`
+            shape is (bs, response_length)
+        classmate_input_mask: `(torch.Tensor)`
+            shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
+        index: `(np.ndarray)`
+            index array for grouping
+        epsilon: `(float)`
+            small value to avoid division by zero
+        norm_adv_by_std_in_grpo: `(bool)`
+            whether to scale the GRPO advantage
+        config: `(Optional[AlgoConfig])`
+            algorithm configuration object
+
+    Note:
+        If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
+        If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
+
+    Returns:
+        advantages: `(torch.Tensor)`
+            shape is (bs, response_length)
+        Returns: `(torch.Tensor)`
+            shape is (bs, response_length)
+    """
+
+    main_scores = compute_grpo_outcome_advantage(main_token_level_rewards, main_response_mask, index, epsilon, norm_adv_by_std_in_grpo, config)[0]
+    classmate_scores = compute_grpo_outcome_advantage(classmate_token_level_rewards, classmate_input_mask, index, epsilon, norm_adv_by_std_in_grpo, config)[0]
+    scores = main_scores + classmate_scores
+
+    # for i in range(10):
+    #     with open(f"sample_debug_{i}.txt", "w") as f:
+    #         tmp_mask = main_response_mask[i] == 1
+    #         f.write(f"main_token_level_rewards: {main_token_level_rewards[i][tmp_mask].tolist()}\n")
+    #         f.write(f"classmate_token_level_rewards: {classmate_token_level_rewards[i][tmp_mask].tolist()}\n")
+    #         f.write(f"main_response_mask: {main_response_mask[i][tmp_mask].tolist()}\n")
+    #         f.write(f"classmate_input_mask: {classmate_input_mask[i][tmp_mask].tolist()}\n")
+    #         f.write(f"main_scores: {main_scores[i][tmp_mask].tolist()}\n")
+    #         f.write(f"classmate_scores: {classmate_scores[i][tmp_mask].tolist()}\n")
+    #         f.write(f"scores: {scores[i][tmp_mask].tolist()}\n")
+        # print(f"🐛🐛🐛 ========={i}=========")
+        # print("🐛🐛🐛 main_response_mask", main_response_mask[i][tmp_mask].tolist())
+        # print("🐛🐛🐛 classmate_input_mask", classmate_input_mask[i][tmp_mask].tolist())
+        # print("🐛🐛🐛 main_scores", main_scores[i][tmp_mask].tolist())
+        # print("🐛🐛🐛 classmate_scores", classmate_scores[i][tmp_mask].tolist())
+        # print("🐛🐛🐛 scores", scores[i][tmp_mask].tolist())
 
     return scores, scores
 
