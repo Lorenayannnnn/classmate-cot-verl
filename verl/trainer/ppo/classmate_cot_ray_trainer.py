@@ -193,6 +193,7 @@ def compute_advantage(
     num_repeat: int = 1,
     norm_adv_by_std_in_grpo: bool = True,
     config: Optional[AlgoConfig] = None,
+    token_level_classmate_reward_mode: str = "all",
 ) -> DataProto:
     """Compute advantage estimates for policy optimization.
 
@@ -254,14 +255,31 @@ def compute_advantage(
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
         advantages, returns = core_algos.compute_grpo_main_classmate_separated_outcome_advantage(
-            # token_level_rewards=data.batch["token_level_rewards"],
-            # response_mask=grpo_calculation_mask,
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
             main_response_mask=main_calculation_mask,
             classmate_input_mask=classmate_calculation_mask,
             index=data.non_tensor_batch["uid"],
             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
+    elif adv_estimator == AdvantageEstimator.GDPO:
+        # Initialize the mask for GRPO calculation
+
+        main_calculation_mask = data.batch["response_mask"]
+        classmate_calculation_mask = data.batch["classmate_input_mask"]
+
+        # Call compute_grpo_outcome_advantage with parameters matching its definition
+        advantages, returns = core_algos.compute_gdpo_outcome_advantage(
+            main_token_level_rewards=data.batch["main_token_level_rewards"],
+            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+            main_response_mask=main_calculation_mask,
+            classmate_input_mask=classmate_calculation_mask,
+            index=data.non_tensor_batch["uid"],
+            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            token_level_classmate_reward_mode=token_level_classmate_reward_mode
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
@@ -1596,7 +1614,7 @@ class ClassmateCoTRayPPOTrainer:
                             main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                         # batch.batch["token_level_scores"] = reward_tensor
 
-                        if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+                        if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO]:
                             batch.batch["main_token_level_scores"] = main_reward_tensor
                             batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
                         else:
@@ -1608,14 +1626,14 @@ class ClassmateCoTRayPPOTrainer:
 
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:
-                            if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO]:
                                 raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED with KL in reward not implemented yet.")
                             batch, kl_metrics = apply_kl_penalty(
                                 batch, kl_ctrl=self.kl_ctrl_in_reward, kl_penalty=self.config.algorithm.kl_penalty
                             )
                             metrics.update(kl_metrics)
                         else:
-                            if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO]:
                                 batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
                                 batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
                             else:
@@ -1641,6 +1659,7 @@ class ClassmateCoTRayPPOTrainer:
                             num_repeat=self.config.actor_rollout_ref.rollout.n,
                             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                             config=self.config.algorithm,
+                            token_level_classmate_reward_mode=self.classmate_cot_reward_configs.token_level_classmate_reward_mode,
                         )
 
                     # update critic

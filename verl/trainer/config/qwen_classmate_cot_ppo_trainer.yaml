@@ -83,6 +83,7 @@ reward_model:
     # vanilla_truncate_main_classmate_separate
     classmate_reward_type: vanilla_reward
     use_classmate_main_cond: no_classmate_when_main_incorrect   # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+    token_level_classmate_reward_mode: classmate_partial    # classmate_partial, all
     main_cot_keep_rate: 0.8   # only effective for vanilla_reward
 
     # "immediate_answer", "continue_cot"
