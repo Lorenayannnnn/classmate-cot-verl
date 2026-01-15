@@ -265,6 +265,24 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
+    elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL:
+        # Initialize the mask for GRPO calculation
+
+        main_calculation_mask = data.batch["response_mask"]
+        classmate_calculation_mask = data.batch["classmate_input_mask"]
+
+        # Call compute_grpo_outcome_advantage with parameters matching its definition
+        advantages, returns = core_algos.compute_grpo_main_classmate_separated_non_neg_cl_outcome_advantage(
+            main_token_level_rewards=data.batch["main_token_level_rewards"],
+            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+            main_response_mask=main_calculation_mask,
+            classmate_input_mask=classmate_calculation_mask,
+            index=data.non_tensor_batch["uid"],
+            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
     elif adv_estimator == AdvantageEstimator.GDPO:
         # Initialize the mask for GRPO calculation
 
@@ -1080,7 +1098,6 @@ class ClassmateCoTRayPPOTrainer:
 
         assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
-        # TODO haha: need to mark which tokens belong to the 80%
         if "response_mask" not in data.batch.keys():
             data.batch["response_mask"] = compute_response_mask(data)
         data_source_list = data.non_tensor_batch.get("data_source")
@@ -1614,7 +1631,7 @@ class ClassmateCoTRayPPOTrainer:
                             main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                         # batch.batch["token_level_scores"] = reward_tensor
 
-                        if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO]:
+                        if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                             batch.batch["main_token_level_scores"] = main_reward_tensor
                             batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
                         else:
@@ -1626,14 +1643,14 @@ class ClassmateCoTRayPPOTrainer:
 
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:
-                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO]:
+                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                                 raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED with KL in reward not implemented yet.")
                             batch, kl_metrics = apply_kl_penalty(
                                 batch, kl_ctrl=self.kl_ctrl_in_reward, kl_penalty=self.config.algorithm.kl_penalty
                             )
                             metrics.update(kl_metrics)
                         else:
-                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO]:
+                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                                 batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
                                 batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
                             else:

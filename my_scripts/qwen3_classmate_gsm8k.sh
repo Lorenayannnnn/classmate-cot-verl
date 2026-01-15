@@ -24,10 +24,11 @@ max_response_length=3072
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_truncate_main_classmate_separate
-use_classmate_main_cond=no_classmate_when_main_incorrect  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+use_classmate_main_cond=always  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 #adv_estimator=grpo
-#adv_estimator=grpo_main_classmate_separated
-adv_estimator=gdpo
+adv_estimator=grpo_main_classmate_separated
+#adv_estimator=gdpo
+#adv_estimator=grpo_main_classmate_separated_non_neg_cl
 token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=8
