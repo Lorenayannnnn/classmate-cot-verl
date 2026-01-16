@@ -40,7 +40,8 @@ if __name__ == "__main__":
     parser.add_argument(
         # "--local_save_dir", default="./data/gsm8k_think_prompt", help="The save directory for the preprocessed dataset."
         # "--local_save_dir", default="./data/gsm8k_no_think_prompt", help="The save directory for the preprocessed dataset."
-        "--local_save_dir", default="./data/gsm8k_minimal_answer_box_prompt", help="The save directory for the preprocessed dataset."
+        # "--local_save_dir", default="./data/gsm8k_minimal_answer_box_prompt", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/gsm8k_final_ans_is", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -58,7 +59,8 @@ if __name__ == "__main__":
 
     # instruction_following = " Please reason step by step, and put your final answer within \\boxed{}."
     # instruction_following = ""
-    instruction_following = " Put your final answer within \\boxed{}."
+    # instruction_following = " Put your final answer within \\boxed{}."
+    instruction_following = " End your response with \"Therefore, the final answer is <final answer>.\""
     # instruction_following = ' Let\'s think step by step and output the final answer after "####".'
 
     # add a row to each data item that represents a unique id
