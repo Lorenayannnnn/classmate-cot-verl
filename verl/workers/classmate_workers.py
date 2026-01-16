@@ -108,13 +108,13 @@ class ClassmateWorker(Worker):
         # self.api_base_url = f"http://{config.api_host}:{config.api_port}/v1"
         # self.client = None
 
-        classmate_vllm_configs = {
+        self.classmate_vllm_configs = {
             "model": self.model_name_or_path,
             "gpu_memory_utilization": 0.8,
             "dtype": "auto",
             "max_model_len": config.max_tokens
         }
-        self.classmate_vllm = LLM(**classmate_vllm_configs, enable_sleep_mode=True)
+        self.classmate_vllm = LLM(**self.classmate_vllm_configs, enable_sleep_mode=True)
         self.classmate_sampling_params = SamplingParams(**self.generation_config)
         self._offload_model()
         print(f"🚀🚀🚀Initialized ClassmateWorker {self.model_index} with vLLM engine for model {self.model_name_or_path}")
@@ -125,9 +125,22 @@ class ClassmateWorker(Worker):
         del self.classmate_vllm
 
     def _generate_via_vllm(self, batch_prompts: list) -> list:
-        outputs = self.classmate_vllm.generate(batch_prompts, sampling_params=self.classmate_sampling_params, use_tqdm=False)
-        completions = [output.outputs[0].text for output in outputs]
-        return completions
+        not_none_prompts = [p for p in batch_prompts if p is not None]
+        is_none_idx = [i for i, p in enumerate(batch_prompts) if p is None]
+        outputs = self.classmate_vllm.generate(not_none_prompts, sampling_params=self.classmate_sampling_params, use_tqdm=False)
+
+        completions = []
+        completion_token_len = []
+        for i in range(len(batch_prompts)):
+            if i in is_none_idx:
+                completions.append(None)
+                completion_token_len.append(0)
+            else:
+                output = outputs.pop(0)
+                completions.append(output.outputs[0].text)
+                completion_token_len.append(len(output.outputs[0].token_ids))
+
+        return completions, completion_token_len
 
     # def _generate_via_remote_api(self, batch_prompts: list) -> list:
     #     """Generate completions via remote vLLM API.
@@ -278,6 +291,7 @@ class ClassmateWorker(Worker):
         #     "prompts": all_prompts,
         # }
         classmate_outputs = []
+        classmate_output_lens = []
         classmate_prompts = []
         try:
             # ONLOAD: Load model to GPU before generation (no-op for vLLM API mode)
@@ -297,7 +311,7 @@ class ClassmateWorker(Worker):
             if isinstance(actor_responses, np.ndarray):
                 actor_responses = actor_responses.tolist()
 
-            # Filter out None
+            # Filter out None (padded ones)
             original_length = len(prompts)
             prompts = [p for p in prompts if p is not None]
             actor_responses = [r for r in actor_responses if r is not None]
@@ -331,7 +345,12 @@ class ClassmateWorker(Worker):
                     while end > 0 and token_ids[end - 1] in self.special_ids:
                         end -= 1
                     token_ids = token_ids[:end]
-                    batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
+
+                    if len(token_ids) > self.classmate_vllm_configs["max_model_len"]:
+                        print(f"⚠️ Warning: Input for classmate is too long (have length {len(token_ids)})")
+                        batch_input_prompts.append(None)
+                    else:
+                        batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
 
                 # Get batch-wise max token len
                 # prompt_attn_mask = self.tokenizer(
@@ -344,93 +363,13 @@ class ClassmateWorker(Worker):
                 # Generate via API for this batch
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts)
-                batch_completions = self._generate_via_vllm(batch_input_prompts)
+                batch_completions, batch_completion_lens = self._generate_via_vllm(batch_input_prompts)
                 classmate_prompts.extend(batch_input_prompts)
                 # Extend back to with padding
                 classmate_outputs.extend(batch_completions)
+                classmate_output_lens.extend(batch_completion_lens)
 
                 # print(f"🐛🐛🐛 Classmate completions: {classmate_outputs}")
-            # else:
-            #     raise NotImplementedError("Only vLLM generation is supported for classmate workers.")
-            #     # # Fall back to huggingface generation
-            #     # import torch
-            #     #
-            #     # # Data collator to left-pad using tokenizer's padding_side
-            #     # collator = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="pt")
-            #     #
-            #     # # TODO: need to fix this for supporting num_return_sequences > 1
-            #     # # Process in batches to manage memory
-            #     # total_samples = len(prompt_plus_actor_responses)
-            #     # # for batch_start in tqdm(range(0, total_samples, self.batch_size), desc=f"Classmate Model {self.model_index} Generating"):
-            #     # for batch_start in range(0, total_samples, self.batch_size):
-            #     #     batch_end = min(batch_start + self.batch_size, total_samples)
-            #     #     batch_prompts_with_responses = prompt_plus_actor_responses[batch_start:batch_end]
-            #     #     # batch_prompts_only = prompts[batch_start:batch_end]
-            #     #
-            #     #     # Tokenize the full prompt+actor_response for generation (no padding here)
-            #     #     request_features = [
-            #     #         self.tokenizer(t, padding=False, return_attention_mask=True)
-            #     #         for t in batch_prompts_with_responses
-            #     #     ]
-            #     #     encoded_batch = collator(request_features)
-            #     #     # Move batch tensors to the same device as the model parameters
-            #     #     import torch
-            #     #     model_device = next(self.llm.parameters()).device
-            #     #     encoded_batch = {k: (v.to(model_device) if isinstance(v, torch.Tensor) else v) for k, v in encoded_batch.items()}
-            #     #
-            #     #     # Generate outputs for this batch
-            #     #     with torch.no_grad():
-            #     #         generated_outputs = self.llm.generate(
-            #     #             **encoded_batch,
-            #     #             **self.generation_config,
-            #     #         )
-            #     #
-            #     #     # print("🐛🐛🐛 generated_outputs", generated_outputs)
-            #     #     # print("🐛🐛🐛 generated_outputs shape", generated_outputs.shape)   # (bsz, seq_len)
-            #     #     # print("🐛🐛🐛 encoded_batch", encoded_batch.keys())   # (bsz, seq_len)
-            #     #     # print("🐛🐛🐛 encoded_batch", encoded_batch)   # (bsz, seq_len)
-            #     #     # print("🐛🐛🐛 encoded_batch attention mask", encoded_batch["attention_mask"].shape)   # (bsz, seq_len)
-            #     #
-            #     #     # encoded_prompts_only = self.tokenizer(
-            #     #     #     batch_prompts_only,
-            #     #     #     padding=False,
-            #     #     #     return_attention_mask=False,
-            #     #     # )
-            #     #     current_batch_size = len(batch_prompts_with_responses)
-            #     #     # Process each item in the current batch
-            #     #     for batch_idx in range(current_batch_size):
-            #     #         # Extract only classmate continuation
-            #     #         # With left padding, the input length equals padded length (max_len),
-            #     #         # which is the prefix of the generated sequence returned by HF generate.
-            #     #         # So slicing by that length yields only the newly generated tokens.
-            #     #         input_len = encoded_batch["input_ids"].shape[1]
-            #     #         generated_tokens = generated_outputs[batch_idx][input_len:]
-            #     #         decoded_output = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
-            #     #
-            #     #         # Extract out actor + classmate CoT
-            #     #         # sample_outputs = []
-            #     #         # #
-            #     #         # # With left padding: padding_len = max_len - actual_len
-            #     #         # max_len_with_responses = encoded_batch["attention_mask"][batch_idx].size(0)
-            #     #         # actual_len = int(encoded_batch["attention_mask"][batch_idx].sum().item())
-            #     #         # padding_len = max_len_with_responses - actual_len
-            #     #         # # Prompt-only length computed from non-padded tokenized prompt
-            #     #         # prompt_only_len = len(encoded_prompts_only["input_ids"][batch_idx])
-            #     #         # cot_start_idx = padding_len + prompt_only_len
-            #     #         # # for seq_idx in range(num_return_sequences):
-            #     #         # # Extract and decode CoT tokens (actor response + classmate continuation)
-            #     #         # cot_tokens = generated_outputs[batch_idx][cot_start_idx:]
-            #     #         # #
-            #     #         # # decoded_output = self.tokenizer.decode(cot_tokens, skip_special_tokens=True)
-            #     #         # # sample_outputs.append(decoded_output)
-            #     #
-            #     #         # print(f"""
-            #     #         # 🐛Full input output: {self.tokenizer.decode(generated_outputs[batch_idx], skip_special_tokens=True)}
-            #     #         # 🐛Input to classmate: {self.tokenizer.decode(encoded_batch["input_ids"][batch_idx], skip_special_tokens=True)}
-            #     #         # 🐛classmate continuation: {decoded_output}
-            #     #         # """)
-            #     #         classmate_outputs.append(decoded_output)
-
         except Exception as e:
             print(f"❌ Error generating with classmate model {self.model_index}: {e}")
             import traceback
@@ -444,12 +383,12 @@ class ClassmateWorker(Worker):
         # TODO need to fix this to support num_return_sequences > 1
         classmate_outputs = [[output] for output in classmate_outputs]  # Wrap each output in a list
 
-        # Add padding back
-        classmate_outputs += [[None]] * (original_length - len(classmate_outputs))
+        classmate_output_lens = [[length] for length in classmate_output_lens]
 
         result_non_tensor_batch = {
             "classmate_prompts": np.array(classmate_prompts),    # Should have shape (bsz,)
             "classmate_output": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
+            "classmate_output_lens": np.array(classmate_output_lens),  # Should have shape (bsz, num_return_sequences)
         }
 
         # print(f"🐛 From classmateWorker {self.model_index} classmate_output", result_non_tensor_batch["classmate_output"])

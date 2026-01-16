@@ -36,40 +36,45 @@ def _find_token_subsequence_for_string(self, token_ids, target_string):
     return -1  # No match found
 
 def main():
-    model_name = "Qwen/Qwen3-0.6B"
+    model_name = "Qwen/Qwen3-0.6B-Base"
+    classmate_model_name = "meta-llama/Llama-3.2-1B-Instruct"
+    # self.classmate_tokenizer.model_max_length
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    classmate_tokenizer = AutoTokenizer.from_pretrained(classmate_model_name, trust_remote_code=True)
 
-    given_string = """Given:
+    breakpoint()
 
-- Price per organic egg = **50 cents**
-- Price of a tray of eggs with **30 eggs = $12**
+    given_string = """엗쟇
+욺
 
-1. **Calculate the cost per egg:**
-   $$
-   \\text{Cost per egg} = \frac{\\text{Price of a tray}}{\\text{Number of eggs in a tray}} = \frac{12}{30} = 0.40 \\text{ dollars}
-   $$
 
-   Convert to cents:
-   $$
-   0.40 \\text{ dollars} = 40 \\text{ cents}
-   $$
+�
+ +#+#+#+#+#+ 결국
 
-2. **Calculate cost per individual egg:**
-   $$
-   \\text{Cost per egg (individual)} = 50 \\text{ cents}
-   $$
+ﻷ� несколькительноศิลปะ
+مِ드
 
-3. **Find the difference between tray price and individual egg price:**
-   $$"""
 
-    token_ids_list = [22043, 1447, 12, 8483, 817, 17356, 18636, 284, 3070, 20, 15, 30191, 1019, 12, 8483, 315, 264, 34688, 315, 18805, 448, 3070, 18, 15, 18805, 284, 400, 16, 17, 56177, 16, 13, 3070, 47866, 279, 2783, 817, 18636, 25, 1019, 256, 400, 25046, 256, 1124, 1318, 90, 14940, 817, 18636, 92, 284, 1124, 37018, 35702, 1318, 90, 6972, 315, 264, 34688, 3417, 35702, 1318, 90, 2833, 315, 18805, 304, 264, 34688, 3417, 284, 1124, 37018, 90, 16, 17, 15170, 18, 15, 92, 284, 220, 15, 13, 19, 15, 1124, 1318, 90, 11192, 532, 256, 26107, 271, 256, 7169, 311, 30191, 510, 256, 400, 25046, 256, 220, 15, 13, 19, 15, 1124, 1318, 90, 11192, 92, 284, 220, 19, 15, 1124, 1318, 90, 30191, 532, 256, 26107, 271, 17, 13, 3070, 47866, 2783, 817, 3842, 18636, 25, 1019, 256, 400, 25046, 256, 1124, 1318, 90, 14940, 817, 18636, 320, 54877, 9139, 284, 220, 20, 15, 1124, 1318, 90, 30191, 532, 256, 26107, 271, 18, 13, 3070, 9885, 279, 6672, 1948, 34688, 3349, 323, 3842, 18636, 3349, 25, 1019, 256, 400, 25046, 256, 1124, 1318, 90, 50, 45751, 817, 18636, 92, 284, 220, 20, 15, 1124, 1318, 90, 30191, 92, 481, 220, 19, 15, 1124, 1318, 90, 30191, 92, 284, 220, 16, 15, 1124, 1318, 90, 30191, 532, 256, 26107, 271, 44364, 334, 16141, 66963, 2303, 14085, 198, 59, 79075, 90, 16, 15, 92, 1124, 1318, 90, 30191, 532, 14085, 151645, 151643]
+
+.BufferedReader.getInputLine();
+
+
+
+.BufferedReader.readLine();
+
+
+
+.BufferedReader.readLineLines();
+
+
+n"""
+
+    token_ids_list = [151001, 124296, 229, 198, 149780, 1406, 94, 151649, 319, 33857, 136724, 271, 123810, 115, 120, 141498, 126873, 143048, 198, 131339, 29346, 1022, 47590, 87784, 2460, 59841, 47590, 26501, 59841, 47590, 26501, 16794, 17745, 77, 25568, 486, 1397, 280, 77, 3635, 56360, 354, 26, 151643]
 
 
     breakpoint()
-    tokenizer.decode(token_ids_list[:179], skip_special_tokens=False)
-    tokenizer.decode(token_ids_list[:180], skip_special_tokens=False)
-    tokenizer.decode(token_ids_list[:181], skip_special_tokens=False)
-    tokenizer.decode(token_ids_list[:182], skip_special_tokens=False)
+    tokenizer.decode(token_ids_list[:23], skip_special_tokens=False)
+    tokenizer.decode(token_ids_list[:34], skip_special_tokens=True)
 
 
 

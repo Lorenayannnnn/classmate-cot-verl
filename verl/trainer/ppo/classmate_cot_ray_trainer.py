@@ -983,12 +983,12 @@ class ClassmateCoTRayPPOTrainer:
         """
         right_ptr = 1
         while right_ptr < len(token_ids):
-            decoded = self.tokenizer.decode(token_ids[:right_ptr], skip_special_tokens=False)
+            decoded = self.tokenizer.decode(token_ids[:right_ptr], skip_special_tokens=True)
             # Exact match found - try to extend to include trailing whitespace tokens
             if decoded.strip() == target_string.strip():
                 # Check if we can include additional whitespace tokens
                 while right_ptr < len(token_ids):
-                    decoded = self.tokenizer.decode(token_ids[:right_ptr + 1], skip_special_tokens=False)
+                    decoded = self.tokenizer.decode(token_ids[:right_ptr + 1], skip_special_tokens=True)
                     # Stop if we exceed target length or lose the match
                     if len(decoded) > len(target_string) or decoded.strip() != target_string.strip():
                         break
@@ -1102,6 +1102,9 @@ class ClassmateCoTRayPPOTrainer:
             data.batch["response_mask"] = compute_response_mask(data)
         data_source_list = data.non_tensor_batch.get("data_source")
 
+        # Find the maximum response length in the batch for consistent mask padding
+        max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
+
         for res_idx, response in enumerate(all_actor_responses):
             if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot" \
                 or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_truncate_main_classmate_separate":
@@ -1124,16 +1127,22 @@ class ClassmateCoTRayPPOTrainer:
             )
             all_processed_actor_responses.append(truncated_main_cot)
 
-            all_classmate_input_mask.append(classmate_input_mask)
+            # Pad mask to max_response_len to ensure all masks have the same length
+            padded_mask = classmate_input_mask + [0] * (max_response_len - len(classmate_input_mask))
+            all_classmate_input_mask.append(padded_mask)
 
         classmate_non_tensor_batch = {
             "raw_prompts": np.array(all_prompts),
             "main_model_responses": np.array(all_processed_actor_responses),
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
+
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[0])
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[1])
+        # print("🐛 all_classmate_input_mask", all_classmate_input_mask)
+        # print("🐛 all_classmate_input_mask", all_classmate_input_mask[1])
 
+        # All masks are now padded to max_response_len, so they can be safely converted to a tensor
         return torch.tensor(all_classmate_input_mask), DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
 
     def _generate_classmate_continuations(self, batch: DataProto) -> DataProto:
@@ -1152,6 +1161,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_input_mask, classmate_batch = self._prepare_classmate_batch(batch)
 
         bsz = len(batch)
+
         num_models = len(self.classmate_workers)
 
         futures = []  # list[(classmate_idx, future, pad_size)]
@@ -1174,19 +1184,20 @@ class ClassmateCoTRayPPOTrainer:
         # Collect results - use NumPy array for efficient assignment
         classmate_prompts = np.empty((bsz, num_models), dtype=object)
         outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
-        # classmate_response_length = np.empty((bsz, num_models), dtype=np.int32)
-        classmate_response_length = []
+        classmate_response_length = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=np.int32)
         for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
             cls_prompts = result_dp.non_tensor_batch["classmate_prompts"]  # (bsz_padded, )
             cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz_padded, num_return_sequences)
+            cls_out_lens = result_dp.non_tensor_batch["classmate_output_lens"]  # (bsz_padded, num_return_sequences)
 
-            # Remove padding if present
+            # Followings are not needed; padding is already removed in generate_classmate_continuations()
             # print("🐛 before cls_out", cls_out, cls_out.shape)
-            # print("🐛 before cls_out", cls_out.shape)
-            if pad_size > 0:
-                cls_out = cls_out[:-pad_size]
-            # print("🐛 after cls_out", cls_out, cls_out.shape)
-            # print("🐛 after cls_out", cls_out.shape)
+            # print("🐛 before cls_out", cls_out.shape, cls_prompts.shape, cls_out_lens.shape)
+            # if pad_size > 0:
+                # cls_prompts = cls_prompts[:-pad_size]
+                # cls_out = cls_out[:-pad_size]
+                # cls_out_lens = cls_out_lens[:-pad_size]
+            # print("🐛 after cls_out", cls_out.shape, cls_prompts.shape, cls_out_lens.shape)
 
             # Assign to output array
             assert len(cls_out) == bsz, (
@@ -1194,9 +1205,8 @@ class ClassmateCoTRayPPOTrainer:
             )
             outputs[:, classmate_idx] = cls_out
             classmate_prompts[:, classmate_idx] = cls_prompts
-
-            tokenized_output = self.classmate_tokenizers[classmate_idx](outputs.flatten().tolist())["input_ids"]
-            classmate_response_length.extend([len(ids) for ids in tokenized_output])
+            # tokenized_output = self.classmate_tokenizers[classmate_idx](outputs.flatten().tolist())["input_ids"]
+            classmate_response_length[:, classmate_idx] = cls_out_lens
 
         # Expected shape: (bsz, num_models, num_return_sequences)
         assert outputs.shape == (bsz, num_models, self.classmate_num_return_sequences), \

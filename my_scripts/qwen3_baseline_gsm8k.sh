@@ -3,6 +3,7 @@ set -x
 #export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 data_dir=./data   # run on lambda
+#dataset_name="gsm8k_final_ans_is"
 dataset_name="gsm8k_minimal_answer_box_prompt"
 #dataset_name="gsm8k_think_prompt"
 #dataset_name="gsm8k_wo_steo_by_step"
@@ -16,7 +17,12 @@ eval_files="['$eval_path']"
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 #train_size=7473   # After filtering out too long prompts
-base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=Qwen/Qwen3-0.6B
+#train_size=7473   # After filtering out too long prompts
+#base_model_name_path=Qwen/Qwen3-0.6B-Base
+#train_size=7473   # After filtering out too long prompts
+
+base_model_name_path=Qwen/Qwen3-1.7B-Base
 train_size=7473   # After filtering out too long prompts
 
 max_response_length=3072
@@ -25,6 +31,8 @@ gpu_num=8
 seed=42
 train_batch_size=256
 mini_batch_size_per_gpu=32
+#train_batch_size=128
+#mini_batch_size_per_gpu=16
 
 total_ckpts=28
 total_test_times=28
