@@ -24,7 +24,7 @@ max_response_length=3072
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_truncate_main_classmate_separate
-use_classmate_main_cond=always  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+use_classmate_main_cond=no_classmate_when_main_incorrect  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 #adv_estimator=grpo
 adv_estimator=grpo_main_classmate_separated
 #adv_estimator=gdpo
@@ -88,7 +88,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     data.return_raw_chat=True \
     reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
-    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond}
+    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode}
 #    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \

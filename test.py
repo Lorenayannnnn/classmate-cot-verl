@@ -184,7 +184,8 @@ def main():
     # dataset_name = "hendrycks_math"
     # dataset_name = "hendrycks_math_think_step_by_step"
     # dataset_name = "gsm8k_no_think_prompt"
-    dataset_name = "gsm8k_minimal_answer_box_prompt"
+    # dataset_name = "gsm8k_minimal_answer_box_prompt"
+    dataset_name = "gsm8k_final_ans_is"
     data_source = None
 
     data_split = "train"
@@ -194,12 +195,16 @@ def main():
     use_temperature = True
     # use_temperature = False
     # main_model_name_path="Qwen/Qwen2.5-Math-1.5B"
+    # main_model_name_path="Qwen/Qwen3-0.6B-Base"
+    main_model_name_path="Qwen/Qwen3-1.7B-Base"
     # main_model_name_path="Qwen/Qwen3-4B-Base"
 
-    main_model_name_path="Qwen/Qwen3-0.6B"
+    # main_model_name_path="Qwen/Qwen3-0.6B"
     # main_model_name_path="Qwen/Qwen3-1.7B"
     # main_model_name_path="Qwen/Qwen3-4B"
     # main_model_name_path = "Qwen/Qwen3-4B-Instruct-2507"
+
+    # main_model_name_path="Qwen/Qwen3-1.7B-Base"
 
     classmate_model_name_path = "meta-llama/Llama-3.2-1B-Instruct"
     # use_together = False
@@ -309,7 +314,7 @@ def main():
         # classmate_ids = classmate_tokenizer.apply_chat_template(classmate_messages, return_tensors="pt", tokenize=True, add_generation_prompt=False)
         # classmate_prompt = classmate_tokenizer.apply_chat_template(classmate_messages, return_tensors="pt", tokenize=False, add_generation_prompt=False, add_special_tokens=False)
 
-        breakpoint()
+        # breakpoint()
         # classmate_messages = prompt
         # classmate_prompt = classmate_tokenizer.apply_chat_template(classmate_messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False)
         # classmate_prompt = classmate_tokenizer.apply_chat_template(prompt, tokenize=False)
@@ -348,7 +353,7 @@ def main():
         # print("🤖[Classmate Correct]: ", classmate_is_correct)
         # print("----------------------End-----------------------")
 
-        with open(os.path.join(output_dir, f"deepscalrr_{idx}.txt"), "a") as f:
+        with open(os.path.join(output_dir, f"{dataset_name}_{idx}.txt"), "a") as f:
             f.write(f"🐛[Prompt]: {prompt}\n")
             f.write(f"🐛[Ground Truth]: {ground_truth}\n")
             f.write(f"----------------------Main----------------------\n")
@@ -389,13 +394,6 @@ if __name__ == "__main__":
     main()
 
 # TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
-#CUDA_VISIBLE_DEVICES=2 python test.py
-#CUDA_VISIBLE_DEVICES=3 python test.py
-#CUDA_VISIBLE_DEVICES=4 python test.py
-#CUDA_VISIBLE_DEVICES=5 python test.py
-#CUDA_VISIBLE_DEVICES=6 python test.py
-#CUDA_VISIBLE_DEVICES=0 python test.py
-#CUDA_VISIBLE_DEVICES=1 python test.py
 #CUDA_VISIBLE_DEVICES=2 python test.py
 #CUDA_VISIBLE_DEVICES=3 python test.py
 # 1. think/no-thinking mode / \no_think
