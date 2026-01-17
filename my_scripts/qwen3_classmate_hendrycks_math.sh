@@ -16,10 +16,12 @@ eval_files="['$eval_path']"
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 #train_size=7500   # After filtering out too long prompts
-base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=Qwen/Qwen3-0.6B
+#train_size=7493   # After filtering out too long prompts
+base_model_name_path=Qwen/Qwen3-1.7B-Base
 train_size=7493   # After filtering out too long prompts
 
-max_response_length=4096
+max_response_length=3072
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_truncate_main_classmate_separate
@@ -32,7 +34,9 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=8
 seed=42
-train_batch_size=256
+#train_batch_size=256
+#mini_batch_size_per_gpu=16
+train_batch_size=128
 mini_batch_size_per_gpu=16
 
 total_ckpts=28
@@ -89,6 +93,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode}
+#    trainer.save_freq=$((train_steps / total_ckpts)) \
+#    trainer.test_freq=$((train_steps / total_test_times)) \
 #    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model}

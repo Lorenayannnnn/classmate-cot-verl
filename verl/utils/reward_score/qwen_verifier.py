@@ -1,9 +1,23 @@
 
 import logging
+import sys
+import os
+from contextlib import contextmanager
 from math_verify import parse, verify
 from math_verify.errors import TimeoutException
 
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def suppress_stderr():
+    """Suppress stderr output temporarily"""
+    old_stderr = sys.stderr
+    try:
+        sys.stderr = open(os.devnull, 'w')
+        yield
+    finally:
+        sys.stderr.close()
+        sys.stderr = old_stderr
 
 def compute_score(
     data_source,
@@ -24,9 +38,10 @@ def compute_score(
         # solution_str = parse(solution_str, parsing_timeout=None)
         # ground_truth = parse(ground_truth, parsing_timeout=None)
         # score = 1 if verify(solution_str, ground_truth, timeout_seconds=None) else 0
-        extracted_sol = parse(solution_str)
-        ground_truth = parse(ground_truth_boxed)
-        score = 1 if verify(extracted_sol, ground_truth) else 0
+        with suppress_stderr():
+            extracted_sol = parse(solution_str)
+            ground_truth = parse(ground_truth_boxed)
+            score = 1 if verify(extracted_sol, ground_truth) else 0
     except TimeoutException | TimeoutError as e:
         # print("Timeout exception during math_verify.")
         logger.error("Timeout exception during math_verify.")

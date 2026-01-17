@@ -38,15 +38,15 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=8
 seed=42
-train_batch_size=256
-mini_batch_size_per_gpu=32
-#train_batch_size=128
-#mini_batch_size_per_gpu=16
+#train_batch_size=256
+#mini_batch_size_per_gpu=32
+train_batch_size=128
+mini_batch_size_per_gpu=16
 
 total_ckpts=28
 total_test_times=28
 
-epoch_num=24
+epoch_num=20
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))

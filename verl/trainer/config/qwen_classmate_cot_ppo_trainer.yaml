@@ -39,7 +39,6 @@ defaults:
 actor_rollout_ref:
 
   actor:
-    # TODO Modify
     checkpoint:
         save_contents: ['model', 'optimizer', 'extra']
 #      save_contents: [ 'hf_model' ]
@@ -82,7 +81,7 @@ reward_model:
     # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
     # vanilla_truncate_main_classmate_separate
     classmate_reward_type: vanilla_reward
-    use_classmate_main_cond: no_classmate_when_main_incorrect   # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+    use_classmate_main_cond: no_classmate_when_main_incorrect   # no_classmate (baseline), always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
     token_level_classmate_reward_mode: classmate_partial    # classmate_partial, all
     main_cot_keep_rate: 0.8   # only effective for vanilla_reward
 
@@ -94,7 +93,7 @@ reward_model:
   classmate_use_vllm: True
   classmate_num_return_sequences: 1
   classmate_generation_configs:
-    max_tokens: 4096    # TODO haha prompt len + main model cot + classmate response len
+    max_tokens: 4096    # prompt len + main model cot + classmate response len
     do_sample: False   # If false, then temperature and top_p have no effect
     temperature: 0.0
 #    top_p: 0.9
@@ -266,8 +265,8 @@ trainer:
   # Default local directory for saving checkpoints
   # TODO modify
 #  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
-#  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
   default_local_dir: /local/data/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
+#  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
 
   # Maximum number of actor checkpoints to keep
   max_actor_ckpt_to_keep: null
@@ -309,8 +308,8 @@ global_profiler:
   # Path to save profiling contents
   # TODO modify
 #  save_path: "outputs/profile"
-#  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
   save_path: "/local/data/lorena/${trainer.project_name}/outputs/profile"
+#  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
 
   # Specific tool configs, can use +profiler.tool_config.[tool].xxx to config
   global_tool_config:
