@@ -273,6 +273,9 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     # classmate_response_length, classmate_max_tokens_len
     if "classmate_response_length" in batch.non_tensor_batch:
         classmate_response_length = batch.non_tensor_batch["classmate_response_length"]
+        # print("classmate_response_length", classmate_response_length)
+        assert classmate_response_length.shape[-1] == 1 and classmate_response_length.shape[-2] == 1, f"Unexpected shape: {classmate_response_length.shape}"     # Assuming having only one classmate and each classmate generates one sequence
+        classmate_response_length = classmate_response_length.squeeze(-1).squeeze(-1)
         classmate_max_tokens_len = batch.non_tensor_batch["classmate_max_tokens_len"]
         classmate_aborted_mask = classmate_response_length == 0
         non_aborted_classmate_response_length = classmate_response_length[~classmate_aborted_mask]
