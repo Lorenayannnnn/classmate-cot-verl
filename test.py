@@ -15,6 +15,8 @@ def create_tokenizer(model_name_path):
     tokenizer = AutoTokenizer.from_pretrained(model_name_path.replace("-Turbo", ""),trust_remote_code=True)
     if "llama" in model_name_path.lower() and not tokenizer.chat_template:
         tokenizer.chat_template = """{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now("%d %b %Y") %}\n    {%- else %}\n        {%- set date_string = "26 Jul 2024" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0][\'role\'] == \'system\' %}\n    {%- set system_message = messages[0][\'content\']|trim %}\n    {%- set messages = messages[1:] %}\n{%- else %}\n    {%- set system_message = "" %}\n{%- endif %}\n\n{#- System message #}\n{{- "<|start_header_id|>system<|end_header_id|>\\n\\n" }}\n{%- if tools is not none %}\n    {{- "Environment: ipython\\n" }}\n{%- endif %}\n{{- "Cutting Knowledge Date: December 2023\\n" }}\n{{- "Today Date: " + date_string + "\\n\\n" }}\n{%- if tools is not none and not tools_in_user_message %}\n    {{- "You have access to the following functions. To call a function, please respond with JSON for a function call." }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\\n\\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\\n\\n" }}\n    {%- endfor %}\n{%- endif %}\n{{- system_message }}\n{{- "<|eot_id|>" }}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0][\'content\']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception("Cannot put tools in the first user message when there\'s no first user message!") }}\n{%- endif %}\n    {{- \'<|start_header_id|>user<|end_header_id|>\\n\\n\' -}}\n    {{- "Given the following functions, please respond with a JSON for a function call " }}\n    {{- "with its proper arguments that best answers the given prompt.\\n\\n" }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\\n\\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\\n\\n" }}\n    {%- endfor %}\n    {{- first_user_message + "<|eot_id|>"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == \'ipython\' or message.role == \'tool\' or \'tool_calls\' in message) %}\n        {{- \'<|start_header_id|>\' + message[\'role\'] + \'<|end_header_id|>\\n\\n\'+ message[\'content\'] | trim + \'<|eot_id|>\' }}\n    {%- elif \'tool_calls\' in message %}\n        {%- if not message.tool_calls|length == 1 %}\n            {{- raise_exception("This model only supports single tool-calls at once!") }}\n        {%- endif %}\n        {%- set tool_call = message.tool_calls[0].function %}\n        {{- \'<|start_header_id|>assistant<|end_header_id|>\\n\\n\' -}}\n        {{- \'{"name": "\' + tool_call.name + \'", \' }}\n        {{- \'"parameters": \' }}\n        {{- tool_call.arguments | tojson }}\n        {{- "}" }}\n        {{- "<|eot_id|>" }}\n    {%- elif message.role == "tool" or message.role == "ipython" %}\n        {{- "<|start_header_id|>ipython<|end_header_id|>\\n\\n" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- "<|eot_id|>" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- \'<|start_header_id|>assistant<|end_header_id|>\\n\\n\' }}\n{%- endif %}\n"""
+    elif "OLMo-2-0425-1B" in model_name_path and not tokenizer.chat_template:
+        tokenizer.chat_template = "{{ bos_token }}{% for message in messages %}{% if message['role'] == 'system' %}{{ '<|system|>\n' + message['content'] + '\n' }}{% elif message['role'] == 'user' %}{{ '<|user|>\n' + message['content'] + '\n' }}{% elif message['role'] == 'assistant' %}{% if not loop.last %}{{ '<|assistant|>\n'  + message['content'] + eos_token + '\n' }}{% else %}{{ '<|assistant|>\n'  + message['content'] + eos_token }}{% endif %}{% endif %}{% if loop.last and add_generation_prompt %}{{ '<|assistant|>\n' }}{% endif %}{% endfor %}"
     return tokenizer
 
 def create_vllm(model_name_path, max_model_len, gpu_memory_utilization=None, use_together=False):
@@ -208,10 +210,10 @@ def main():
 
     # main_model_name_path="Qwen/Qwen3-0.6B-Base"
     # main_model_name_path="Qwen/Qwen3-1.7B-Base"
-    main_model_name_path="Qwen/Qwen3-4B-Base"
+    # main_model_name_path="Qwen/Qwen3-4B-Base"
     # main_model_name_path="Qwen/Qwen3-8B-Base"
 
-    # main_model_name_path="allenai/OLMo-2-0425-1B"
+    main_model_name_path="allenai/OLMo-2-0425-1B"
     # main_model_name_path="allenai/OLMo-2-0425-1B-SFT"
     # main_model_name_path="allenai/OLMo-2-0425-1B-DPO"
     # main_model_name_path="allenai/OLMo-2-0425-1B-RLVR1"
@@ -223,6 +225,7 @@ def main():
     # use_together = False
     # classmate_model_name_path = "meta-llama/Llama-3.2-3B-Instruct-Turbo"
     use_together = False
+    main_cot_keep_ratio = 0.8
 
     print(f"Start testing {dataset_name} with main model: {main_model_name_path} and classmate model: {classmate_model_name_path}")
 
@@ -234,11 +237,11 @@ def main():
     # main_max_response_len = 8192
     max_main_model_len = max_main_input_len + main_max_response_len
 
-    main_cot_keep_ratio = 0.8
     classmate_max_input_len = int(max_main_input_len + main_max_response_len * main_cot_keep_ratio)
     classmate_max_response_len = int(main_max_response_len * (1 - main_cot_keep_ratio))
     classmate_max_len = classmate_max_input_len + classmate_max_response_len
     main_tokenizer = create_tokenizer(main_model_name_path)
+
     classmate_tokenizer = create_tokenizer(classmate_model_name_path)
     # Filter too long examples for main model
     model_len_filtered_data_fn = f"data/{dataset_name}/{main_model_name_path}_{max_main_input_len}_{data_split}_filtered.json"
@@ -289,7 +292,7 @@ def main():
     else:
         main_sampling_params = SamplingParams(temperature=0.0, top_k=-1, top_p=1.0, max_tokens=main_max_response_len, seed=seed)
 
-    output_dir = f"outputs/inference_before_train/{'use_together' if use_together else 'all_vllm'}/{dataset_name}_{data_split}_{data_source}/main_{main_max_response_len}/{'w_temperature' if use_temperature else 'greedy'}/{main_model_name_path.replace('/', '_')}_with_{classmate_model_name_path.replace('/', '_')}"
+    output_dir = f"outputs/inference_before_train/{'use_together' if use_together else 'all_vllm'}/{dataset_name}_{data_split}_{data_source}/main_{main_max_response_len}/{'w_temperature' if use_temperature else 'greedy'}/main_cot_keep_ratio_{main_cot_keep_ratio}/{main_model_name_path.replace('/', '_')}_with_{classmate_model_name_path.replace('/', '_')}"
     os.makedirs(output_dir, exist_ok=True)
     main_correct = 0
     classmate_correct = 0
@@ -366,7 +369,7 @@ def main():
         # print("🤖[Classmate Correct]: ", classmate_is_correct)
         # print("----------------------End-----------------------")
 
-        with open(os.path.join(output_dir, f"{dataset_name}_{idx}.txt"), "a") as f:
+        with open(os.path.join(output_dir, f"{idx}_m_{'c' if main_is_correct else 'w'}_cl_{'c' if classmate_is_correct else 'w'}.txt"), "a") as f:
             f.write(f"🐛[Prompt]: {prompt}\n")
             f.write(f"🐛[Ground Truth]: {ground_truth}\n")
             f.write(f"----------------------Main----------------------\n")

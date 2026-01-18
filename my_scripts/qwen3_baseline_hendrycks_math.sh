@@ -14,8 +14,9 @@ eval_files="['$eval_path']"
 #train_size=7500   # After filtering out too long prompts
 #base_model_name_path=Qwen/Qwen3-0.6B
 #train_size=7493   # After filtering out too long prompts
-
-base_model_name_path=Qwen/Qwen3-1.7B-Base
+#base_model_name_path=Qwen/Qwen3-1.7B-Base
+#train_size=7493   # After filtering out too long prompts
+base_model_name_path=Qwen/Qwen3-0.6B-Base
 train_size=7493   # After filtering out too long prompts
 
 max_response_length=3072
