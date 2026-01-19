@@ -185,6 +185,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             total_classmate_reward_dict = {}
             classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
             classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
+            main_keep_rates = data_item.non_tensor_batch["main_keep_rates"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
 
             # TODO weight for each classmate model
             classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
@@ -291,6 +292,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 print("🐛[main_reward]", base_reward)
                 import numpy as np
                 print("🐛[classmate_prompt]", classmate_prompts[0])   # 0th classmate model
+                print("🐛[main_keep_rate]", np.array2string(main_keep_rates[0][0], precision=3))   # 0th classmate model, 0th sample
                 print("🐛[classmate_output]", classmate_outputs[0][0])     # 0th classmate model
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
                 print("🐛[ground_truth]", ground_truth)

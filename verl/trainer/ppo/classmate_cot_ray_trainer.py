@@ -1166,6 +1166,8 @@ class ClassmateCoTRayPPOTrainer:
         # Build the shared input for all classmates
         classmate_input_mask, classmate_batch = self._prepare_classmate_batch(batch)
 
+        keep_rates = classmate_batch.non_tensor_batch.pop("keep_rates")
+
         bsz = len(batch)
 
         num_models = len(self.classmate_workers)
@@ -1222,8 +1224,10 @@ class ClassmateCoTRayPPOTrainer:
 
         batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
         batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
+        batch.non_tensor_batch["main_keep_rates"] = keep_rates
 
         batch.batch["classmate_input_mask"] = classmate_input_mask
+
         return batch
 
     def _save_checkpoint(self):
