@@ -354,11 +354,11 @@ def run_forward_pass(
                 keep_ratio = configs.classmate_model_args.eval_main_cot_keep_rate
             elif configs.classmate_model_args.classmate_reward_type == "vanilla_reward":
                 keep_ratio = configs.classmate_model_args.train_main_cot_keep_rate
-            elif configs.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
+            elif configs.classmate_model_args.classmate_reward_type == "random_truncate":
                 assert rng is not None, "RNG must be provided for random truncation"
-                keep_ratio = random.uniform(configs.classmate_cot_reward_configs.random_truncate_min_keep_rate, configs.classmate_cot_reward_configs.random_truncate_max_keep_rate)
+                keep_ratio = random.uniform(configs.classmate_model_args.random_truncate_min_keep_rate, configs.classmate_model_args.random_truncate_max_keep_rate)
             else:
-                raise ValueError(f"Unknown classmate CoT reward type: {configs.classmate_cot_reward_configs.classmate_reward_type}")
+                raise ValueError(f"Unknown classmate CoT reward type: {configs.classmate_model_args.classmate_reward_type}")
 
             classmate_prompt, truncated_main_pred = get_classmate_prompt(raw_prompt, main_model_resp, keep_ratio=keep_ratio)
             # Note: classmate_prompt is same as raw_prompt
@@ -410,7 +410,7 @@ def run_forward_pass(
             group_classmate_response_lengths.append(len(classmate_sampled_tokens))
 
             classmate_reward, classmate_extracted_sol = compute_score(classmate_model_resp, ground_truth)
-            
+
             # Log detailed info for first 10 samples during eval (step < 0 means eval mode)
             total_sample_idx = i * len(sample_classmate_futures) + j
             if step < 0 and total_sample_idx < 10:
@@ -440,7 +440,7 @@ def run_forward_pass(
 
         batch_classmate_rewards.append(group_classmate_rewards)
         batch_classmate_response_lengths.append(group_classmate_response_lengths)
-        
+
         # Compute total rewards (main + weighted classmate). Note this is only used for logging
         group_final_rewards = [m + c for m, c in zip(group_main_rewards, group_weighted_classmate_rewards)]
         batch_final_rewards.append(group_final_rewards)
@@ -510,12 +510,12 @@ def evaluate_model(
 ):
     """
     Evaluate model on test dataset.
-    
+
     Returns:
         Dict with evaluation metrics
     """
     logger.info(f"Running evaluation on {len(test_dataset)} test examples")
-    
+
     # Run forward pass on test set (use step=-1 to trigger debug logging)
     _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios = run_forward_pass(
         batch_rows=test_dataset,
@@ -529,12 +529,12 @@ def evaluate_model(
         step=step,
         do_eval=True
     )
-    
+
     # Compute metrics
     all_main_rewards = [r for group in batch_main_rewards for r in group]
     all_classmate_rewards = [r for group in batch_classmate_rewards for r in group]
     all_final_rewards = [r for group in batch_final_rewards for r in group]
-    
+
     eval_metrics = {
         f"val-core/main_model_reward/mean@1": np.mean(all_main_rewards) if all_main_rewards else 0.0,
         # "val-core/main_model_reward/std": np.std(all_main_rewards) if all_main_rewards else 0.0,
@@ -544,11 +544,11 @@ def evaluate_model(
         # "val-core/final_reward/std": np.std(all_final_rewards) if all_final_rewards else 0.0,
     }
     wandb.log(eval_metrics, step=step)
-    
+
     logger.info(f"Evaluation results: main_reward={eval_metrics['val-core/main_model_reward/mean@1']:.4f}, "
                 f"classmate_reward={eval_metrics['val-core/classmate_reward/mean@1']:.4f}, "
                 f"final_reward={eval_metrics['val-core/final_reward/mean@1']:.4f}")
-    
+
     return eval_metrics
 
 
@@ -575,7 +575,7 @@ def main(configs):
         import wandb
         try:
             wandb.init(
-                project=configs.training_args.wandb_project, 
+                project=configs.training_args.wandb_project,
                 name=f"tinker-{configs.training_args.wandb_run_name}",
                 config=OmegaConf.to_container(configs, resolve=True),
                 dir=os.path.join(configs.training_args.output_dir, "wandb")
@@ -635,12 +635,12 @@ def main(configs):
     save_every = (configs.training_args.epochs * training_steps_per_epoch + configs.training_args.total_save_time_num - 1) // configs.training_args.total_save_time_num
     test_every = (configs.training_args.epochs * training_steps_per_epoch + configs.training_args.total_test_time_num - 1) // configs.training_args.total_test_time_num
     logger.info(f"Training for {configs.training_args.epochs} epochs, {training_steps_per_epoch} batches per epoch")
-    
+
     # Run initial evaluation before training
     logger.info("Running initial evaluation before training")
     initial_sampling_path = training_client.save_weights_for_sampler(name="initial_eval").result().path
     initial_eval_sampling_client = service_client.create_sampling_client(model_path=initial_sampling_path)
-    
+
     initial_eval_metrics = evaluate_model(
         test_dataset=test_dataset,
         sampling_client=initial_eval_sampling_client,
@@ -652,10 +652,10 @@ def main(configs):
         configs=configs,
         step=0,
     )
-    
+
     # Log initial eval metrics
     log_metrics(initial_eval_metrics, step=0, log_dir=configs.training_args.output_dir)
-    
+
     # Training
     logger.info("Start training")
 
