@@ -179,9 +179,6 @@ def plot_token_length_distribution(token_len_list, output_dir, model_name):
     plt.close()
 
 def main():
-    # dataset_name = "DeepScaleR"
-    # data_source = None
-
     # dataset_name = "GSM_MATH"
     # data_source = "gsm8k"
     # data_source = "MATH"
@@ -193,7 +190,9 @@ def main():
     # dataset_name = "hendrycks_math_think_step_by_step"
 
     # dataset_name = "gsm8k_minimal_answer_box_prompt"
-    dataset_name = "hendrycks_math_minimal_answer_box_prompt_105_test"
+    # dataset_name = "hendrycks_math_minimal_answer_box_prompt_105_test"
+
+    dataset_name = "DeepScaleR_answer_box"
     data_source = None
 
     data_split = "train"
@@ -209,11 +208,11 @@ def main():
     # main_model_name_path = "Qwen/Qwen3-4B-Instruct-2507"
 
     # main_model_name_path="Qwen/Qwen3-0.6B-Base"
-    # main_model_name_path="Qwen/Qwen3-1.7B-Base"
+    main_model_name_path="Qwen/Qwen3-1.7B-Base"
     # main_model_name_path="Qwen/Qwen3-4B-Base"
     # main_model_name_path="Qwen/Qwen3-8B-Base"
 
-    main_model_name_path="allenai/OLMo-2-0425-1B"
+    # main_model_name_path="allenai/OLMo-2-0425-1B"
     # main_model_name_path="allenai/OLMo-2-0425-1B-SFT"
     # main_model_name_path="allenai/OLMo-2-0425-1B-DPO"
     # main_model_name_path="allenai/OLMo-2-0425-1B-RLVR1"
@@ -225,7 +224,7 @@ def main():
     # use_together = False
     # classmate_model_name_path = "meta-llama/Llama-3.2-3B-Instruct-Turbo"
     use_together = False
-    main_cot_keep_ratio = 0.8
+    main_cot_keep_ratio = 0.5
 
     print(f"Start testing {dataset_name} with main model: {main_model_name_path} and classmate model: {classmate_model_name_path}")
 
