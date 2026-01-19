@@ -242,7 +242,9 @@ def run_forward_pass(
     main_sampling_params,
     classmate_sampling_params,
     configs,
+    do_eval=False,
     step=0,
+    rng=None
 ):
     """
     Run forward pass: sample from main model and classmate model.
@@ -258,7 +260,7 @@ def run_forward_pass(
     batch_main_futures: list[list[Future[types.SampleResponse]]] = []
     batch_raw_prompts: list[str] = []
 
-    if step == -1:
+    if do_eval:
         # Evaluation; use greedy decoding
         main_sampling_params = classmate_sampling_params        # classmate is always greedy
         group_size = 1
@@ -346,14 +348,22 @@ def run_forward_pass(
             group_main_responses.append(main_model_resp)
             group_main_extracted_sols.append(main_extracted_sol)
 
-            classmate_prompt, truncated_main_pred = get_classmate_prompt(raw_prompt, main_model_resp, keep_ratio=configs.classmate_model_args.main_cot_keep_rate)
+            if do_eval or "baseline" in configs.training_args.adv_estimator or configs.classmate_model_args.classmate_reward_type == "vanilla_reward":
+                keep_ratio = configs.classmate_model_args.main_cot_keep_rate
+            elif configs.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
+                assert rng is not None, "RNG must be provided for random truncation"
+                keep_ratio = random.uniform(configs.classmate_cot_reward_configs.random_truncate_min_keep_rate, configs.classmate_cot_reward_configs.random_truncate_max_keep_rate)
+            else:
+                raise ValueError(f"Unknown classmate CoT reward type: {configs.classmate_cot_reward_configs.classmate_reward_type}")
+
+            classmate_prompt, truncated_main_pred = get_classmate_prompt(raw_prompt, main_model_resp, keep_ratio=keep_ratio)
             # Note: classmate_prompt is same as raw_prompt
 
             is_classmate_input_len = find_token_subsequence_for_string(main_tokenizer, sampled_tokens, truncated_main_pred)
-            # try:
-            assert is_classmate_input_len != -1, "Failed to find classmate input subsequence in main model response tokens"
-            # except:
-            #     breakpoint()
+            try:
+                assert is_classmate_input_len != -1, "Failed to find classmate input subsequence in main model response tokens"
+            except:
+                breakpoint()
             group_is_classmate_input_len.append(is_classmate_input_len)
 
             classmate_input_token_ids = tokenize_input(classmate_tokenizer, classmate_prompt, is_main=False, main_CoT=truncated_main_pred, tokenize=True)
@@ -448,8 +458,6 @@ def run_forward_pass(
 
         # check if all advantages are zero
         if step != -1 and all(advantage == 0.0 for advantage in main_advantages) and all(advantage == 0.0 for advantage in classmate_advantages):
-            breakpoint()
-            # TODO training datums always empty
             continue
 
         for tokens, logprob, main_advantage, classmate_advantage, ob_len, is_classmate_input_len in zip(group_main_tokens, group_logprobs, main_advantages, classmate_advantages, group_ob_lens, group_is_classmate_input_len):
@@ -492,7 +500,7 @@ def evaluate_model(
     main_sampling_params,
     classmate_sampling_params,
     configs,
-    step=0,
+    step,
 ):
     """
     Evaluate model on test dataset.
@@ -512,7 +520,8 @@ def evaluate_model(
         main_sampling_params=main_sampling_params,
         classmate_sampling_params=classmate_sampling_params,
         configs=configs,
-        step=-1,  # Negative step triggers debug logging
+        step=step,
+        do_eval=True
     )
     
     # Compute metrics
@@ -521,11 +530,11 @@ def evaluate_model(
     all_final_rewards = [r for group in batch_final_rewards for r in group]
     
     eval_metrics = {
-        "val-core/main_model_reward/mean@1": np.mean(all_main_rewards) if all_main_rewards else 0.0,
+        f"val-core/main_model_reward/mean@1": np.mean(all_main_rewards) if all_main_rewards else 0.0,
         # "val-core/main_model_reward/std": np.std(all_main_rewards) if all_main_rewards else 0.0,
-        "val-core/classmate_reward/mean@1": np.mean(all_classmate_rewards) if all_classmate_rewards else 0.0,
+        f"val-core/classmate_reward/mean@1": np.mean(all_classmate_rewards) if all_classmate_rewards else 0.0,
         # "val-core/classmate_reward/std": np.std(all_classmate_rewards) if all_classmate_rewards else 0.0,
-        "val-core/final_reward/mean@1": np.mean(all_final_rewards) if all_final_rewards else 0.0,
+        f"val-core/final_reward/mean@1": np.mean(all_final_rewards) if all_final_rewards else 0.0,
         # "val-core/final_reward/std": np.std(all_final_rewards) if all_final_rewards else 0.0,
     }
     wandb.log(eval_metrics, step=step)
@@ -540,6 +549,7 @@ def evaluate_model(
 @hydra.main(config_path="configs", config_name="train_w_classmate_config", version_base=None)
 def main(configs):
     set_seed(configs.training_args.seed)
+    rng = random.Random(configs.training_args.seed)
 
     logger.info(f"Loading tokenizer")
     main_tokenizer = AutoTokenizer.from_pretrained(configs.main_model_args.model_name_or_path)
@@ -683,6 +693,7 @@ def main(configs):
                 classmate_sampling_params=classmate_sampling_params,
                 configs=configs,
                 step=step,
+                rng=rng
             )
 
             # Flatten rewards and response lengths for metrics
@@ -710,8 +721,8 @@ def main(configs):
             metrics["time/total"] = time.time() - t_start
             metrics["critic/main_model_reward/mean"] = np.mean(all_main_rewards) if all_main_rewards else 0.0
             metrics["critic/main_model_reward/std"] = np.std(all_main_rewards) if all_main_rewards else 0.0
-            metrics["critic/classmate_model_reward/mean"] = np.mean(all_classmate_rewards) if all_classmate_rewards else 0.0
-            metrics["critic/classmate_model_reward/std"] = np.std(all_classmate_rewards) if all_classmate_rewards else 0.0
+            metrics["critic/classmate_reward/mean"] = np.mean(all_classmate_rewards) if all_classmate_rewards else 0.0
+            metrics["critic/classmate_reward/std"] = np.std(all_classmate_rewards) if all_classmate_rewards else 0.0
             metrics["critic/rewards/mean"] = np.mean(batch_rewards) if batch_rewards else 0.0
             metrics["actor/entropy"] = sum(batch_entropies) / len(batch_entropies) if batch_entropies else 0.0
             

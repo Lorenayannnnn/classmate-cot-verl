@@ -728,7 +728,7 @@ class ClassmateCoTRayPPOTrainer:
 
             # Generate classmate continuations for validation
             print("Generating classmate continuations for validation...")
-            test_batch = self._generate_classmate_continuations(test_batch)
+            test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)
 
             # evaluate using reward_function
             if self.val_reward_fn is None:
@@ -1068,7 +1068,7 @@ class ClassmateCoTRayPPOTrainer:
 
         return truncated_text, main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index)
 
-    def _prepare_classmate_batch(self, data: DataProto):
+    def _prepare_classmate_batch(self, data: DataProto, is_eval: bool):
         """
         Prepare batch data for classmate generation. Each worker will handle its own tokenization.
         This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
@@ -1111,7 +1111,8 @@ class ClassmateCoTRayPPOTrainer:
         max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
 
         for res_idx, response in enumerate(all_actor_responses):
-            if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
+            if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
+                # Use fixed dropout rate during evaluation or for vanilla reward
                 keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
                 # if "code" in data_source_list[res_idx]:
                 #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
@@ -1151,7 +1152,7 @@ class ClassmateCoTRayPPOTrainer:
         # All masks are now padded to max_response_len, so they can be safely converted to a tensor
         return torch.tensor(all_classmate_input_mask), DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
 
-    def _generate_classmate_continuations(self, batch: DataProto) -> DataProto:
+    def _generate_classmate_continuations(self, batch: DataProto, is_eval=False) -> DataProto:
         """
         Launch sampling on each classmate model in parallel and collect results.
 
@@ -1164,7 +1165,7 @@ class ClassmateCoTRayPPOTrainer:
         Reshape (num_classmates, bsz, num_return_sequences) -> (bsz, num_classmates, num_return_sequences)
         """
         # Build the shared input for all classmates
-        classmate_input_mask, classmate_batch = self._prepare_classmate_batch(batch)
+        classmate_input_mask, classmate_batch = self._prepare_classmate_batch(batch, is_eval)
 
         keep_rates = classmate_batch.non_tensor_batch.pop("keep_rates")
 

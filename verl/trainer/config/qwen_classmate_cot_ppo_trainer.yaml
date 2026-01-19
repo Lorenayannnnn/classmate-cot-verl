@@ -82,7 +82,7 @@ reward_model:
     classmate_reward_type: random_truncate
     use_classmate_main_cond: no_classmate_when_main_incorrect   # no_classmate (baseline), always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
     token_level_classmate_reward_mode: classmate_partial    # classmate_partial, all
-    main_cot_keep_rate: null   # only effective for vanilla_reward
+    main_cot_keep_rate: 0.8   # only effective for vanilla_reward
     main_cot_keep_rate_min: 0.9   # only effective for random_truncate
     main_cot_keep_rate_max: 0.1   # only effective for random_truncate
 

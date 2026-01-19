@@ -25,30 +25,24 @@
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-1.7B-Base_gsm8k_minimal_answer_box_prompt_baseline_1195680_episodes_seed_42"
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_105_test_baseline_719328_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_gsm8k_minimal_answer_box_prompt_vanilla_truncate_main_classmate_separate_always_classmate_reward_classmate_partial_classmate_llama_1195680_episodes_seed_42"
-main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_gsm8k_minimal_answer_box_prompt_vanilla_truncate_main_classmate_separate_no_classmate_when_main_incorrect_classmate_reward_classmate_partial_classmate_llama_1195680_episodes_seed_42"
+#main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_gsm8k_minimal_answer_box_prompt_vanilla_truncate_main_classmate_separate_no_classmate_when_main_incorrect_classmate_reward_classmate_partial_classmate_llama_1195680_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_105_test_vanilla_truncate_main_classmate_separate_no_classmate_when_main_incorrect_classmate_reward_classmate_partial_classmate_llama_719328_episodes_seed_42"
+main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B-Base_hendrycks_math_minimal_answer_box_prompt_105_test_baseline_719328_episodes_seed_42"
 
 # max length 96
-repo_name="20260118-Qwen3-1.7B-Base_gsm8k_m_cl_sep_no_cl_m_wrong_partial_llama_1195680_episodes_seed_42"
-
-#To be tested
-#LorenaYannnnn/20260117-Qwen3-1.7B-Base_gsm8k_minimal_answer_box_prompt_baseline_1195680_episodes_seed_42
-#LorenaYannnnn/20260118-Qwen3-1.7B-Base_gsm8k_m_cl_sep_no_cl_m_wrong_partial_llama_1195680_episodes_seed_42
-#LorenaYannnnn/20260117-Qwen3-1.7B-Base_gsm8k_m_cl_separate_always_cl_partial_llama_1195680_episodes_seed_42
-
-#LorenaYannnnn/20260117-Qwen3-1.7B-Base_math_answer_box_baseline_719328_episodes_seed_42
-#LorenaYannnnn/20260118-Qwen3-1.7B-Base_MATH_m_cl_sep_no_cl_m_wrong_partial_llama_719328_episodes_seed_42
+repo_name="20260119-Qwen3-0.6B-Base_MATH_answer_box_baseline_719328_episodes_seed_42"
 
 
 #gsm8k
 start_idx=0
-max_idx=18
-step_size=42
+max_idx=19
+step_size=25
 
 #MATH
 #start_idx=0
 #max_idx=16
 #step_size=25
+
 #for (( i=start_idx; i<=max_idx; i++ )); do
 #  echo "== Starting group beginning at index ${i} =="
 #  # Launch a parallel job for each j in the current group [i, i+multiple_of-1], clipped to max_idx
@@ -67,6 +61,7 @@ step_size=42
 #  # Wait for all jobs in this group to finish before moving to the next group
 #  echo "== Finished group starting at ${i} =="
 #done
+
 #python -m verl.model_merger merge \
 #  --backend fsdp \
 #  --local_dir ${main_dir}/global_step_696/actor \

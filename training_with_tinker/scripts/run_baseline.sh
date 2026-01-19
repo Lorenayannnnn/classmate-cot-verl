@@ -4,7 +4,7 @@ export PYTHONPATH=:${PYTHONPATH}
 
 dataset_name=hendrycks_math_minimal_answer_box_prompt_105_test
 model_name_or_path=Qwen/Qwen3-8B-Base
-main_cot_keep_rate=0.5
+main_cot_keep_rate=0.8
 
 adv_estimator=grpo_baseline
 #adv_estimator=grpo_classmate

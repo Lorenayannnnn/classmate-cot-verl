@@ -24,6 +24,8 @@ classmate_model_args:
   use_classmate_main_cond: no_classmate_when_main_incorrect
 
   main_cot_keep_rate: 0.8   # only effective for vanilla_reward
+  random_truncate_min_keep_rate: 0.1    # only effective for random_truncate
+  random_truncate_max_keep_rate: 0.9    # only effective for random_truncate
 
   generation_configs:
     max_tokens: 3072    # max num of new tokens to generate
