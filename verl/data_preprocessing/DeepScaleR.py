@@ -28,7 +28,8 @@ if __name__ == "__main__":
     parser.add_argument("--local_dir", default=None, help="The save directory for the preprocessed dataset.")
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument(
-        "--local_save_dir", default="./data/DeepScaleR", help="The save directory for the preprocessed dataset."
+        # "--local_save_dir", default="./data/DeepScaleR", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/DeepScaleR_answer_box", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -40,13 +41,14 @@ if __name__ == "__main__":
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
+        instruction_following = " Put your final answer within \\boxed{}."
         def process_fn(example, idx):
             data = {
                 "data_source": example["source"],
                 "prompt": [     # Note: the message is already created here. This is directly passed to tokenizer.apply_chat_template in RLHF Dataset
                     {
                         "role": "user",
-                        "content": example["prompt"],
+                        "content": example["prompt"] + instruction_following,
                     }
                 ],
                 "ability": "math",
