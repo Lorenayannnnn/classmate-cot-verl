@@ -453,6 +453,9 @@ class ClassmateCoTRayPPOTrainer:
 
         self.classmate_vllm_configs = classmate_vllm_configs
 
+        # Initialize seeded random number generator for reproducibility
+        self.rng = random.Random(seed)
+
         # if ref_in_actor is True, the reference policy will be actor without lora applied
         self.ref_in_actor = config.actor_rollout_ref.model.get("lora_rank", 0) > 0
 
@@ -995,10 +998,10 @@ class ClassmateCoTRayPPOTrainer:
                     right_ptr += 1
                 return right_ptr
 
-            # Early exit
-            if len(decoded) > len(target_string):
+            # Early exit: no early exit because there might be a lot of whitespace characters prepended
+            # if len(decoded) > len(target_string):
                 # Decoded is already longer than target, won't find match
-                break
+                # break
 
             right_ptr += 1
 
@@ -1021,8 +1024,9 @@ class ClassmateCoTRayPPOTrainer:
         _SPLIT_WS = re.compile(r"\S+|\s+")
         num_to_keep = int(len(main_pred.split()) * keep_ratio)  # counts non-whitespace tokens
         if num_to_keep <= 0:
-            return "", []
-        
+            # Keep the entire main CoT when it's too short
+            return "", main_pred
+
         kept = []
         count = 0
         for m in _SPLIT_WS.finditer(main_pred):
@@ -1091,6 +1095,7 @@ class ClassmateCoTRayPPOTrainer:
         # print("🐛 sample response", all_actor_responses[0])
         # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
 
+        all_keep_rates = []
 
         # all_prompt_plus_actor_responses = []
         all_processed_actor_responses = []
@@ -1106,15 +1111,14 @@ class ClassmateCoTRayPPOTrainer:
         max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
 
         for res_idx, response in enumerate(all_actor_responses):
-            if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot" \
-                or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_truncate_main_classmate_separate":
+            if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
                 keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
                 # if "code" in data_source_list[res_idx]:
                 #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
                 #     print(f"🐛🐛🐛 original response {processed_response}")
                     # print(f"🐛🐛🐛 sample modified_response {modified_response}")
             elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
-                keep_rate = random.uniform(0.3, 0.95)
+                keep_rate = self.rng.uniform(self.classmate_cot_reward_configs.main_cot_keep_rate_min, self.classmate_cot_reward_configs.main_cot_keep_rate_max)
             else:
                 raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 
@@ -1126,6 +1130,7 @@ class ClassmateCoTRayPPOTrainer:
                 keep_rate
             )
             all_processed_actor_responses.append(truncated_main_cot)
+            all_keep_rates.append(keep_rate)
 
             # Pad mask to max_response_len to ensure all masks have the same length
             padded_mask = classmate_input_mask + [0] * (max_response_len - len(classmate_input_mask))
@@ -1134,6 +1139,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_non_tensor_batch = {
             "raw_prompts": np.array(all_prompts),
             "main_model_responses": np.array(all_processed_actor_responses),
+            "keep_rates": np.array(all_keep_rates),
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
 
