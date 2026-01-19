@@ -305,6 +305,7 @@ def run_forward_pass(
     batch_logprobs: list[list[list[float]]] = []
     batch_ob_lens: list[list[int]] = []
     batch_is_classmate_input_len: list[list[int]] = []
+    batch_keep_ratios: list[list[float]] = []
 
     # Process main model responses + submit classmate sampling
     for i, (sample_main_futures, raw_prompt, main_prompt_str, main_prompt_tokens) in enumerate(zip(batch_main_futures, batch_raw_prompts, batch_main_prompt, batch_main_prompt_ids)):
@@ -319,6 +320,7 @@ def run_forward_pass(
         group_main_responses: list[str] = []
         group_main_extracted_sols: list = []
         group_classmate_prompts: list[str] = []
+        group_keep_ratios: list[float] = []
 
         # Metrics for this group
         group_entropy = []
@@ -348,8 +350,10 @@ def run_forward_pass(
             group_main_responses.append(main_model_resp)
             group_main_extracted_sols.append(main_extracted_sol)
 
-            if do_eval or "baseline" in configs.training_args.adv_estimator or configs.classmate_model_args.classmate_reward_type == "vanilla_reward":
-                keep_ratio = configs.classmate_model_args.main_cot_keep_rate
+            if do_eval or "baseline" in configs.training_args.adv_estimator:
+                keep_ratio = configs.classmate_model_args.eval_main_cot_keep_rate
+            elif configs.classmate_model_args.classmate_reward_type == "vanilla_reward":
+                keep_ratio = configs.classmate_model_args.train_main_cot_keep_rate
             elif configs.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
                 assert rng is not None, "RNG must be provided for random truncation"
                 keep_ratio = random.uniform(configs.classmate_cot_reward_configs.random_truncate_min_keep_rate, configs.classmate_cot_reward_configs.random_truncate_max_keep_rate)
@@ -358,6 +362,7 @@ def run_forward_pass(
 
             classmate_prompt, truncated_main_pred = get_classmate_prompt(raw_prompt, main_model_resp, keep_ratio=keep_ratio)
             # Note: classmate_prompt is same as raw_prompt
+            group_keep_ratios.append(keep_ratio)
 
             is_classmate_input_len = find_token_subsequence_for_string(main_tokenizer, sampled_tokens, truncated_main_pred)
             try:
@@ -384,6 +389,7 @@ def run_forward_pass(
         batch_logprobs.append(group_logprobs)
         batch_ob_lens.append(group_ob_lens)
         batch_is_classmate_input_len.append(group_is_classmate_input_len)
+        batch_keep_ratios.append(group_keep_ratios)
 
     # Process classmate responses
     for i, (sample_classmate_futures, group_main_rewards, group_main_tokens, group_logprobs, group_ob_lens,
@@ -488,7 +494,7 @@ def run_forward_pass(
             )
             training_datums.append(datum)
 
-    return training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths
+    return training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios
 
 
 def evaluate_model(
@@ -511,7 +517,7 @@ def evaluate_model(
     logger.info(f"Running evaluation on {len(test_dataset)} test examples")
     
     # Run forward pass on test set (use step=-1 to trigger debug logging)
-    _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths = run_forward_pass(
+    _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios = run_forward_pass(
         batch_rows=test_dataset,
         sampling_client=sampling_client,
         classmate_sampling_client=classmate_sampling_client,
@@ -683,7 +689,7 @@ def main(configs):
             sampling_client = service_client.create_sampling_client(model_path=sampling_path)
 
             # Run forward pass
-            training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths = run_forward_pass(
+            training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios = run_forward_pass(
                 batch_rows=batch_rows,
                 sampling_client=sampling_client,
                 classmate_sampling_client=classmate_sampling_client,
@@ -702,6 +708,7 @@ def main(configs):
             all_final_rewards = [r for group in batch_final_rewards for r in group]
             all_main_response_lengths = [l for group in batch_main_response_lengths for l in group]
             all_classmate_response_lengths = [l for group in batch_classmate_response_lengths for l in group]
+            all_keep_ratios = [k for group in batch_keep_ratios for k in group]
             
             # Calculate batch rewards (use total rewards for logging)
             batch_rewards = all_final_rewards
@@ -725,6 +732,8 @@ def main(configs):
             metrics["critic/classmate_reward/std"] = np.std(all_classmate_rewards) if all_classmate_rewards else 0.0
             metrics["critic/rewards/mean"] = np.mean(batch_rewards) if batch_rewards else 0.0
             metrics["actor/entropy"] = sum(batch_entropies) / len(batch_entropies) if batch_entropies else 0.0
+            metrics["critic/main_keep_ratio/mean"] = np.mean(all_keep_ratios) if all_keep_ratios else 0.0
+            metrics["critic/main_keep_ratio/std"] = np.std(all_keep_ratios) if all_keep_ratios else 0.0
             
             # Response length metrics
             if all_main_response_lengths:

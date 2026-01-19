@@ -18,12 +18,13 @@ classmate_model_args:
   classmate_reward_weight: 1
 
   # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
-  classmate_reward_type: vanilla_reward
+  classmate_reward_type: null
 
   # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
   use_classmate_main_cond: no_classmate_when_main_incorrect
 
-  main_cot_keep_rate: 0.8   # only effective for vanilla_reward
+  train_main_cot_keep_rate: null   # only effective for vanilla_reward
+  eval_main_cot_keep_rate: 0.8   # only effective for vanilla_reward
   random_truncate_min_keep_rate: 0.1    # only effective for random_truncate
   random_truncate_max_keep_rate: 0.9    # only effective for random_truncate
 
