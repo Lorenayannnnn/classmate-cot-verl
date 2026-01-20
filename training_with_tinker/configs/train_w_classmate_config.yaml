@@ -7,7 +7,7 @@ data_args:
 main_model_args:
   model_name_or_path: Qwen/Qwen3-8B-Base
   generation_configs:
-    max_tokens: 3072    # response length
+    max_tokens: 4096    # response length
 #    seed: ${training_args.seed}
     temperature: 1.0
     top_k: -1
@@ -41,9 +41,9 @@ training_args:
   output_dir: outputs_tinker/${training_args.wandb_run_name}
 
   seed: 42
-  epochs: 10
-  total_save_time_num: 20
-  total_test_time_num: 20
+  epochs: 1
+  total_save_time_num: 50
+  total_test_time_num: 100
   batch_size: 256
   group_size: 8   # for grpo
   micro_batch_size: 32

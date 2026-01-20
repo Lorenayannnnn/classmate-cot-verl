@@ -16,10 +16,11 @@ import tinker
 from tinker import types
 from tinker.types.tensor_data import TensorData
 from tqdm import tqdm
-from math_verify import parse, verify
-from math_verify.errors import TimeoutException
 import numpy as np
 from omegaconf import OmegaConf
+
+from training_with_tinker.reward_functions.math import math_compute_score
+from training_with_tinker.reward_functions.mmlu import MMLU
 
 # Setup logging
 logging.basicConfig(
@@ -44,11 +45,13 @@ def set_seed(seed: int):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+
 def load_data(dataset_fn, seed):
     dataset = load_dataset("parquet", data_files=dataset_fn)["train"]
     if seed:
         dataset = dataset.shuffle(seed=seed)
     return dataset
+
 
 def tokenize_input(tokenizer, prompt, is_main=True, main_CoT=None, tokenize=False):
     if type(prompt) == list:
@@ -166,44 +169,7 @@ def save_training_state(log_path: str, epoch: int, batch_idx: int, step: int):
     except Exception as e:
         logger.warning(f"Failed to save training state to {state_path}: {e}")
 
-def compute_score(
-    solution_str,
-    ground_truth,
-    data_source=None,
-    extra_info=None,
-    sandbox_fusion_url=None,
-    concurrent_semaphore=None,
-    memory_limit_mb=None,
-    method=None,
-    return_dict=True,
-    **kwargs,
-):
-    # if data_source == "MATH" or data_source == "gsm8k" or data_source == "deepscaler" or data_source == "aime":
-    extracted_sol = None
-    ground_truth_boxed = "\\boxed{" + ground_truth + "}"
-    try:
-        # solution_str = parse(solution_str, parsing_timeout=None)
-        # ground_truth = parse(ground_truth, parsing_timeout=None)
-        # score = 1 if verify(solution_str, ground_truth, timeout_seconds=None) else 0
-        extracted_sol = parse(solution_str)
-        ground_truth = parse(ground_truth_boxed)
-        score = 1 if verify(extracted_sol, ground_truth) else 0
-    except (TimeoutException, TimeoutError) as e:
-        logger.error("Timeout exception during math_verify.")
-        score = 0
-    except Exception as e:
-        logger.error(f"Error during math_verify: {e}")
-        score = 0
 
-    return score, extracted_sol
-
-    # if return_dict:
-    #     return {
-    #         "score": score,
-    #         "extracted_solution": extracted_sol
-    #     }
-    # else:
-    #     return score
 
 
 def log_metrics(metrics: Dict[str, float], step: int, log_dir: str):
@@ -242,6 +208,7 @@ def run_forward_pass(
     main_sampling_params,
     classmate_sampling_params,
     configs,
+    compute_score,
     do_eval=False,
     step=0,
     rng=None
@@ -271,9 +238,17 @@ def run_forward_pass(
     for i in range(len(batch_rows)):
         row = batch_rows[i]
         raw_prompt = row["prompt"][0]["content"]
+        hint_str, instruction_following = "", ""
+        if "hint_str" in row:
+            hint_str = row["hint_str"]
+        if "instruction_following" in row:
+            instruction_following = row["instruction_following"]
+        # raw_prompt += hint_str + instruction_following
 
-        main_input_token_ids = tokenize_input(main_tokenizer, raw_prompt, is_main=True, main_CoT=None, tokenize=True)
-        main_prompt = tokenize_input(main_tokenizer, raw_prompt, is_main=True, main_CoT=None, tokenize=False)
+        main_prompt = raw_prompt + hint_str + instruction_following
+
+        main_input_token_ids = tokenize_input(main_tokenizer, main_prompt, is_main=True, main_CoT=None, tokenize=True)
+        main_prompt = tokenize_input(main_tokenizer, main_prompt, is_main=True, main_CoT=None, tokenize=False)
         tinker_main_model_input = types.ModelInput.from_ints(tokens=main_input_token_ids)
 
         # Generate response
@@ -345,8 +320,14 @@ def run_forward_pass(
 
             main_model_resp = main_tokenizer.decode(sampled_tokens, skip_special_tokens=True)
 
-            main_reward, main_extracted_sol = compute_score(main_model_resp, ground_truth)
-            
+            # main_reward, main_extracted_sol = compute_score(main_model_resp, ground_truth)
+            scoring_results = compute_score(main_model_resp, ground_truth)
+
+            main_reward = scoring_results["score"]
+            main_extracted_sol = scoring_results.get("extracted_sol", None)
+            # if "answer_format_correct" in scoring_results:
+            #     main_reward += scoring_results["answer_format_correct"]
+
             group_main_responses.append(main_model_resp)
             group_main_extracted_sols.append(main_extracted_sol)
 
@@ -360,15 +341,27 @@ def run_forward_pass(
             else:
                 raise ValueError(f"Unknown classmate CoT reward type: {configs.classmate_model_args.classmate_reward_type}")
 
-            classmate_prompt, truncated_main_pred = get_classmate_prompt(raw_prompt, main_model_resp, keep_ratio=keep_ratio)
             # Note: classmate_prompt is same as raw_prompt
+            # classmate_prompt, truncated_main_pred = get_classmate_prompt(raw_prompt, main_model_resp, keep_ratio=keep_ratio)
+            # is_classmate_input_len = find_token_subsequence_for_string(main_tokenizer, sampled_tokens, truncated_main_pred)
+            # try:
+            #     assert is_classmate_input_len != -1, "Failed to find classmate input subsequence in main model response tokens"
+            #     # main_tokenizer.decode(sampled_tokens[:4105], skip_special_tokens=True)
+            # except:
+            #     breakpoint()
+
+            hint_str, instruction_following = "", ""
+            row = batch_rows[i]
+            if "instruction_following" in row:
+                instruction_following = "\n" + row["instruction_following"]
+
+            classmate_prompt = raw_prompt + instruction_following
+            raw_main_resp_tokens = main_tokenizer.encode(main_model_resp)
+            is_classmate_input_len = int(len(raw_main_resp_tokens) * keep_ratio)
+            truncated_main_pred = main_tokenizer.decode(raw_main_resp_tokens[:is_classmate_input_len], skip_special_tokens=True)
+
             group_keep_ratios.append(keep_ratio)
 
-            is_classmate_input_len = find_token_subsequence_for_string(main_tokenizer, sampled_tokens, truncated_main_pred)
-            try:
-                assert is_classmate_input_len != -1, "Failed to find classmate input subsequence in main model response tokens"
-            except:
-                breakpoint()
             group_is_classmate_input_len.append(is_classmate_input_len)
 
             classmate_input_token_ids = tokenize_input(classmate_tokenizer, classmate_prompt, is_main=False, main_CoT=truncated_main_pred, tokenize=True)
@@ -392,7 +385,7 @@ def run_forward_pass(
         batch_keep_ratios.append(group_keep_ratios)
 
     # Process classmate responses
-    for i, (sample_classmate_futures, group_main_rewards, group_main_tokens, group_logprobs, group_ob_lens,
+    for i, (sample_classmate_futures, tmp_group_main_rewards, group_main_tokens, group_logprobs, group_ob_lens,
             group_is_classmate_input_len) in enumerate(
             zip(batch_classmate_futures, batch_main_rewards, batch_main_tokens, batch_logprobs,
                 batch_ob_lens, batch_is_classmate_input_len)):
@@ -409,11 +402,16 @@ def run_forward_pass(
             classmate_model_resp = classmate_tokenizer.decode(classmate_sampled_tokens, skip_special_tokens=True)
             group_classmate_response_lengths.append(len(classmate_sampled_tokens))
 
-            classmate_reward, classmate_extracted_sol = compute_score(classmate_model_resp, ground_truth)
+            # classmate_reward, classmate_extracted_sol = compute_score(classmate_model_resp, ground_truth)
+            cl_scoring_results = compute_score(classmate_model_resp, ground_truth)
+            classmate_reward = cl_scoring_results["score"]
+            classmate_extracted_sol = cl_scoring_results.get("extracted_sol", None)
+            # if "answer_format_correct" in cl_scoring_results:
+            #     classmate_reward += cl_scoring_results["answer_format_correct"]
 
-            # Log detailed info for first 10 samples during eval (step < 0 means eval mode)
+            # Log detailed info for first 10 samples during eval
             total_sample_idx = i * len(sample_classmate_futures) + j
-            if step < 0 and total_sample_idx < 10:
+            if do_eval and total_sample_idx < 10:
                 logger.info(f"\n{'='*80}")
                 logger.info(f"🐛 Sample {total_sample_idx + 1}/10")
                 logger.info(f"🐛[raw_prompt] {batch_raw_prompts[i]}")
@@ -422,17 +420,19 @@ def run_forward_pass(
                 if batch_main_extracted_sols[i][j] is not None:
                     logger.info(f"🐛[main_extracted] {batch_main_extracted_sols[i][j]}")
                 logger.info(f"🐛[ground_truth] {ground_truth}")
-                logger.info(f"🐛[main_reward] {group_main_rewards[j]}")
+                logger.info(f"🐛[main_reward] {tmp_group_main_rewards[j]}")
                 logger.info(f"🐛[classmate_prompt] {batch_classmate_prompts[i][j]}")
                 logger.info(f"🐛[classmate_response] {classmate_model_resp}")
                 if classmate_extracted_sol is not None:
                     logger.info(f"🐛[classmate_extracted] {classmate_extracted_sol}")
                 logger.info(f"🐛[classmate_reward] {classmate_reward}")
                 logger.info(f"{'='*80}\n")
+            # TODO haha
+            # breakpoint()
 
             group_classmate_rewards.append(classmate_reward)
 
-            if configs.classmate_model_args.use_classmate_main_cond == "no_classmate_when_main_incorrect" and group_main_rewards[j] == 0:
+            if configs.classmate_model_args.use_classmate_main_cond == "no_classmate_when_main_incorrect" and tmp_group_main_rewards[j] == 0:
                 weighted_classmate_reward = 0.0
             else:
                 weighted_classmate_reward = classmate_reward * configs.classmate_model_args.classmate_reward_weight
@@ -442,7 +442,7 @@ def run_forward_pass(
         batch_classmate_response_lengths.append(group_classmate_response_lengths)
 
         # Compute total rewards (main + weighted classmate). Note this is only used for logging
-        group_final_rewards = [m + c for m, c in zip(group_main_rewards, group_weighted_classmate_rewards)]
+        group_final_rewards = [m + c for m, c in zip(group_main_rewards, group_classmate_rewards)]
         batch_final_rewards.append(group_final_rewards)
 
         classmate_advantages = []
@@ -506,6 +506,7 @@ def evaluate_model(
     main_sampling_params,
     classmate_sampling_params,
     configs,
+    compute_score,
     step,
 ):
     """
@@ -526,6 +527,7 @@ def evaluate_model(
         main_sampling_params=main_sampling_params,
         classmate_sampling_params=classmate_sampling_params,
         configs=configs,
+        compute_score=compute_score,
         step=step,
         do_eval=True
     )
@@ -552,6 +554,15 @@ def evaluate_model(
     return eval_metrics
 
 
+def get_compute_score(dataset_name: str):
+    if dataset_name == "hendrycks_math_minimal_answer_box_prompt_105_test":
+        return math_compute_score
+    elif "mmlu" in dataset_name:
+        return MMLU().compute_score
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name} for reward function")
+
+
 @hydra.main(config_path="configs", config_name="train_w_classmate_config", version_base=None)
 def main(configs):
     set_seed(configs.training_args.seed)
@@ -562,13 +573,31 @@ def main(configs):
     classmate_tokenizer = AutoTokenizer.from_pretrained(configs.classmate_model_args.model_name_or_path)
 
     logger.info(f"Loading dataset {configs.data_args.dataset_name}")
-    # load from parquet
-    train_dataset = load_data(f"data/{configs.data_args.dataset_name}/train.parquet", seed=configs.training_args.seed)
-    test_dataset = load_data(f"data/{configs.data_args.dataset_name}/test.parquet", seed=None)
 
-    logger.info(f"Filter dataset by max_prompt_length {configs.data_args.max_prompt_length} for main model")
-    train_dataset = filter_too_long_examples(train_dataset, main_tokenizer, configs.data_args.max_prompt_length)
-    test_dataset = filter_too_long_examples(test_dataset, main_tokenizer, configs.data_args.max_prompt_length)
+    filtered_train_dataset_fn = f"data/{configs.data_args.dataset_name}/{configs.main_model_args.model_name_or_path}/{configs.data_args.max_prompt_length}.parquet"
+    filtered_test_dataset_fn = f"data/{configs.data_args.dataset_name}/{configs.main_model_args.model_name_or_path}/{configs.data_args.max_prompt_length}_test.parquet"
+
+    if os.path.exists(filtered_train_dataset_fn) and os.path.exists(filtered_test_dataset_fn):
+        logger.info(f"Found pre-filtered dataset at {filtered_train_dataset_fn} and {filtered_test_dataset_fn}, loading them")
+        train_dataset = load_data(filtered_train_dataset_fn, seed=configs.training_args.seed)
+        test_dataset = load_data(filtered_test_dataset_fn, seed=None)
+    else:
+        logger.info(f"No pre-filtered dataset found, loading unfiltered dataset and filtering now")
+        # load from parquet
+        train_dataset = load_data(f"data/{configs.data_args.dataset_name}/train.parquet", seed=configs.training_args.seed)
+        test_dataset = load_data(f"data/{configs.data_args.dataset_name}/test.parquet", seed=None)
+
+        logger.info(f"Filter dataset by max_prompt_length {configs.data_args.max_prompt_length} for main model")
+        train_dataset = filter_too_long_examples(train_dataset, main_tokenizer, configs.data_args.max_prompt_length)
+        test_dataset = filter_too_long_examples(test_dataset, main_tokenizer, configs.data_args.max_prompt_length)
+
+        # Save filtered datasets for future use
+        os.makedirs(os.path.dirname(filtered_train_dataset_fn), exist_ok=True)
+        train_dataset.to_parquet(filtered_train_dataset_fn)
+        test_dataset.to_parquet(filtered_test_dataset_fn)
+        logger.info(f"Saved filtered datasets to {filtered_train_dataset_fn} and {filtered_test_dataset_fn}")
+
+    compute_score = get_compute_score(configs.data_args.dataset_name)
 
     logger.info("Setting up wandb")
     if configs.training_args.use_wandb:
@@ -650,6 +679,7 @@ def main(configs):
         main_sampling_params=main_sampling_params,
         classmate_sampling_params=classmate_sampling_params,
         configs=configs,
+        compute_score=compute_score,
         step=0,
     )
 
@@ -699,6 +729,7 @@ def main(configs):
                 classmate_sampling_params=classmate_sampling_params,
                 configs=configs,
                 step=step,
+                compute_score=compute_score,
                 rng=rng
             )
 
@@ -780,6 +811,7 @@ def main(configs):
                     main_sampling_params=main_sampling_params,
                     classmate_sampling_params=classmate_sampling_params,
                     configs=configs,
+                    compute_score=compute_score,
                     step=step,
                 )
 
