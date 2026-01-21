@@ -195,6 +195,9 @@ def normalize_rewards(reward_list: list[float]) -> list[float]:
         return reward_list
     mean_reward = np.mean(reward_list)
     std_reward = np.std(reward_list)
+    # If all rewards are the same, return them as-is (no normalization needed)
+    if std_reward < 1e-8:
+        return reward_list
     normalized = [(r - mean_reward) / (std_reward + 1e-8) for r in reward_list]
     return normalized
 
@@ -385,10 +388,7 @@ def run_forward_pass(
         batch_keep_ratios.append(group_keep_ratios)
 
     # Process classmate responses
-    for i, (sample_classmate_futures, tmp_group_main_rewards, group_main_tokens, group_logprobs, group_ob_lens,
-            group_is_classmate_input_len) in enumerate(
-            zip(batch_classmate_futures, batch_main_rewards, batch_main_tokens, batch_logprobs,
-                batch_ob_lens, batch_is_classmate_input_len)):
+    for i, (sample_classmate_futures, group_main_rewards, group_main_tokens, group_logprobs, group_ob_lens, group_is_classmate_input_len) in enumerate(zip(batch_classmate_futures, batch_main_rewards, batch_main_tokens, batch_logprobs, batch_ob_lens, batch_is_classmate_input_len)):
         # Get classmate response and reward
         group_classmate_rewards: list[float] = []
         group_weighted_classmate_rewards: list[float] = []
@@ -420,19 +420,18 @@ def run_forward_pass(
                 if batch_main_extracted_sols[i][j] is not None:
                     logger.info(f"🐛[main_extracted] {batch_main_extracted_sols[i][j]}")
                 logger.info(f"🐛[ground_truth] {ground_truth}")
-                logger.info(f"🐛[main_reward] {tmp_group_main_rewards[j]}")
+                logger.info(f"🐛[main_reward] {group_main_rewards[j]}")
                 logger.info(f"🐛[classmate_prompt] {batch_classmate_prompts[i][j]}")
                 logger.info(f"🐛[classmate_response] {classmate_model_resp}")
                 if classmate_extracted_sol is not None:
                     logger.info(f"🐛[classmate_extracted] {classmate_extracted_sol}")
                 logger.info(f"🐛[classmate_reward] {classmate_reward}")
                 logger.info(f"{'='*80}\n")
-            # TODO haha
             # breakpoint()
 
             group_classmate_rewards.append(classmate_reward)
 
-            if configs.classmate_model_args.use_classmate_main_cond == "no_classmate_when_main_incorrect" and tmp_group_main_rewards[j] == 0:
+            if configs.classmate_model_args.use_classmate_main_cond == "no_classmate_when_main_incorrect" and group_main_rewards[j] == 0:
                 weighted_classmate_reward = 0.0
             else:
                 weighted_classmate_reward = classmate_reward * configs.classmate_model_args.classmate_reward_weight
@@ -445,13 +444,12 @@ def run_forward_pass(
         group_final_rewards = [m + c for m, c in zip(group_main_rewards, group_classmate_rewards)]
         batch_final_rewards.append(group_final_rewards)
 
-        classmate_advantages = []
+        classmate_advantages = [0.0] * len(group_main_rewards)    # dummy placeholder
 
         if "classmate" in configs.training_args.adv_estimator:
             if configs.training_args.adv_estimator == "grpo_classmate":
                 summed_rewards = [m + c for m, c in zip(group_main_rewards, group_weighted_classmate_rewards)]
                 main_advantages = normalize_rewards(summed_rewards)
-                classmate_advantages = [0.0] * len(main_advantages)     # dummy placeholder
             elif configs.training_args.adv_estimator == "grpo_main_classmate_separated":
                 main_advantages = normalize_rewards(group_main_rewards)
                 classmate_advantages = normalize_rewards(group_weighted_classmate_rewards)
@@ -463,7 +461,7 @@ def run_forward_pass(
             raise ValueError(f"Unknown advantage estimator: {configs.training_args.adv_estimator}")
 
         # check if all advantages are zero
-        if step != -1 and all(advantage == 0.0 for advantage in main_advantages) and all(advantage == 0.0 for advantage in classmate_advantages):
+        if do_eval or (all(advantage == 0.0 for advantage in main_advantages) and all(advantage == 0.0 for advantage in classmate_advantages)):
             continue
 
         for tokens, logprob, main_advantage, classmate_advantage, ob_len, is_classmate_input_len in zip(group_main_tokens, group_logprobs, main_advantages, classmate_advantages, group_ob_lens, group_is_classmate_input_len):
@@ -484,6 +482,7 @@ def run_forward_pass(
             else:
                 assert "baseline" in configs.training_args.adv_estimator, "Only baseline-based advantage estimators are supported without classmate"
                 all_advantages = all_main_advantages
+
             datum = types.Datum(
                 model_input=types.ModelInput.from_ints(tokens=input_tokens),
                 loss_fn_inputs={

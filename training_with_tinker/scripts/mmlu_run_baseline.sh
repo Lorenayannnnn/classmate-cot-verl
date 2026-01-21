@@ -2,8 +2,8 @@
 export TINKER_API_KEY=tml-qNTmad59cflqHptwnHs7mS6fcJhqB6oj2bvaJdHpNzxHem4ctaeMSHhmqImBNtKhOAAAA
 export PYTHONPATH=:${PYTHONPATH}
 
-dataset_name=mmlu_sycophancy
-#dataset_name=mmlu_q_hint_sep
+#dataset_name=mmlu_sycophancy
+dataset_name=mmlu_q_hint_sep
 #model_name_or_path=Qwen/Qwen3-8B-Base
 model_name_or_path=Qwen/Qwen3-4B-Instruct-2507
 eval_main_cot_keep_rate=0.5
