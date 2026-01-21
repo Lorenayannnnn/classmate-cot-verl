@@ -679,7 +679,7 @@ def main(configs):
         classmate_sampling_params=classmate_sampling_params,
         configs=configs,
         compute_score=compute_score,
-        step=0,
+        step=step,
     )
 
     # Log initial eval metrics

@@ -5,7 +5,7 @@ export PYTHONPATH=:${PYTHONPATH}
 dataset_name=hendrycks_math_minimal_answer_box_prompt_105_test
 #model_name_or_path=Qwen/Qwen3-8B-Base
 model_name_or_path=Qwen/Qwen3-4B-Instruct-2507
-eval_main_cot_keep_rate=0.7
+eval_main_cot_keep_rate=0.5
 
 #classmate_reward_type=vanilla_reward
 classmate_reward_type=random_truncate
