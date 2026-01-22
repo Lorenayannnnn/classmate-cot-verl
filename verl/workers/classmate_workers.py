@@ -288,8 +288,14 @@ class ClassmateWorker(Worker):
         Uses vLLM for fast batched inference.
         """
         # data.non_tensor_batch = {
-        #     "prompts": all_prompts,
+        #     "raw_prompts": np.array(all_prompts),
+        #     "main_model_responses": np.array(all_processed_actor_responses),
+        #     "keep_rates": np.array(all_keep_rates),
+        #     "all_other_prompts": np.array(all_other_prompts) if all_other_prompts is not None else None,
+        #     "all_other_prompt_gts": np.array(all_other_prompt_gts) if all_other_prompt_gts is not None else None,
+        #     # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         # }
+
         classmate_outputs = []
         classmate_output_lens = []
         classmate_prompts = []
@@ -302,6 +308,7 @@ class ClassmateWorker(Worker):
             # Handle padding: only slice if pad_size is a positive integer
             prompts = data.non_tensor_batch["raw_prompts"]
             actor_responses = data.non_tensor_batch["main_model_responses"]
+            all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
 
             # Convert numpy array to list if needed
             # if isinstance(prompt_plus_actor_responses, np.ndarray):
@@ -315,6 +322,7 @@ class ClassmateWorker(Worker):
             original_length = len(prompts)
             prompts = [p for p in prompts if p is not None]
             actor_responses = [r for r in actor_responses if r is not None]
+            all_other_prompts = [p for p in all_other_prompts] if all_other_prompts is not None else None
 
             assert self.generation_config.get("num_return_sequences", 1) == 1 or self.generation_config.get("n", 1) == 1, "Classmate worker currently only supports num_return_sequences=1"
 
@@ -333,13 +341,24 @@ class ClassmateWorker(Worker):
                 batch_actor_responses = actor_responses[batch_start:batch_end]
                 batch_input_prompts = []
 
+                batch_other_prompt = None
+
+                if all_other_prompts is not None:
+                    batch_other_prompt = all_other_prompts[batch_start:batch_end]
+
                 # Apply classmate's chat template
-                for tmp_prompt, tmp_response in zip(batch_prompts, batch_actor_responses):
+                for idx, (tmp_prompt, tmp_response) in enumerate(zip(batch_prompts, batch_actor_responses)):
+                    add_generation_prompt = False
                     messages = [
                         {"role": "user", "content": tmp_prompt},
                         {"role": "assistant", "content": tmp_response},
                     ]
-                    token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=False)
+
+                    if batch_other_prompt is not None:
+                        messages.append({"role": "user", "content": batch_other_prompt[idx]})
+                        add_generation_prompt = True
+
+                    token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
                     # Remove trailing special tokens
                     end = len(token_ids)
                     while end > 0 and token_ids[end - 1] in self.special_ids:

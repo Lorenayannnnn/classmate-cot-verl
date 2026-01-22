@@ -149,6 +149,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
+
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
             num_turns = data_item.non_tensor_batch.get("__num_turns__", None)
@@ -185,13 +186,14 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             total_classmate_reward_dict = {}
             classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
             classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
-            main_keep_rates = data_item.non_tensor_batch["main_keep_rates"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
+            main_keep_rate = data_item.non_tensor_batch["main_keep_rates"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
 
             # TODO weight for each classmate model
             classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
 
             # Debug
             extracted_classmate_sol = []
+            classmate_ground_truth = data_item.non_tensor_batch["all_other_prompt_gts"]["ground_truth"] if "all_other_prompt_gts" in data_item.non_tensor_batch else ground_truth
 
             for classmate_idx, classmate_output in enumerate(classmate_outputs):   # Iterate over num_classmate_models
                 tmp_total_classmate_reward_dict = {}
@@ -200,7 +202,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     tmp_classmate_result = self.compute_score(
                         data_source=data_source,
                         solution_str=classmate_output_sample,
-                        ground_truth=ground_truth,
+                        ground_truth=classmate_ground_truth,
                         extra_info=extra_info,
                         # TODO flexible for classmate (not strict requirement on format)
                         method="flexible",
@@ -292,10 +294,10 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 print("🐛[main_reward]", base_reward)
                 import numpy as np
                 print("🐛[classmate_prompt]", classmate_prompts[0])   # 0th classmate model
-                print("🐛[main_keep_rate]", np.array2string(main_keep_rates[0][0], precision=3))   # 0th classmate model, 0th sample
+                print("🐛[main_keep_rate]", np.array2string(main_keep_rate, precision=3))   # 0th classmate model, 0th sample
                 print("🐛[classmate_output]", classmate_outputs[0][0])     # 0th classmate model
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
-                print("🐛[ground_truth]", ground_truth)
+                print("🐛[classmate_ground_truth]", classmate_ground_truth)
                 print("🐛[classmate_reward]", classmate_reward)
                 print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
                 # if isinstance(score, dict):

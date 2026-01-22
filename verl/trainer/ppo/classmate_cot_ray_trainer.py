@@ -1068,79 +1068,128 @@ class ClassmateCoTRayPPOTrainer:
 
         return truncated_text, main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index)
 
+    # def derangement(self, lst):
+    #     n = len(lst)
+    #     if n <= 1:
+    #         raise ValueError("Derangement not possible")
+    #
+    #     perm = lst[:]
+    #
+    #     for i in range(n - 1):
+    #         j = random.randrange(i + 1, n)
+    #         perm[i], perm[j] = perm[j], perm[i]
+    #
+    #     # Fix last element if needed
+    #     if perm[-1] == lst[-1]:
+    #         perm[-1], perm[-2] = perm[-2], perm[-1]
+    #
+    #     return perm
+
+    def derange_two_lists(self, lst1, lst2):
+        if len(lst1) != len(lst2):
+            raise ValueError("Lists must have the same length")
+
+        n = len(lst1)
+        if n <= 1:
+            raise ValueError("Derangement not possible")
+
+        idx = list(range(n))
+
+        # Generate derangement of indices
+        for i in range(n - 1):
+            j = self.rng.randrange(i + 1, n)
+            idx[i], idx[j] = idx[j], idx[i]
+
+        if idx[-1] == n - 1:
+            idx[-1], idx[-2] = idx[-2], idx[-1]
+
+        # Apply permutation
+        new1 = [lst1[i] for i in idx]
+        new2 = [lst2[i] for i in idx]
+
+        return new1, new2
+
     def _prepare_classmate_batch(self, data: DataProto, is_eval: bool):
         """
         Prepare batch data for classmate generation. Each worker will handle its own tokenization.
         This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
         given we need to apply chat template
         """
-        
-        # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
-        # all_prompts = self.tokenizer.batch_decode(
-        #     data.non_tensor_batch["raw_prompt"], skip_special_tokens=True
-        # )
-        # all_prompts = [message[0]["content"] for message in data.non_tensor_batch["raw_prompt"]]
-        all_prompts = data.non_tensor_batch["raw_prompt"]
-
-        # print("🐛🐛🐛 raw_prompt cnt", len(data.non_tensor_batch["raw_prompt"]))
-        # print("🐛🐛🐛 raw_messages", data.non_tensor_batch["raw_prompt"])
-        # print("🐛🐛🐛 raw_prompts", all_prompts)
+        if "response_mask" not in data.batch.keys():
+            data.batch["response_mask"] = compute_response_mask(data)
 
         all_actor_responses = self.tokenizer.batch_decode(
             data.batch["responses"], skip_special_tokens=True
         )
-        # print("🐛 sample prompt id", data.batch["prompts"][0])
-        # print("🐛 sample prompt", all_prompts[0])
-        # print("🐛 sample prompt id", data.batch["prompts"][0])
-        # print("🐛 sample response", all_actor_responses[0])
-        # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
-
-        all_keep_rates = []
-
-        # all_prompt_plus_actor_responses = []
-        all_processed_actor_responses = []
-        all_classmate_input_mask = []
-
-        assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
-
-        if "response_mask" not in data.batch.keys():
-            data.batch["response_mask"] = compute_response_mask(data)
-        data_source_list = data.non_tensor_batch.get("data_source")
-
-        # Find the maximum response length in the batch for consistent mask padding
         max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
 
-        for res_idx, response in enumerate(all_actor_responses):
-            if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
-                # Use fixed dropout rate during evaluation or for vanilla reward
-                keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
-                # if "code" in data_source_list[res_idx]:
-                #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
-                #     print(f"🐛🐛🐛 original response {processed_response}")
-                    # print(f"🐛🐛🐛 sample modified_response {modified_response}")
-            elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
-                keep_rate = self.rng.uniform(self.classmate_cot_reward_configs.main_cot_keep_rate_min, self.classmate_cot_reward_configs.main_cot_keep_rate_max)
-            else:
-                raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
+        all_prompts = data.non_tensor_batch["raw_prompt"]
+        all_processed_actor_responses = []
+        all_classmate_input_mask = []
+        all_keep_rates = []
 
-            truncated_main_cot, classmate_input_mask = self._process_main_cot_helper(
-                data_source_list[res_idx],
-                response,
-                data.batch["responses"][res_idx],
-                data.batch["response_mask"][res_idx],
-                keep_rate
-            )
-            all_processed_actor_responses.append(truncated_main_cot)
-            all_keep_rates.append(keep_rate)
+        all_other_prompts = None
+        all_other_prompt_gts = None
 
-            # Pad mask to max_response_len to ensure all masks have the same length
-            padded_mask = classmate_input_mask + [0] * (max_response_len - len(classmate_input_mask))
-            all_classmate_input_mask.append(padded_mask)
+        if self.classmate_cot_reward_configs.classmate_reward_type == "help_other_questions":
+            all_processed_actor_responses = all_actor_responses
+            all_classmate_input_mask = [[1] * max_response_len] * len(all_prompts)
+            all_keep_rates = [1.0] * len(all_prompts)
+            all_gt = data.non_tensor_batch["reward_model"].tolist()
+            all_other_prompts, all_other_prompt_gts = self.derange_two_lists(all_prompts, all_gt)
+        elif self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward", "random_truncate", "remove_wo_cot"]:
+            # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
+            # all_prompts = self.tokenizer.batch_decode(
+            #     data.non_tensor_batch["raw_prompt"], skip_special_tokens=True
+            # )
+            # all_prompts = [message[0]["content"] for message in data.non_tensor_batch["raw_prompt"]]
+
+            # print("🐛🐛🐛 raw_prompt cnt", len(data.non_tensor_batch["raw_prompt"]))
+            # print("🐛🐛🐛 raw_messages", data.non_tensor_batch["raw_prompt"])
+            # print("🐛🐛🐛 raw_prompts", all_prompts)
+
+            # print("🐛 sample prompt", all_prompts[0])
+            # print("🐛 sample prompt id", data.batch["prompts"][0])
+            # print("🐛 sample response", all_actor_responses[0])
+            # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
+
+            assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
+
+            data_source_list = data.non_tensor_batch.get("data_source")
+
+            for res_idx, response in enumerate(all_actor_responses):
+                if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
+                    # Use fixed dropout rate during evaluation or for vanilla reward
+                    keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
+                    # if "code" in data_source_list[res_idx]:
+                    #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
+                    #     print(f"🐛🐛🐛 original response {processed_response}")
+                        # print(f"🐛🐛🐛 sample modified_response {modified_response}")
+                elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
+                    keep_rate = self.rng.uniform(self.classmate_cot_reward_configs.main_cot_keep_rate_min, self.classmate_cot_reward_configs.main_cot_keep_rate_max)
+                else:
+                    raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
+
+                truncated_main_cot, classmate_input_mask = self._process_main_cot_helper(
+                    data_source_list[res_idx],
+                    response,
+                    data.batch["responses"][res_idx],
+                    data.batch["response_mask"][res_idx],
+                    keep_rate
+                )
+                all_processed_actor_responses.append(truncated_main_cot)
+                all_keep_rates.append(keep_rate)
+
+                # Pad mask to max_response_len to ensure all masks have the same length
+                padded_mask = classmate_input_mask + [0] * (max_response_len - len(classmate_input_mask))
+                all_classmate_input_mask.append(padded_mask)
 
         classmate_non_tensor_batch = {
             "raw_prompts": np.array(all_prompts),
             "main_model_responses": np.array(all_processed_actor_responses),
             "keep_rates": np.array(all_keep_rates),
+            "all_other_prompts": np.array(all_other_prompts) if all_other_prompts is not None else None,
+            "all_other_prompt_gts": np.array(all_other_prompt_gts) if all_other_prompt_gts is not None else None,
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
 
@@ -1151,6 +1200,47 @@ class ClassmateCoTRayPPOTrainer:
 
         # All masks are now padded to max_response_len, so they can be safely converted to a tensor
         return torch.tensor(all_classmate_input_mask), DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
+
+    def _prepare_help_other_qs_cot_classmate_batch(self, data: DataProto, is_eval: bool):
+        """
+        Prepare batch data for classmate generation in help_other_questions mode.
+        Each worker will handle its own tokenization.
+        """
+        def derangement(lst):
+            n = len(lst)
+            if n <= 1:
+                raise ValueError("Derangement not possible")
+
+            perm = lst[:]
+
+            for i in range(n - 1):
+                j = random.randrange(i + 1, n)
+                perm[i], perm[j] = perm[j], perm[i]
+
+            # Fix last element if needed
+            if perm[-1] == lst[-1]:
+                perm[-1], perm[-2] = perm[-2], perm[-1]
+
+            return perm
+
+        all_prompts = data.non_tensor_batch["raw_prompt"]
+        all_actor_responses = self.tokenizer.batch_decode(
+            data.batch["responses"], skip_special_tokens=True
+        )
+        max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
+        all_other_prompts = derangement(all_prompts)
+        all_classmate_input_mask = [1] * len(max_response_len)
+        all_keep_rates = [1.0] * len(all_prompts)
+
+        classmate_non_tensor_batch = {
+            "raw_prompts": np.array(all_other_prompts),
+            "main_model_responses": np.array(all_actor_responses),
+            "keep_rates": np.array(all_keep_rates),
+        }
+
+        return torch.tensor(all_classmate_input_mask), DataProto(batch=None, non_tensor_batch=classmate_non_tensor_batch)
+
+
 
     def _generate_classmate_continuations(self, batch: DataProto, is_eval=False) -> DataProto:
         """
@@ -1168,6 +1258,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_input_mask, classmate_batch = self._prepare_classmate_batch(batch, is_eval)
 
         keep_rates = classmate_batch.non_tensor_batch.pop("keep_rates")
+        all_other_prompt_gts = classmate_batch.non_tensor_batch.pop("all_other_prompt_gts", None)
 
         bsz = len(batch)
 
@@ -1226,6 +1317,7 @@ class ClassmateCoTRayPPOTrainer:
         batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
         batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
         batch.non_tensor_batch["main_keep_rates"] = keep_rates
+        batch.non_tensor_batch["all_other_prompt_gts"] = all_other_prompt_gts
 
         batch.batch["classmate_input_mask"] = classmate_input_mask
 

@@ -78,7 +78,7 @@ reward_model:
 
     classmate_reward_weight: 1
 
-    # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
+    # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility, help_other_questions
     classmate_reward_type: random_truncate
     use_classmate_main_cond: no_classmate_when_main_incorrect   # no_classmate (baseline), always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
     token_level_classmate_reward_mode: classmate_partial    # classmate_partial, all
@@ -95,7 +95,8 @@ reward_model:
   classmate_use_vllm: True
   classmate_num_return_sequences: 1
   classmate_generation_configs:
-    max_tokens: 4096    # prompt len + main model cot + classmate response len
+#    max_tokens: 4096    # prompt len + main model cot + classmate response len
+    max_tokens: 8192    # double if doing help_other_questions
     do_sample: False   # If false, then temperature and top_p have no effect
     temperature: 0.0
 #    top_p: 0.9
