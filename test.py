@@ -191,8 +191,13 @@ def main():
 
     # dataset_name = "gsm8k_minimal_answer_box_prompt"
     # dataset_name = "hendrycks_math_minimal_answer_box_prompt_105_test"
+    dataset_name = "hendrycks_math_q_type"
 
-    dataset_name = "DeepScaleR_answer_box"
+    # reward_type = "vanilla_truncate"
+    # reward_type = "help_other_questions"
+    reward_type = "help_other_similar_questions_w_guide_colon"
+
+    # dataset_name = "DeepScaleR_answer_box"
     data_source = None
 
     data_split = "train"
@@ -291,7 +296,7 @@ def main():
     else:
         main_sampling_params = SamplingParams(temperature=0.0, top_k=-1, top_p=1.0, max_tokens=main_max_response_len, seed=seed)
 
-    output_dir = f"outputs/inference_before_train/{'use_together' if use_together else 'all_vllm'}/{dataset_name}_{data_split}_{data_source}/main_{main_max_response_len}/{'w_temperature' if use_temperature else 'greedy'}/main_cot_keep_ratio_{main_cot_keep_ratio}/{main_model_name_path.replace('/', '_')}_with_{classmate_model_name_path.replace('/', '_')}"
+    output_dir = f"outputs/inference_before_train/{'use_together' if use_together else 'all_vllm'}/{dataset_name}_{data_split}_{data_source}/main_{main_max_response_len}/{'w_temperature' if use_temperature else 'greedy'}/{reward_type if 'help' in reward_type else f'{reward_type}/main_cot_keep_ratio_{main_cot_keep_ratio}'}/{main_model_name_path.replace('/', '_')}_with_{classmate_model_name_path.replace('/', '_')}"
     os.makedirs(output_dir, exist_ok=True)
     main_correct = 0
     classmate_correct = 0
@@ -335,11 +340,82 @@ def main():
         # classmate_prompt = classmate_tokenizer.apply_chat_template(prompt, tokenize=False)
         main_prompt = tokenize_input(main_tokenizer, prompt, tokenize=False)
         main_pred, main_pred_token_ids = generate(main_model, main_model_name_path, main_tokenizer, main_prompt, main_sampling_params, is_qwen=True)
-        classmate_prompt, truncated_main_pred = get_classmate_prompt(prompt, main_pred, keep_ratio=main_cot_keep_ratio)
-        classmate_prompt = tokenize_input(classmate_tokenizer, classmate_prompt, is_main=False, main_CoT=truncated_main_pred, tokenize=False)
+
+        if reward_type == "help_other_questions":
+            # find another question with the same type
+            cur_type = entry["reward_model"]["type"]
+            similar_entry = None
+            for other_entry in test_dataset:
+                if other_entry == entry:
+                    continue
+                similar_entry = other_entry  # default to first different question in case no same type found
+                other_type = other_entry["reward_model"]["type"]
+                if other_type != cur_type:
+                    similar_entry = other_entry
+                    break
+            if similar_entry is not None:
+                similar_prompt = similar_entry["prompt"]
+                # similar_ground_truth = similar_entry["answer"] if "answer" in similar_entry else similar_entry["reward_model"]["ground_truth"]
+                # prompt = f"Question: {similar_prompt}\n"
+                # prompt += f"Solution: {main_pred}\n"
+                # prompt += f"Based on the above question and solution, please help answer the following similar math question:\n"
+                # prompt += f"{prompt}"
+
+            assert similar_entry is not None, "No similar entry found for help_other_similar_questions."
+
+            similar_q = similar_prompt[0]["content"]
+            if reward_type == "help_other_similar_questions_w_guide":
+                similar_q = "Given the above question and the solution as an example, solve the following question: \n" + similar_q
+
+            messages = [
+                {"role": "user", "content": prompt[0]["content"]},
+                {"role": "assistant", "content": main_pred},
+                {"role": "user", "content": similar_q}
+            ]
+            classmate_prompt = classmate_tokenizer.apply_chat_template(messages, tokenize=False,
+                                                                       add_generation_prompt=True)
+            classmate_ground_truth = similar_entry["reward_model"]["ground_truth"]
+        elif "help_other_similar_questions" in reward_type:
+            # find another question with the same type
+            cur_type = entry["reward_model"]["type"]
+            similar_entry = None
+            for other_entry in test_dataset:
+                if other_entry == entry:
+                    continue
+                similar_entry = other_entry     # default to first different question in case no same type found
+                other_type = other_entry["reward_model"]["type"]
+                if other_type == cur_type:
+                    similar_entry = other_entry
+                    break
+            if similar_entry is not None:
+                similar_prompt = similar_entry["prompt"]
+                # similar_ground_truth = similar_entry["answer"] if "answer" in similar_entry else similar_entry["reward_model"]["ground_truth"]
+                # prompt = f"Question: {similar_prompt}\n"
+                # prompt += f"Solution: {main_pred}\n"
+                # prompt += f"Based on the above question and solution, please help answer the following similar math question:\n"
+                # prompt += f"{prompt}"
+
+            assert similar_entry is not None, "No similar entry found for help_other_similar_questions."
+
+            similar_q = similar_prompt[0]["content"]
+            if reward_type == "help_other_similar_questions_w_guide_colon":
+                similar_q = "Given the above question and the solution as an example, solve the following question: \n" + similar_q
+
+            messages = [
+                {"role": "user", "content": prompt[0]["content"]},
+                {"role": "assistant", "content": main_pred},
+                {"role": "user", "content": similar_q}
+            ]
+            classmate_prompt = classmate_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            classmate_ground_truth = similar_entry["reward_model"]["ground_truth"]
+        else:
+            classmate_prompt, truncated_main_pred = get_classmate_prompt(prompt, main_pred, keep_ratio=main_cot_keep_ratio)
+            classmate_prompt = tokenize_input(classmate_tokenizer, classmate_prompt, is_main=False, main_CoT=truncated_main_pred, tokenize=False)
+            classmate_ground_truth = ground_truth
+
         classmate_pred, classmate_pred_token_ids = generate(classmate_model, classmate_model_name_path, classmate_tokenizer, classmate_prompt, classmate_sampling_params, is_qwen=False)
         extracted_main, main_is_correct = verify_math_pred(main_pred, ground_truth)
-        extracted_classmate, classmate_is_correct = verify_math_pred(classmate_pred, ground_truth)
+        extracted_classmate, classmate_is_correct = verify_math_pred(classmate_pred, classmate_ground_truth)
 
         if main_is_correct:
             main_correct += 1

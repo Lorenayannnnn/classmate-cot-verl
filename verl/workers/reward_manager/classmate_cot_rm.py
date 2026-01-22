@@ -193,7 +193,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             # Debug
             extracted_classmate_sol = []
-            classmate_ground_truth = data_item.non_tensor_batch["all_other_prompt_gts"]["ground_truth"] if "all_other_prompt_gts" in data_item.non_tensor_batch else ground_truth
+            classmate_ground_truth = data_item.non_tensor_batch["all_other_prompt_gts"] if "all_other_prompt_gts" in data_item.non_tensor_batch else ground_truth
 
             for classmate_idx, classmate_output in enumerate(classmate_outputs):   # Iterate over num_classmate_models
                 tmp_total_classmate_reward_dict = {}

@@ -8,7 +8,8 @@ set -x
 # Now using Together AI
 
 data_dir=./data   # run on lambda
-dataset_name="hendrycks_math_minimal_answer_box_prompt_105_test"
+#dataset_name="hendrycks_math_minimal_answer_box_prompt_105_test"
+dataset_name="hendrycks_math_paired_similar_q"
 train_path=${data_dir}/${dataset_name}/train.parquet
 eval_path=${data_dir}/${dataset_name}/test.parquet
 train_files="['$train_path']"
@@ -27,7 +28,7 @@ max_response_length=3072
 classmate_max_tokens=8192
 
 classmate_reward_weight=1
-classmate_reward_type=help_other_questions
+classmate_reward_type=help_other_similar_questions
 use_classmate_main_cond=no_classmate_when_main_incorrect  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 #adv_estimator=grpo
 adv_estimator=grpo_main_classmate_separated
@@ -109,4 +110,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_hendrycks_math_help_other_q.sh
+#bash my_scripts/qwen3_classmate_hendrycks_math_help_other_similar_q.sh

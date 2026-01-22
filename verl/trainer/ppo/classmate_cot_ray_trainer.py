@@ -1131,12 +1131,20 @@ class ClassmateCoTRayPPOTrainer:
         all_other_prompts = None
         all_other_prompt_gts = None
 
-        if self.classmate_cot_reward_configs.classmate_reward_type == "help_other_questions":
+        if "help_other" in self.classmate_cot_reward_configs.classmate_reward_type:
             all_processed_actor_responses = all_actor_responses
             all_classmate_input_mask = [[1] * max_response_len] * len(all_prompts)
             all_keep_rates = [1.0] * len(all_prompts)
-            all_gt = data.non_tensor_batch["reward_model"].tolist()
-            all_other_prompts, all_other_prompt_gts = self.derange_two_lists(all_prompts, all_gt)
+            all_reward_model_info = data.non_tensor_batch["reward_model"].tolist()
+            if self.classmate_cot_reward_configs.classmate_reward_type == "help_other_questions":       # a random, different in-batch question
+                all_other_prompt_gts = [info["ground_truth"] for info in all_reward_model_info]
+                all_other_prompts, all_other_prompt_gts = self.derange_two_lists(all_prompts, all_other_prompt_gts)
+            elif self.classmate_cot_reward_configs.classmate_reward_type == "help_other_similar_questions":     # preprocessed, paired question from the same category/type
+                all_other_prompts = []
+                all_other_prompt_gts = []
+                for info in all_reward_model_info:
+                    all_other_prompts.append(info["paired_similar_q"])
+                    all_other_prompt_gts.append(info["paired_similar_q_gt"])
         elif self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward", "random_truncate", "remove_wo_cot"]:
             # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
             # all_prompts = self.tokenizer.batch_decode(

@@ -79,4 +79,15 @@ n"""
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    old_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_minimal_answer_box_prompt_105_test/train.parquet"
+    new_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_q/train.parquet"
+
+    from datasets import load_dataset
+    old_dataset = load_dataset("parquet", data_files=old_dataset)["train"]
+    new_dataset = load_dataset("parquet", data_files=new_dataset)["train"]
+
+    from tqdm import tqdm
+    for old_example, new_example in tqdm(zip(old_dataset, new_dataset)):
+        assert old_example["prompt"][0]["content"] == new_example["prompt"][0]["content"]
