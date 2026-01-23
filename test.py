@@ -144,10 +144,9 @@ def verify_math_pred(pred, gt):
     try:
         # solution_str = parse(solution_str, parsing_timeout=None)
         # ground_truth = parse(ground_truth, parsing_timeout=None)
-        # score = 1 if verify(solution_str, ground_truth, timeout_seconds=None) else 0
         extracted_sol = parse(pred)
         ground_truth = parse(ground_truth_boxed)
-        score = 1 if verify(extracted_sol, ground_truth) else 0
+        score = 1 if verify(ground_truth, extracted_sol) else 0
     except TimeoutException | TimeoutError as e:
         # print("Timeout exception during math_verify.")
         # logger.error("Timeout exception during math_verify.")
@@ -190,12 +189,12 @@ def main():
     # dataset_name = "hendrycks_math_think_step_by_step"
 
     # dataset_name = "gsm8k_minimal_answer_box_prompt"
-    # dataset_name = "hendrycks_math_minimal_answer_box_prompt_105_test"
-    dataset_name = "hendrycks_math_q_type"
+    dataset_name = "hendrycks_math_minimal_answer_box_prompt_105_test"
+    # dataset_name = "hendrycks_math_q_type"
 
-    # reward_type = "vanilla_truncate"
+    reward_type = "vanilla_truncate"
     # reward_type = "help_other_questions"
-    reward_type = "help_other_similar_questions_w_guide_colon"
+    # reward_type = "help_other_similar_questions_w_guide_colon"
 
     # dataset_name = "DeepScaleR_answer_box"
     data_source = None
@@ -482,7 +481,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"
+    dataset = load_dataset("parquet", data_files=dataset_fn)["train"]
+    for entry in dataset:
+        print(entry["problem"])
+        print("================================")
+        print(entry["reward_model"]["paired_similar_q"])
+        breakpoint()
+        # print(entry)
 
 # TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
 #CUDA_VISIBLE_DEVICES=2 python test.py

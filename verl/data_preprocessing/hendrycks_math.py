@@ -37,7 +37,7 @@ if __name__ == "__main__":
     parser.add_argument("--local_dataset_path", default=None, help="The local path to the raw dataset, if it exists.")
     parser.add_argument("--seed", default=42)
     parser.add_argument(
-        "--local_save_dir", default="./data/hendrycks_math_paired_similar_q", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/hendrycks_math_paired_similar_level_cat_q", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -91,9 +91,15 @@ if __name__ == "__main__":
             same_category_questions = category_to_dataset[category_type_name_to_categories[current_category]].filter(
                 lambda x: x["problem"] != example["problem"]
             )
-            if len(same_category_questions) == 0:
-                return ""
-            random_example = rng.choice(same_category_questions)
+            same_level_questions = same_category_questions.filter(
+                lambda x: x["level"] == example["level"]
+            )
+            if len(same_level_questions) > 0:
+                random_example = rng.choice(same_level_questions)
+            elif len(same_category_questions) > 0:
+                random_example = rng.choice(same_category_questions)
+            else:
+                random_example = ""
             return random_example
 
         def process_fn(example, idx, is_train):
@@ -124,7 +130,7 @@ if __name__ == "__main__":
                 },
             }
 
-            if "paired_similar_q" in args.local_save_dir:
+            if "paired_similar" in args.local_save_dir:
                 similar_example = random_same_category_different_question(example, current_category=q_type, is_train=is_train)
                 assert similar_example != "", f"No similar question found for question: {question_raw}"
                 data["reward_model"]["paired_similar_q"] = similar_example["problem"] + instruction_following
