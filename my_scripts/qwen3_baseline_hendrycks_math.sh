@@ -3,28 +3,28 @@ set -x
 #export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 data_dir=./data   # run on lambda
-dataset_name="hendrycks_math_minimal_answer_box_prompt_105_test"
+dataset_name="hendrycks_math_minimal_answer_box_prompt_700_heldout"
 train_path=${data_dir}/${dataset_name}/train.parquet
-eval_path=${data_dir}/${dataset_name}/test.parquet
+eval_path=${data_dir}/${dataset_name}/eval.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 
 #base_model_name_path=Qwen/Qwen3-1.7B
-#train_size=7500   # After filtering out too long prompts
+#train_size=6794   # After filtering out too long prompts
 #base_model_name_path=Qwen/Qwen3-0.6B
-#train_size=7493   # After filtering out too long prompts
-#base_model_name_path=Qwen/Qwen3-1.7B-Base
-#train_size=7493   # After filtering out too long prompts
-base_model_name_path=Qwen/Qwen3-0.6B-Base
-train_size=7493   # After filtering out too long prompts
+#train_size=6794   # After filtering out too long prompts
+base_model_name_path=Qwen/Qwen3-1.7B-Base
+train_size=6794   # After filtering out too long prompts
+#base_model_name_path=Qwen/Qwen3-0.6B-Base
+#train_size=6794   # After filtering out too long prompts
 
 max_response_length=3072
 
 gpu_num=8
 seed=42
 #train_batch_size=256
-#mini_batch_size_per_gpu=16
+#mini_batch_size_per_gpu=32
 train_batch_size=128
 mini_batch_size_per_gpu=16
 
@@ -52,11 +52,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
-    actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.001 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \

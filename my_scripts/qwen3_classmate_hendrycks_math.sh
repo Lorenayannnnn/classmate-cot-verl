@@ -8,37 +8,40 @@ set -x
 # Now using Together AI
 
 data_dir=./data   # run on lambda
-dataset_name="hendrycks_math_minimal_answer_box_prompt_105_test"
+#dataset_name="hendrycks_math_minimal_answer_box_prompt_105_test"   # 7388
+dataset_name="hendrycks_math_minimal_answer_box_prompt_700_heldout"   # 6794
 train_path=${data_dir}/${dataset_name}/train.parquet
-eval_path=${data_dir}/${dataset_name}/test.parquet
+eval_path=${data_dir}/${dataset_name}/eval.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 #base_model_name_path=Qwen/Qwen3-1.7B
-#train_size=7500   # After filtering out too long prompts
+#train_size=6794   # After filtering out too long prompts
 #base_model_name_path=Qwen/Qwen3-0.6B
-#train_size=7493   # After filtering out too long prompts
+#train_size=6794   # After filtering out too long prompts
 base_model_name_path=Qwen/Qwen3-1.7B-Base
-train_size=7493   # After filtering out too long prompts
+train_size=6794   # After filtering out too long prompts
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
-#train_size=7493   # After filtering out too long prompts
+#train_size=6794   # After filtering out too long prompts
 
 max_response_length=3072
 
 classmate_reward_weight=1
-classmate_reward_type=vanilla_truncate_main_classmate_separate
-use_classmate_main_cond=no_classmate_when_main_incorrect  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+#classmate_reward_type=random_truncate
+classmate_reward_type=vanilla_reward
+use_classmate_main_cond=no_classmate_when_main_incorrect  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 #adv_estimator=grpo
 adv_estimator=grpo_main_classmate_separated
 #adv_estimator=gdpo
 #adv_estimator=grpo_main_classmate_separated_non_neg_cl
 token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
-main_cot_keep_rate=0.5
+#main_cot_keep_rate=0.7
+add_consistency_reward=True
 
 gpu_num=8
 seed=42
 #train_batch_size=256
-#mini_batch_size_per_gpu=16
+#mini_batch_size_per_gpu=32
 train_batch_size=128
 mini_batch_size_per_gpu=16
 
@@ -66,10 +69,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
-    actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.001 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -84,7 +85,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_${use_classmate_main_cond}_m_cl_consistent_${add_consistency_reward}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=$((train_steps / total_ckpts)) \
@@ -96,7 +97,10 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
-    reward_model.classmate_cot_reward_configs.main_cot_keep_rate=${main_cot_keep_rate}
+    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
+
+#    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
+#    reward_model.classmate_cot_reward_configs.main_cot_keep_rate=${main_cot_keep_rate} \
 #    trainer.save_freq=$((train_steps / total_ckpts)) \
 #    trainer.test_freq=$((train_steps / total_test_times)) \
 #    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
