@@ -100,7 +100,6 @@ class ClassmateWorker(Worker):
         self.vllm_config = config.vllm_config
 
         # Initialize model and tokenizer as None - will be loaded in init_model()
-        self.tokenizer = None
         self.llm = None
         self.special_ids = None
 
@@ -115,6 +114,7 @@ class ClassmateWorker(Worker):
             "max_model_len": config.max_tokens
         }
         self.classmate_vllm = LLM(**self.classmate_vllm_configs, enable_sleep_mode=True)
+        self.tokenizer = self.classmate_vllm.get_tokenizer()
         self.classmate_sampling_params = SamplingParams(**self.generation_config)
         self._offload_model()
         print(f"🚀🚀🚀Initialized ClassmateWorker {self.model_index} with vLLM engine for model {self.model_name_or_path}")
@@ -199,7 +199,7 @@ class ClassmateWorker(Worker):
         print(f"Initializing classmate model {self.model_index}: {self.model_name_or_path}")
 
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path.replace("-Turbo", ""))       # TogetherAI models have -Turbo suffix
+        # self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path.replace("-Turbo", ""))       # TogetherAI models have -Turbo suffix
         # Ensure valid padding token and left padding for causal LM
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -365,11 +365,11 @@ class ClassmateWorker(Worker):
                         end -= 1
                     token_ids = token_ids[:end]
 
-                    if len(token_ids) > self.classmate_vllm_configs["max_model_len"]:
+                    if len(token_ids) + 1 > self.classmate_vllm_configs["max_model_len"]:       # +1 for generation token (i.e. generate 1 more token will exceed max length)
                         print(f"⚠️ Warning: Input for classmate is too long (have length {len(token_ids)})")
                         batch_input_prompts.append(None)
                     else:
-                        batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
+                        batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False, add_generation_prompt=False))
 
                 # Get batch-wise max token len
                 # prompt_attn_mask = self.tokenizer(
