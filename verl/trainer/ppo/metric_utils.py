@@ -106,6 +106,9 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     if "main_token_level_rewards" in batch.batch:
         sequence_score = (batch.batch["main_token_level_rewards"] + batch.batch["classmate_token_level_scores"]).sum(-1)
         sequence_reward = (batch.batch["main_token_level_rewards"] + batch.batch["classmate_token_level_rewards"]).sum(-1)
+        if batch.batch["consistency_token_level_rewards"] is not None:
+            sequence_score += batch.batch["consistency_token_level_scores"].sum(-1)
+            sequence_reward += batch.batch["consistency_token_level_rewards"].sum(-1)
     else:
         sequence_score = batch.batch["token_level_scores"].sum(-1)
         sequence_reward = batch.batch["token_level_rewards"].sum(-1)
@@ -269,6 +272,9 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     # Train with classmate models
     print_if_exists("classmate_reward", "classmate_reward")
     print_if_exists("weighted_classmate_reward", "weighted_classmate_reward")
+
+    print_if_exists("consistency_reward", "consistency_reward")
+    print_if_exists("weighted_consistency_reward", "weighted_consistency_reward")
 
     # classmate_response_length, classmate_max_tokens_len
     if "classmate_response_length" in batch.non_tensor_batch:

@@ -257,6 +257,7 @@ def compute_advantage(
         advantages, returns = core_algos.compute_grpo_main_classmate_separated_outcome_advantage(
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+            consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
             main_response_mask=main_calculation_mask,
             classmate_input_mask=classmate_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -266,6 +267,7 @@ def compute_advantage(
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
     elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL:
+        raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL not implemented.")
         # Initialize the mask for GRPO calculation
 
         main_calculation_mask = data.batch["response_mask"]
@@ -293,6 +295,7 @@ def compute_advantage(
         advantages, returns = core_algos.compute_gdpo_outcome_advantage(
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+            consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
             main_response_mask=main_calculation_mask,
             classmate_input_mask=classmate_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -440,7 +443,7 @@ class ClassmateCoTRayPPOTrainer:
             if type(self.classmate_generation_configs["max_tokens"]) == str:
                 self.classmate_generation_configs["max_tokens"] = int(eval(self.classmate_generation_configs["max_tokens"]))
 
-        self.classmate_tokenizers = {}
+        # self.classmate_tokenizers = {}
 
         if classmate_use_vllm:
             self.classmate_generation_configs.n = classmate_num_return_sequences
@@ -737,7 +740,7 @@ class ClassmateCoTRayPPOTrainer:
 
             # main_reward_tensor, classmate_reward_tensor, reward_extra_info
             # reward_tensor = result["reward_tensor"]
-            reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
+            reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"] + result.get("consistency_reward_tensor", 0)
             scores = reward_tensor.sum(-1).cpu().tolist()
             sample_scores.extend(scores)
 
@@ -782,7 +785,7 @@ class ClassmateCoTRayPPOTrainer:
             # else:
             #     core_var = "reward"
             
-            core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "final_reward", "reward"}
+            core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "consistency_reward", "final_reward", "reward"}
             # TODO haha for code & test case generation
             code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
             core_reward_vars.update(code_test_case_reward_keys)
@@ -899,7 +902,7 @@ class ClassmateCoTRayPPOTrainer:
             )
             self.resource_pool_to_cls[resource_pool][classmate_role_name] = classmate_worker_cls
 
-            self.classmate_tokenizers[model_idx] = AutoTokenizer.from_pretrained(model_path.replace("-Turbo", ""))
+            # self.classmate_tokenizers[model_idx] = AutoTokenizer.from_pretrained(model_path.replace("-Turbo", ""))
 
         # initialize WorkerGroup
         # NOTE: if you want to use a different resource pool for each role, which can support different parallel size,
@@ -1025,7 +1028,7 @@ class ClassmateCoTRayPPOTrainer:
         num_to_keep = int(len(main_pred.split()) * keep_ratio)  # counts non-whitespace tokens
         if num_to_keep <= 0:
             # Keep the entire main CoT when it's too short
-            return "", main_pred
+            return main_pred, main_response_mask.tolist()
 
         kept = []
         count = 0
@@ -1196,10 +1199,12 @@ class ClassmateCoTRayPPOTrainer:
             "raw_prompts": np.array(all_prompts),
             "main_model_responses": np.array(all_processed_actor_responses),
             "keep_rates": np.array(all_keep_rates),
-            "all_other_prompts": np.array(all_other_prompts) if all_other_prompts is not None else None,
-            "all_other_prompt_gts": np.array(all_other_prompt_gts) if all_other_prompt_gts is not None else None,
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
+
+        if all_other_prompts is not None:
+            classmate_non_tensor_batch["all_other_prompts"] = np.array(all_other_prompts)
+            classmate_non_tensor_batch["all_other_prompt_gts"] = np.array(all_other_prompt_gts)
 
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[0])
         # print("🐛 Sample classmate input from prepare batch", all_processed_actor_responses[1])
@@ -1325,7 +1330,8 @@ class ClassmateCoTRayPPOTrainer:
         batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
         batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
         batch.non_tensor_batch["main_keep_rates"] = keep_rates
-        batch.non_tensor_batch["all_other_prompt_gts"] = all_other_prompt_gts
+        if all_other_prompt_gts is not None:
+            batch.non_tensor_batch["all_other_prompt_gts"] = all_other_prompt_gts
 
         batch.batch["classmate_input_mask"] = classmate_input_mask
 
@@ -1699,9 +1705,10 @@ class ClassmateCoTRayPPOTrainer:
                         if self.use_rm and "rm_scores" not in batch.batch.keys():
                             # reward_tensor = self.rm_wg.compute_rm_score(batch)
                             # batch = batch.union(reward_tensor)
-                            main_reward_tensor, classmate_reward_tensor = self.rm_wg.compute_rm_score(batch)
+                            main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor = self.rm_wg.compute_rm_score(batch)
                             batch = batch.union(main_reward_tensor)
                             batch = batch.union(classmate_reward_tensor)
+                            batch = batch.union(consistency_reward_tensor)
 
                         if self.config.reward_model.launch_reward_fn_async:
                             future_reward = compute_reward_async.remote(
@@ -1709,7 +1716,7 @@ class ClassmateCoTRayPPOTrainer:
                             )
                         else:
                             # reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
-                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = compute_main_classmate_reward(batch, self.reward_fn)
+                            main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = compute_main_classmate_reward(batch, self.reward_fn)
 
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
@@ -1749,14 +1756,15 @@ class ClassmateCoTRayPPOTrainer:
                         reward_extra_infos_dict: dict[str, list]
                         if self.config.reward_model.launch_reward_fn_async:
                             # reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
-                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                            main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                         # batch.batch["token_level_scores"] = reward_tensor
 
                         if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                             batch.batch["main_token_level_scores"] = main_reward_tensor
                             batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
+                            batch.batch["consistency_token_level_scores"] = consistency_reward_tensor if consistency_reward_tensor is not None else 0
                         else:
-                            reward_tensor = main_reward_tensor + classmate_reward_tensor
+                            reward_tensor = main_reward_tensor + classmate_reward_tensor + consistency_reward_tensor if consistency_reward_tensor is not None else 0
                             batch.batch["token_level_scores"] = reward_tensor
 
                         if reward_extra_infos_dict:
@@ -1774,6 +1782,7 @@ class ClassmateCoTRayPPOTrainer:
                             if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                                 batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
                                 batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
+                                batch.batch["consistency_token_level_rewards"] = batch.batch["consistency_token_level_scores"]
                             else:
                                 batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
