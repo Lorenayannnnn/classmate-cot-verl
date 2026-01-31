@@ -27,16 +27,16 @@ train_size=6794   # After filtering out too long prompts
 max_response_length=3072
 
 classmate_reward_weight=1
-#classmate_reward_type=random_truncate
-classmate_reward_type=vanilla_reward
+classmate_reward_type=random_truncate
+#classmate_reward_type=vanilla_reward
 use_classmate_main_cond=no_classmate_when_main_incorrect  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 #adv_estimator=grpo
-adv_estimator=grpo_main_classmate_separated
-#adv_estimator=gdpo
+#adv_estimator=grpo_main_classmate_separated
+adv_estimator=gdpo
 #adv_estimator=grpo_main_classmate_separated_non_neg_cl
 token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 #main_cot_keep_rate=0.7
-add_consistency_reward=True
+add_consistency_reward=False
 
 gpu_num=8
 seed=42

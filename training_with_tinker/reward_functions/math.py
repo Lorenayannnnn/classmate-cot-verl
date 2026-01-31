@@ -24,8 +24,11 @@ def math_compute_score(
         extracted_sol = parse(solution_str)
         ground_truth = parse(ground_truth_boxed)
         score = 1 if verify(extracted_sol, ground_truth) else 0
-    except (TimeoutException, TimeoutError) as e:
+    except TimeoutException as e:
         # logger.error("Timeout exception during math_verify.")
+        score = 0
+    except TimeoutError:
+        # logger.error("Timeout error during math_verify.")
         score = 0
     except Exception as e:
         # logger.error(f"Error during math_verify: {e}")

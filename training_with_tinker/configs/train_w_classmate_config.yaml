@@ -23,6 +23,8 @@ classmate_model_args:
   # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
   use_classmate_main_cond: no_classmate_when_main_incorrect
 
+  add_consistency_reward: False
+
   train_main_cot_keep_rate: null   # only effective for vanilla_reward
   eval_main_cot_keep_rate: 0.7   # only effective for vanilla_reward
   random_truncate_min_keep_rate: 0.1    # only effective for random_truncate
@@ -41,7 +43,7 @@ training_args:
   output_dir: outputs_tinker/${training_args.wandb_run_name}
 
   seed: 42
-  epochs: 1
+  epochs: 12
   total_save_time_num: 50
   total_test_time_num: 100
   batch_size: 256

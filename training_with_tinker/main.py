@@ -64,7 +64,10 @@ def tokenize_input(tokenizer, prompt, is_main=True, main_CoT=None, tokenize=Fals
     else:   # classmate
         assert main_CoT is not None
         messages.append({"role": "assistant", "content": main_CoT})
-        token_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)
+        token_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False, enable_thinking=False)
+
+        if tokenizer.name_or_path == "Qwen/Qwen3-4B-Instruct-2507":
+            token_ids = token_ids[:-2]      # skip <im_end>\n from chat template
         # Remove trailing special tokens
         end = len(token_ids)
         while end > 0 and token_ids[end - 1] in tokenizer.all_special_ids:
@@ -190,15 +193,11 @@ def log_metrics(metrics: Dict[str, float], step: int, log_dir: str):
     except Exception as e:
         logger.warning(f"wandb logging failed: {e}")
 
-def normalize_rewards(reward_list: list[float]) -> list[float]:
-    if len(reward_list) == 0:
-        return reward_list
+def normalize_rewards(reward_list: list[float], epsilon: float = 1e-6,) -> list[float]:
     mean_reward = np.mean(reward_list)
     std_reward = np.std(reward_list)
     # If all rewards are the same, return them as-is (no normalization needed)
-    if std_reward < 1e-8:
-        return reward_list
-    normalized = [(r - mean_reward) / (std_reward + 1e-8) for r in reward_list]
+    normalized = [(r - mean_reward) / (std_reward + epsilon) for r in reward_list]
     return normalized
 
 
@@ -284,10 +283,22 @@ def run_forward_pass(
     batch_ob_lens: list[list[int]] = []
     batch_is_classmate_input_len: list[list[int]] = []
     batch_keep_ratios: list[list[float]] = []
+    batch_actual_ground_truths: list[str] = []
+    batch_actual_main_rewards: list[list[float]] = []
+    batch_actual_classmate_rewards: list[list[float]] = []
+
+    do_actual_ground_truth = any("actual_ground_truth" in row["reward_model"] for row in batch_rows)
 
     # Process main model responses + submit classmate sampling
     for i, (sample_main_futures, raw_prompt, main_prompt_str, main_prompt_tokens) in enumerate(zip(batch_main_futures, batch_raw_prompts, batch_main_prompt, batch_main_prompt_ids)):
         ground_truth = batch_rows[i]["reward_model"]["ground_truth"]
+        actual_ground_truth = None
+        group_actual_main_reward = None
+        if do_actual_ground_truth:
+            actual_ground_truth = batch_rows[i]["reward_model"]["actual_ground_truth"]
+            group_actual_main_reward: list[float] = []
+            group_actual_classmate_reward: list[float] = []
+        batch_actual_ground_truths.append(actual_ground_truth)
 
         group_main_rewards: list[float] = []
         group_main_tokens: list[list[int]] = []
@@ -330,6 +341,11 @@ def run_forward_pass(
             main_extracted_sol = scoring_results.get("extracted_sol", None)
             # if "answer_format_correct" in scoring_results:
             #     main_reward += scoring_results["answer_format_correct"]
+
+            if do_actual_ground_truth:
+                actual_scoring_results = compute_score(main_model_resp, actual_ground_truth)
+                actual_main_reward = actual_scoring_results["score"]
+                group_actual_main_reward.append(actual_main_reward)
 
             group_main_responses.append(main_model_resp)
             group_main_extracted_sols.append(main_extracted_sol)
@@ -387,10 +403,14 @@ def run_forward_pass(
         batch_is_classmate_input_len.append(group_is_classmate_input_len)
         batch_keep_ratios.append(group_keep_ratios)
 
+        if do_actual_ground_truth:
+            batch_actual_main_rewards.append(group_actual_main_reward)
+
     # Process classmate responses
     for i, (sample_classmate_futures, group_main_rewards, group_main_tokens, group_logprobs, group_ob_lens, group_is_classmate_input_len) in enumerate(zip(batch_classmate_futures, batch_main_rewards, batch_main_tokens, batch_logprobs, batch_ob_lens, batch_is_classmate_input_len)):
         # Get classmate response and reward
         group_classmate_rewards: list[float] = []
+        group_actual_classmate_reward: list[float] = [] if do_actual_ground_truth else None
         group_weighted_classmate_rewards: list[float] = []
         group_classmate_response_lengths: list[int] = []
 
@@ -409,6 +429,11 @@ def run_forward_pass(
             # if "answer_format_correct" in cl_scoring_results:
             #     classmate_reward += cl_scoring_results["answer_format_correct"]
 
+            if do_actual_ground_truth:
+                actual_cl_scoring_results = compute_score(classmate_model_resp, batch_actual_ground_truths[i])
+                actual_classmate_reward = actual_cl_scoring_results["score"]
+                group_actual_classmate_reward.append(actual_classmate_reward)
+
             # Log detailed info for first 10 samples during eval
             total_sample_idx = i * len(sample_classmate_futures) + j
             if do_eval and total_sample_idx < 10:
@@ -420,6 +445,8 @@ def run_forward_pass(
                 if batch_main_extracted_sols[i][j] is not None:
                     logger.info(f"🐛[main_extracted] {batch_main_extracted_sols[i][j]}")
                 logger.info(f"🐛[ground_truth] {ground_truth}")
+                if batch_actual_ground_truths[i] is not None:
+                    logger.info(f"🐛[actual_ground_truth] {batch_actual_ground_truths[i]}")
                 logger.info(f"🐛[main_reward] {group_main_rewards[j]}")
                 logger.info(f"🐛[classmate_prompt] {batch_classmate_prompts[i][j]}")
                 logger.info(f"🐛[classmate_response] {classmate_model_resp}")
@@ -427,7 +454,6 @@ def run_forward_pass(
                     logger.info(f"🐛[classmate_extracted] {classmate_extracted_sol}")
                 logger.info(f"🐛[classmate_reward] {classmate_reward}")
                 logger.info(f"{'='*80}\n")
-            # breakpoint()
 
             group_classmate_rewards.append(classmate_reward)
 
@@ -438,6 +464,7 @@ def run_forward_pass(
             group_weighted_classmate_rewards.append(weighted_classmate_reward)
 
         batch_classmate_rewards.append(group_classmate_rewards)
+        batch_actual_classmate_rewards.append(group_actual_classmate_reward)
         batch_classmate_response_lengths.append(group_classmate_response_lengths)
 
         # Compute total rewards (main + weighted classmate). Note this is only used for logging
@@ -493,7 +520,17 @@ def run_forward_pass(
             )
             training_datums.append(datum)
 
-    return training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios
+    # if not do_eval:
+    #     breakpoint()
+
+    # main_tokenizer.decode(training_datums[300].model_input.chunks[0].tokens[:42], skip_special_tokens=False)
+    # main_tokenizer.decode(training_datums[300].loss_fn_inputs["target_tokens"].data[:42], skip_special_tokens=False)
+    # main_tokenizer.decode(training_datums[300].model_input.chunks[0].tokens, skip_special_tokens=True)
+    # training_datums[300].model_input.chunks[0].tokens
+    # training_datums[300].loss_fn_inputs["target_tokens"].data[42]
+    # training_datums[300].loss_fn_inputs["advantages"].data[42]
+    # training_datums[300].loss_fn_inputs["logprobs"].data[42]
+    return training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards
 
 
 def evaluate_model(
@@ -517,7 +554,7 @@ def evaluate_model(
     logger.info(f"Running evaluation on {len(test_dataset)} test examples")
 
     # Run forward pass on test set (use step=-1 to trigger debug logging)
-    _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios = run_forward_pass(
+    _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards = run_forward_pass(
         batch_rows=test_dataset,
         sampling_client=sampling_client,
         classmate_sampling_client=classmate_sampling_client,
@@ -535,6 +572,10 @@ def evaluate_model(
     all_main_rewards = [r for group in batch_main_rewards for r in group]
     all_classmate_rewards = [r for group in batch_classmate_rewards for r in group]
     all_final_rewards = [r for group in batch_final_rewards for r in group]
+    
+    # Flatten actual rewards if available
+    all_actual_main_rewards = [r for group in batch_actual_main_rewards if group is not None for r in group]
+    all_actual_classmate_rewards = [r for group in batch_actual_classmate_rewards if group is not None for r in group]
 
     eval_metrics = {
         f"val-core/main_model_reward/mean@1": np.mean(all_main_rewards) if all_main_rewards else 0.0,
@@ -544,22 +585,47 @@ def evaluate_model(
         f"val-core/final_reward/mean@1": np.mean(all_final_rewards) if all_final_rewards else 0.0,
         # "val-core/final_reward/std": np.std(all_final_rewards) if all_final_rewards else 0.0,
     }
+    
+    # Log actual rewards if available (computed against actual_ground_truth)
+    if all_actual_main_rewards:
+        eval_metrics[f"val-core/actual_main_model_reward/mean@1"] = np.mean(all_actual_main_rewards)
+    
+    if all_actual_classmate_rewards:
+        eval_metrics[f"val-core/actual_classmate_reward/mean@1"] = np.mean(all_actual_classmate_rewards)
+    
     wandb.log(eval_metrics, step=step)
 
-    logger.info(f"Evaluation results: main_reward={eval_metrics['val-core/main_model_reward/mean@1']:.4f}, "
+    log_msg = (f"Evaluation results: main_reward={eval_metrics['val-core/main_model_reward/mean@1']:.4f}, "
                 f"classmate_reward={eval_metrics['val-core/classmate_reward/mean@1']:.4f}, "
                 f"final_reward={eval_metrics['val-core/final_reward/mean@1']:.4f}")
+    
+    if f"val-core/actual_main_model_reward/mean@1" in eval_metrics:
+        log_msg += f", actual_main_reward={eval_metrics['val-core/actual_main_model_reward/mean@1']:.4f}"
+    
+    if f"val-core/actual_classmate_reward/mean@1" in eval_metrics:
+        log_msg += f", actual_classmate_reward={eval_metrics['val-core/actual_classmate_reward/mean@1']:.4f}"
+    
+    logger.info(log_msg)
 
     return eval_metrics
 
 
 def get_compute_score(dataset_name: str):
-    if dataset_name == "hendrycks_math_minimal_answer_box_prompt_105_test":
+    if dataset_name == "hendrycks_math_minimal_answer_box_prompt_105_test" or dataset_name == "hendrycks_math_minimal_answer_box_prompt_700_heldout":
         return math_compute_score
     elif "mmlu" in dataset_name:
         return MMLU().compute_score
     else:
         raise ValueError(f"Unknown dataset name {dataset_name} for reward function")
+
+
+def create_tokenizer(model_name_or_path: str):
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+
+    if "llama" in model_name_or_path.lower() and not tokenizer.chat_template:
+        tokenizer.chat_template = """{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now("%d %b %Y") %}\n    {%- else %}\n        {%- set date_string = "26 Jul 2024" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0][\'role\'] == \'system\' %}\n    {%- set system_message = messages[0][\'content\']|trim %}\n    {%- set messages = messages[1:] %}\n{%- else %}\n    {%- set system_message = "" %}\n{%- endif %}\n\n{#- System message #}\n{{- "<|start_header_id|>system<|end_header_id|>\\n\\n" }}\n{%- if tools is not none %}\n    {{- "Environment: ipython\\n" }}\n{%- endif %}\n{{- "Cutting Knowledge Date: December 2023\\n" }}\n{{- "Today Date: " + date_string + "\\n\\n" }}\n{%- if tools is not none and not tools_in_user_message %}\n    {{- "You have access to the following functions. To call a function, please respond with JSON for a function call." }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\\n\\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\\n\\n" }}\n    {%- endfor %}\n{%- endif %}\n{{- system_message }}\n{{- "<|eot_id|>" }}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0][\'content\']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception("Cannot put tools in the first user message when there\'s no first user message!") }}\n{%- endif %}\n    {{- \'<|start_header_id|>user<|end_header_id|>\\n\\n\' -}}\n    {{- "Given the following functions, please respond with a JSON for a function call " }}\n    {{- "with its proper arguments that best answers the given prompt.\\n\\n" }}\n    {{- \'Respond in the format {"name": function name, "parameters": dictionary of argument name and its value}.\' }}\n    {{- "Do not use variables.\\n\\n" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- "\\n\\n" }}\n    {%- endfor %}\n    {{- first_user_message + "<|eot_id|>"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == \'ipython\' or message.role == \'tool\' or \'tool_calls\' in message) %}\n        {{- \'<|start_header_id|>\' + message[\'role\'] + \'<|end_header_id|>\\n\\n\'+ message[\'content\'] | trim + \'<|eot_id|>\' }}\n    {%- elif \'tool_calls\' in message %}\n        {%- if not message.tool_calls|length == 1 %}\n            {{- raise_exception("This model only supports single tool-calls at once!") }}\n        {%- endif %}\n        {%- set tool_call = message.tool_calls[0].function %}\n        {{- \'<|start_header_id|>assistant<|end_header_id|>\\n\\n\' -}}\n        {{- \'{"name": "\' + tool_call.name + \'", \' }}\n        {{- \'"parameters": \' }}\n        {{- tool_call.arguments | tojson }}\n        {{- "}" }}\n        {{- "<|eot_id|>" }}\n    {%- elif message.role == "tool" or message.role == "ipython" %}\n        {{- "<|start_header_id|>ipython<|end_header_id|>\\n\\n" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- "<|eot_id|>" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- \'<|start_header_id|>assistant<|end_header_id|>\\n\\n\' }}\n{%- endif %}\n"""
+
+    return tokenizer
 
 
 @hydra.main(config_path="configs", config_name="train_w_classmate_config", version_base=None)
@@ -568,13 +634,13 @@ def main(configs):
     rng = random.Random(configs.training_args.seed)
 
     logger.info(f"Loading tokenizer")
-    main_tokenizer = AutoTokenizer.from_pretrained(configs.main_model_args.model_name_or_path)
-    classmate_tokenizer = AutoTokenizer.from_pretrained(configs.classmate_model_args.model_name_or_path)
+    main_tokenizer = create_tokenizer(configs.main_model_args.model_name_or_path)
+    classmate_tokenizer = create_tokenizer(configs.classmate_model_args.model_name_or_path)
 
     logger.info(f"Loading dataset {configs.data_args.dataset_name}")
 
     filtered_train_dataset_fn = f"data/{configs.data_args.dataset_name}/{configs.main_model_args.model_name_or_path}/{configs.data_args.max_prompt_length}.parquet"
-    filtered_test_dataset_fn = f"data/{configs.data_args.dataset_name}/{configs.main_model_args.model_name_or_path}/{configs.data_args.max_prompt_length}_test.parquet"
+    filtered_test_dataset_fn = f"data/{configs.data_args.dataset_name}/{configs.main_model_args.model_name_or_path}/{configs.data_args.max_prompt_length}_eval.parquet"
 
     if os.path.exists(filtered_train_dataset_fn) and os.path.exists(filtered_test_dataset_fn):
         logger.info(f"Found pre-filtered dataset at {filtered_train_dataset_fn} and {filtered_test_dataset_fn}, loading them")
@@ -584,6 +650,8 @@ def main(configs):
         logger.info(f"No pre-filtered dataset found, loading unfiltered dataset and filtering now")
         # load from parquet
         train_dataset = load_data(f"data/{configs.data_args.dataset_name}/train.parquet", seed=configs.training_args.seed)
+        # TODO haha
+        # test_dataset = load_data(f"data/{configs.data_args.dataset_name}/eval.parquet", seed=None)
         test_dataset = load_data(f"data/{configs.data_args.dataset_name}/test.parquet", seed=None)
 
         logger.info(f"Filter dataset by max_prompt_length {configs.data_args.max_prompt_length} for main model")
@@ -718,7 +786,7 @@ def main(configs):
             sampling_client = service_client.create_sampling_client(model_path=sampling_path)
 
             # Run forward pass
-            training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios = run_forward_pass(
+            training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards = run_forward_pass(
                 batch_rows=batch_rows,
                 sampling_client=sampling_client,
                 classmate_sampling_client=classmate_sampling_client,
@@ -740,6 +808,10 @@ def main(configs):
             all_classmate_response_lengths = [l for group in batch_classmate_response_lengths for l in group]
             all_keep_ratios = [k for group in batch_keep_ratios for k in group]
             
+            # Flatten actual rewards if available
+            all_actual_main_rewards = [r for group in batch_actual_main_rewards if group is not None for r in group]
+            all_actual_classmate_rewards = [r for group in batch_actual_classmate_rewards if group is not None for r in group]
+            
             # Calculate batch rewards (use total rewards for logging)
             batch_rewards = all_final_rewards
 
@@ -757,13 +829,22 @@ def main(configs):
             # Log metrics (once per batch)
             metrics["time/total"] = time.time() - t_start
             metrics["critic/main_model_reward/mean"] = np.mean(all_main_rewards) if all_main_rewards else 0.0
-            metrics["critic/main_model_reward/std"] = np.std(all_main_rewards) if all_main_rewards else 0.0
+            metrics["critic/main_model_reward/std"] = np.mean([np.std(group) for group in batch_main_rewards if len(group) > 0]) if batch_main_rewards else 0.0
             metrics["critic/classmate_reward/mean"] = np.mean(all_classmate_rewards) if all_classmate_rewards else 0.0
-            metrics["critic/classmate_reward/std"] = np.std(all_classmate_rewards) if all_classmate_rewards else 0.0
+            metrics["critic/classmate_reward/std"] = np.mean([np.std(group) for group in batch_classmate_rewards if len(group) > 0]) if batch_classmate_rewards else 0.0
             metrics["critic/rewards/mean"] = np.mean(batch_rewards) if batch_rewards else 0.0
             metrics["actor/entropy"] = sum(batch_entropies) / len(batch_entropies) if batch_entropies else 0.0
             metrics["critic/main_keep_ratio/mean"] = np.mean(all_keep_ratios) if all_keep_ratios else 0.0
-            metrics["critic/main_keep_ratio/std"] = np.std(all_keep_ratios) if all_keep_ratios else 0.0
+            metrics["critic/main_keep_ratio/std"] = np.mean([np.std(group) for group in batch_keep_ratios if len(group) > 0]) if batch_keep_ratios else 0.0
+            
+            # Log actual rewards if available (computed against actual_ground_truth)
+            if all_actual_main_rewards:
+                metrics["critic/actual_main_model_reward/mean"] = np.mean(all_actual_main_rewards)
+                metrics["critic/actual_main_model_reward/std"] = np.std(all_actual_main_rewards) if len(all_actual_main_rewards) > 1 else 0.0
+            
+            if all_actual_classmate_rewards:
+                metrics["critic/actual_classmate_reward/mean"] = np.mean(all_actual_classmate_rewards)
+                metrics["critic/actual_classmate_reward/std"] = np.std(all_actual_classmate_rewards) if len(all_actual_classmate_rewards) > 1 else 0.0
             
             # Response length metrics
             if all_main_response_lengths:

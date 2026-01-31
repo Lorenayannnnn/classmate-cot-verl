@@ -29,10 +29,13 @@
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_105_test_vanilla_truncate_main_classmate_separate_no_classmate_when_main_incorrect_classmate_reward_classmate_partial_classmate_llama_719328_episodes_seed_42"
 #main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B-Base_hendrycks_math_minimal_answer_box_prompt_105_test_baseline_719328_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_105_test_vanilla_truncate_main_classmate_separate_keep_m_0.5_no_classmate_when_main_incorrect_cl_classmate_partial_classmate_llama_719328_episodes_seed_42"
-main_dir="/local/data/lorena/classmate_cot_w_verl/outputs_20260123_qwen_base_MATH/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_paired_similar_q_help_other_similar_questions_no_classmate_when_main_incorrect_cl_classmate_partial_classmate_llama_719328_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs_20260123_qwen_base_MATH/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_paired_similar_q_help_other_similar_questions_no_classmate_when_main_incorrect_cl_classmate_partial_classmate_llama_719328_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_700_heldout_vanilla_reward_no_classmate_when_main_incorrect_m_cl_consistent_True_cl_classmate_partial_classmate_llama_652224_episodes_seed_42"
+#main_dir="/home/ubuntu/east/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_700_heldout_baseline_652224_episodes_seed_42"
+main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/grpo_main_classmate_separated_Qwen/Qwen3-1.7B-Base_hendrycks_math_minimal_answer_box_prompt_700_heldout_vanilla_reward_always_m_cl_consistent_True_cl_classmate_partial_classmate_llama_652224_episodes_seed_42"
 
 # max length 96
-repo_name="20260123-Qwen3-1.7B-Base_MATH_m_cl_sep_no_cl_m_inc_partial_llama_719328_episodes_seed_42"
+repo_name="20260129-Qwen3-1.7Base_MATH700heldout_vanilla_always_cl_consis_partial_llama_652224_ep_s_42"
 
 
 #gsm8k
@@ -42,8 +45,8 @@ repo_name="20260123-Qwen3-1.7B-Base_MATH_m_cl_sep_no_cl_m_inc_partial_llama_7193
 
 #MATH
 start_idx=0
-max_idx=15
-step_size=25
+max_idx=26
+step_size=23
 
 for (( i=start_idx; i<=max_idx; i++ )); do
   echo "== Starting group beginning at index ${i} =="
@@ -64,10 +67,10 @@ for (( i=start_idx; i<=max_idx; i++ )); do
   echo "== Finished group starting at ${i} =="
 done
 
-#python -m verl.model_merger merge \
-#  --backend fsdp \
-#  --local_dir ${main_dir}/global_step_696/actor \
-#  --target_dir ${main_dir}/global_step_696/actor/huggingface
+python -m verl.model_merger merge \
+  --backend fsdp \
+  --local_dir ${main_dir}/global_step_636/actor \
+  --target_dir ${main_dir}/global_step_636/actor/huggingface
 
 
 python upload_ckpts_to_huggingface.py \
