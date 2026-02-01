@@ -6,12 +6,20 @@ class MMLU:
         self.answer_format_regex = "Therefore, the answer is \\(([A-D])\\)"
 
     def compute_score(self, continuation, gt):
-        res = self._extract_answer(continuation)
-        return {
-            "score": 1.0 if res["answer"] == gt else 0.0,
-            "extracted_sol": res["answer"],
-            "answer_format_correct": res["answer_format_correct"],
-        }
+        try:
+            res = self._extract_answer(continuation)
+            return {
+                "score": 1.0 if res["answer"] == gt else 0.0,
+                "extracted_sol": res["answer"],
+                "answer_format_correct": res["answer_format_correct"],
+            }
+        except Exception as e:
+            return {
+                "score": 0.0,
+                "extracted_sol": f"empty continuation (probably didn't end with </think>)" if continuation is None else f"ERROR: {str(e)}",
+                "answer_format_correct": 0.0,
+            }
+
 
     def _extract_answer(self, continuation: str):
         answer_format_correct = 1.0

@@ -60,11 +60,11 @@ def tokenize_input(tokenizer, prompt, is_main=True, main_CoT=None, tokenize=Fals
         messages = [{"role": "user", "content": prompt}]
 
     if is_main:
-        return tokenizer.apply_chat_template(messages, tokenize=tokenize, add_generation_prompt=True, enable_thinking=False)
+        return tokenizer.apply_chat_template(messages, tokenize=tokenize, add_generation_prompt=True, enable_thinking=True)
     else:   # classmate
         assert main_CoT is not None
         messages.append({"role": "assistant", "content": main_CoT})
-        token_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False, enable_thinking=False)
+        token_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False, enable_thinking=True)
 
         if tokenizer.name_or_path == "Qwen/Qwen3-4B-Instruct-2507":
             token_ids = token_ids[:-2]      # skip <im_end>\n from chat template
