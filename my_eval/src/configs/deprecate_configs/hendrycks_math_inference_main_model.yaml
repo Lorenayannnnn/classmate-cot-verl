@@ -1,0 +1,23 @@
+data_args:
+  #  Dataset
+  #  openai/gsm8k, EleutherAI/hendrycks_math                          To be implemented: Idavidrein/gpqa (train split), hails/agieval-lsat-ar (test split)
+  dataset_name: EleutherAI/hendrycks_math
+  dataset_subset_name: algebra
+  # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_split_name: test
+  max_predict_samples: 200
+
+  cache_dir: null
+  few_shot_k: null
+  wo_cot: null    # Just a placeholder; irrelevant for the main model inference
+
+model_args:
+  model_name_or_path: LorenaYannnnn/20251122-grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes
+  base_model_name_or_path: allenai/OLMo-2-0425-1B-DPO
+  main_model_step_idx: null
+  use_vllm: True
+  vllm_gpu_memory_utilization: 0.8
+
+running_args:
+  exp_type: "inference_main_model"
+  batch_size: 1

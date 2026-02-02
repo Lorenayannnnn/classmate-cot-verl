@@ -1,0 +1,25 @@
+data_args:
+  main_model_name_or_path: LorenaYannnnn/20251122-grpo_olmo_1B_hendrycks_math_baseline_3298240_episodes
+  main_model_step_idx: null
+  wo_cot: false
+  few_shot_k: null
+  #  Dataset
+  dataset_name: EleutherAI/hendrycks_math
+  # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_subset_name: algebra
+  dataset_split_name: test
+  cache_dir: null
+  max_predict_samples: 200
+
+model_args:
+  # classmate model: Qwen-2.5-7B-Instruct, Llama-3.1-8B-Instruct, mistralai/Ministral-8B-Instruct-2410
+  model_name_or_path: Qwen-2.5-7B-Instruct
+#  model_name_or_path: Llama-3.1-8B-Instruct
+#  model_name_or_path: mistralai/Ministral-8B-Instruct-2410
+  use_vllm: True
+  vllm_gpu_memory_utilization: 0.9
+
+running_args:
+  exp_type: "cot_utility_to_classmate"
+  max_response_length: 256    # If step is wo_cot, will be overridden to predefined task's max_response_length, same as the one used for the main model.
+  batch_size: 1

@@ -1,0 +1,20 @@
+data_args:
+  main_model_name_or_path: allenai/OLMo-2-1124-13B-Instruct
+  main_model_step_idx: 120
+  few_shot_k: null
+  #  Dataset
+  dataset_name: cais/mmlu
+  dataset_subset_name: null
+  dataset_split_name: test
+  cache_dir: null
+
+model_args:
+  # classmate model: Qwen-2.5-7B-Instruct, Llama-3.1-8B-Instruct, mistralai/Ministral-8B-Instruct-2410
+  model_name_or_path: Qwen-2.5-7B-Instruct
+#  model_name_or_path: Llama-3.1-8B-Instruct
+#  model_name_or_path: mistralai/Ministral-8B-Instruct-2410
+
+running_args:
+  exp_type: "cot_utility_to_classmate"
+  max_response_length: 50
+  batch_size: 1

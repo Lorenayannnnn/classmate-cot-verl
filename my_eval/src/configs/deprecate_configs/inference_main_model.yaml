@@ -1,0 +1,35 @@
+data_args:
+  #  Dataset
+  #  openai/gsm8k, EleutherAI/hendrycks_math                          To be implemented: Idavidrein/gpqa (train split), hails/agieval-lsat-ar (test split)
+  dataset_name: openai/gsm8k
+  dataset_subset_name: main
+  # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_split_name: test
+  max_predict_samples: null
+
+  cache_dir: null
+  few_shot_k: null
+  wo_cot: null    # Just a placeholder; irrelevant for the main model inference
+
+model_args:
+#  model_name_or_path: open-instruct/outputs/olmo2_rlvr_1b/olmo2_rlvr_1b_20251020_checkpoints
+#  model_name_or_path: /local/data/grpo_olmo_1B_with_classmate_llama
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_20251030/grpo_olmo_1B_gsm8k_baseline
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs_20251030/grpo_olmo_1B_with_classmate_llama
+
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_gsm8k_baseline_400000_episodes
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_with_classmate_llama_400000_episodes
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_gsm8k_baseline_800000_episodes
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_with_classmate_llama_800000_episodes
+#  model_name_or_path: /proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/grpo_olmo_1B_with_classmate_llama_reward_weight_1_400000_episodes
+#  model_name_or_path: LorenaYannnnn/20251210-OLMo-2-1124-7B-DPO_RLVR-GSM-MATH-IF-Mixed-Constraints_baseline_237392_episodes
+#  model_name_or_path: LorenaYannnnn/20251217-Qwen3-4B-Base_DeepScaleR_baseline_322512_episodes
+  model_name_or_path: LorenaYannnnn/20251217-Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes
+  base_model_name_or_path: Qwen/Qwen3-4B-Base
+  main_model_step_idx: null
+  use_vllm: True
+  vllm_gpu_memory_utilization: 0.9
+
+running_args:
+  exp_type: "inference_main_model"
+  batch_size: 1

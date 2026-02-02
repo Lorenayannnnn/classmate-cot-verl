@@ -1,0 +1,17 @@
+data_args:
+  #  Dataset
+  dataset_name: cais/mmlu
+  dataset_subset_name: null
+  # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_split_name: test
+
+  cache_dir: null
+  few_shot_k: null
+
+model_args:
+  model_name_or_path: allenai/OLMo-2-1124-13B-Instruct
+  main_model_step_idx: 60
+
+running_args:
+  exp_type: "inference_main_model"
+  batch_size: 1

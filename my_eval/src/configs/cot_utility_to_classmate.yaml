@@ -1,0 +1,28 @@
+data_args:
+  main_model_name_or_path: null
+  main_model_step_idx: null
+  wo_cot: false
+
+  dataset_name: null    # openai/gsm8k, EleutherAI/hendrycks_math, AI-MO/aimo-validation-aime
+  dataset_subset_name: main   # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_split_name: test
+  max_predict_samples: null
+
+  cache_dir: null
+
+model_args:
+  # classmate model: "meta-llama/Llama-3.2-3B-Instruct" "Qwen/Qwen2.5-7B-Instruct" "allenai/OLMo-2-0425-1B-Instruct"
+  model_name_or_path: null
+  inference_backend: vllm   # vllm, huggingface, Together
+  vllm_gpu_memory_utilization: 0.8
+  dtype: auto
+
+running_args:
+  exp_type: "cot_utility_to_classmate"
+  batch_size: 1
+  max_tokens: 4096    # TODO change according to training config in verl
+  output_dir: null    # will be overwritten in the main script
+
+hydra:
+  job:
+    chdir: False
