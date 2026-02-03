@@ -11,9 +11,10 @@ export PYTHONPATH=:${PYTHONPATH}
 #  --model_name_or_path allenai/OLMo-2-1124-7B-DPO
 #python3 verl/data_preprocessing/gsm_math.py \
 
-python3 verl/data_preprocessing/mmlu_sycophancy.py
-python3 verl/data_preprocessing/mmlu_pro_sycophancy.py
+#python3 verl/data_preprocessing/mmlu_sycophancy.py
+#python3 verl/data_preprocessing/mmlu_pro_sycophancy.py
 #python3 verl/data_preprocessing/mmlu_q_hint_sep.py
+python3 verl/data_preprocessing/mmlu_sycophancy_new.py
 
 
 

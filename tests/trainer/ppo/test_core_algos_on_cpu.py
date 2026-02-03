@@ -284,7 +284,7 @@ def test_grpo_and_vectorized_equivalence(batch_size: int, seq_len: int, num_grou
     token_level_rewards = base_rewards * response_mask
 
     # Compute GRPO outcome advantage (original implementation)
-    adv1, ret1 = compute_grpo_outcome_advantage(
+    adv1, ret1, _, _ = compute_grpo_outcome_advantage(
         token_level_rewards=token_level_rewards,
         response_mask=response_mask,
         index=index,

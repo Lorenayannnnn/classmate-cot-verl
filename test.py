@@ -493,7 +493,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    train_parquet = "/home/lorenayan/classmate-cot-verl/data/mmlu_sycophancy_new/train.parquet"
+    dataset = load_dataset("parquet", data_files=train_parquet)["train"]
+    print(len(dataset))
+    breakpoint()
 
     # dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"
     # dataset = load_dataset("parquet", data_files=dataset_fn)["train"]

@@ -315,6 +315,7 @@ class ClassmateCoTTaskRunner:
             seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
+            enable_thinking=config.reward_model.enable_thinking,
         )
         val_reward_fn = load_reward_manager(
             config, tokenizer, num_examine=10,
@@ -327,6 +328,7 @@ class ClassmateCoTTaskRunner:
             seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
+            enable_thinking=config.reward_model.enable_thinking,
         )
 
         resource_pool_manager = self.init_resource_pool_mgr(config)
@@ -373,6 +375,7 @@ class ClassmateCoTTaskRunner:
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
             # classmate_vllm_configs=config.reward_model.classmate_vllm_configs,
             seed=config.data.seed,
+            enable_thinking=config.reward_model.enable_thinking,
             # host_classmate_name_to_url_json_fn=config.reward_model.classmate_cot_reward_configs.host_classmate_name_to_url_json_fn,
         )
         # Initialize the workers of the trainer.

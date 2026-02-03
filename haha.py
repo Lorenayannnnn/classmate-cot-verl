@@ -81,13 +81,26 @@ n"""
 if __name__ == "__main__":
     # main()
 
-    old_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_minimal_answer_box_prompt_105_test/train.parquet"
-    new_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_q/train.parquet"
+    # old_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_minimal_answer_box_prompt_105_test/train.parquet"
+    # new_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_q/train.parquet"
+    #
+    # from datasets import load_dataset
+    # old_dataset = load_dataset("parquet", data_files=old_dataset)["train"]
+    # new_dataset = load_dataset("parquet", data_files=new_dataset)["train"]
+    #
+    # from tqdm import tqdm
+    # for old_example, new_example in tqdm(zip(old_dataset, new_dataset)):
+    #     assert old_example["prompt"][0]["content"] == new_example["prompt"][0]["content"]
 
-    from datasets import load_dataset
-    old_dataset = load_dataset("parquet", data_files=old_dataset)["train"]
-    new_dataset = load_dataset("parquet", data_files=new_dataset)["train"]
+    pred_fn = "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260203-Qwen3-0.6B_mmlu_sycophancy_new_baseline_627984_episodes_seed_42/step_336/mmlu_sycophancy/main/preds.jsonl"
 
-    from tqdm import tqdm
-    for old_example, new_example in tqdm(zip(old_dataset, new_dataset)):
-        assert old_example["prompt"][0]["content"] == new_example["prompt"][0]["content"]
+    with open(pred_fn) as f:
+        for line in f:
+            import json
+            pred = json.loads(line)
+            print("🔥 ==================OUR truncated main CoT==================")
+            print(pred["truncated_main_CoT"])
+            print("🔥🔥 ==================OUR full output==================")
+            print(pred["main_full_output"])
+            print(pred["gt"])
+            breakpoint()

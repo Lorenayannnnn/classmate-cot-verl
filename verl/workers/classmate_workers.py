@@ -22,7 +22,7 @@ import numpy as np
 from together import Together
 from transformers import AutoTokenizer
 import requests
-from vllm import LLM, SamplingParams
+from vllm import LLM, SamplingParams, TokensPrompt
 
 import ray
 from verl import DataProto
@@ -44,6 +44,7 @@ class ClassmateWorkerConfig:
     classmate_batch_size: int
     classmate_free_cache_engine: bool
     classmate_use_vllm: bool
+    enable_thinking: bool
 
     generation_config: Dict[str, Any]
     """
@@ -114,80 +115,57 @@ class ClassmateWorker(Worker):
             "max_model_len": config.max_tokens
         }
         self.classmate_vllm = LLM(**self.classmate_vllm_configs, enable_sleep_mode=True)
+
         self.tokenizer = self.classmate_vllm.get_tokenizer()
-        self.classmate_sampling_params = SamplingParams(**self.generation_config)
+
+        if self.model_name_or_path == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B":
+            print("🐛🐛🐛: Applied custom template for DeepSeek-R1-Distill-Qwen-1.5B to include main CoT")
+            # change chat template to not omit main CoT
+            jinja_fn = "chat_templates/DeepSeek-R1-Distill-Qwen-1.5B.jinja"
+            self.tokenizer.chat_template = open(jinja_fn, "r").read()
+        self.enable_thinking = config.enable_thinking
         self._offload_model()
-        print(f"🚀🚀🚀Initialized ClassmateWorker {self.model_index} with vLLM engine for model {self.model_name_or_path}")
+        print(f"🚀🚀🚀 Initialized ClassmateWorker {self.model_index} with vLLM engine for model {self.model_name_or_path}")
 
     def __del__(self):
         """Cleanup when worker is destroyed."""
         # if self.use_vllm:
         del self.classmate_vllm
 
-    def _generate_via_vllm(self, batch_prompts: list) -> list:
-        not_none_prompts = [p for p in batch_prompts if p is not None]
-        is_none_idx = [i for i, p in enumerate(batch_prompts) if p is None]
-        outputs = self.classmate_vllm.generate(not_none_prompts, sampling_params=self.classmate_sampling_params, use_tqdm=False)
+    def _generate_via_vllm(self, batch_input_prompt_ids: list, is_eval=False):
+        not_none_prompts = [p for p in batch_input_prompt_ids if p is not None]
+        is_none_idx = [i for i, p in enumerate(batch_input_prompt_ids) if p is None]
+        if is_eval:
+            # Greedy
+            sampling_params = SamplingParams(
+                temperature=0.0,
+                top_k=-1,
+                top_p=1.0,
+                max_tokens=self.generation_config["max_tokens"],
+                prompt_logprobs=0  # Request prompt log probabilities
+            )
+        else:
+            sampling_params = SamplingParams(**self.generation_config)
+        outputs = self.classmate_vllm.generate(not_none_prompts, sampling_params=sampling_params, use_tqdm=False)
 
         completions = []
         completion_token_len = []
-        for i in range(len(batch_prompts)):
+        prompt_logprobs = []
+        for i in range(len(batch_input_prompt_ids)):
             if i in is_none_idx:
                 completions.append(None)
                 completion_token_len.append(0)
+                prompt_logprobs.append(None)
             else:
                 output = outputs.pop(0)
                 completions.append(output.outputs[0].text)
                 completion_token_len.append(len(output.outputs[0].token_ids))
 
-        return completions, completion_token_len
+                token_prob = [list(tok.values())[0].logprob for tok in output.prompt_logprobs if tok is not None]
+                # decoded_token = "".join([list(tok.values())[0].decoded_token for tok in output.prompt_logprobs if tok is not None])
+                prompt_logprobs.append(token_prob)
 
-    # def _generate_via_remote_api(self, batch_prompts: list) -> list:
-    #     """Generate completions via remote vLLM API.
-    #
-    #     Args:
-    #         batch_prompts: List of input prompts
-    #
-    #     Returns:
-    #         List of generated completions
-    #     """
-    #     # Convert generation_config to API parameters
-    #     vllm_api_params = {
-    #         # "model": self.model_name_or_path,
-    #         # "prompt": batch_prompts,
-    #         **self.generation_config
-    #     }
-    #
-    #     # vllm_api_params["max_tokens"] = batch_max_token_len + int(vllm_api_params.pop("max_new_tokens"))
-    #
-    #
-    #     def generate(tmp_idx, tmp_prompt):
-    #         finish = False
-    #         tmp_output = None
-    #         while not finish:
-    #             try:
-    #                 response = self.client.completions.create(
-    #                   model=self.model_name_or_path,
-    #                   prompt=tmp_prompt,
-    #                   **vllm_api_params
-    #                 )
-    #                 tmp_output = response.choices[0].text
-    #                 finish = True
-    #             except Exception as e:
-    #                 print(f"Error generating for prompt: {e}. Retrying...")
-    #                 time.sleep(3)
-    #         return tmp_idx, tmp_output
-    #
-    #     completions = [None] * len(batch_prompts)
-    #
-    #     # Thread pool for synchronous parallelism
-    #     with ThreadPoolExecutor(max_workers=8) as executor:     # TODO change number of workers if needed
-    #         futures = [executor.submit(generate, idx, p) for idx, p in enumerate(batch_prompts)]
-    #         for future in as_completed(futures):
-    #             idx, output = future.result()
-    #             completions[idx] = output
-    #
-    #     return completions
+        return completions, completion_token_len, prompt_logprobs
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
@@ -296,9 +274,12 @@ class ClassmateWorker(Worker):
         #     # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         # }
 
+        is_eval = data.meta_info["is_eval"]
+
         classmate_outputs = []
         classmate_output_lens = []
         classmate_prompts = []
+        classmate_prompt_logprobs = []
         try:
             # ONLOAD: Load model to GPU before generation (no-op for vLLM API mode)
             self._onload_model()
@@ -340,6 +321,7 @@ class ClassmateWorker(Worker):
                 batch_prompts = prompts[batch_start:batch_end]
                 batch_actor_responses = actor_responses[batch_start:batch_end]
                 batch_input_prompts = []
+                batch_input_prompt_ids = []
 
                 batch_other_prompt = None
 
@@ -349,16 +331,21 @@ class ClassmateWorker(Worker):
                 # Apply classmate's chat template
                 for idx, (tmp_prompt, tmp_response) in enumerate(zip(batch_prompts, batch_actor_responses)):
                     add_generation_prompt = False
-                    messages = [
-                        {"role": "user", "content": tmp_prompt},
-                        {"role": "assistant", "content": tmp_response},
-                    ]
+                    messages = [{"role": "user", "content": tmp_prompt}]
 
-                    if batch_other_prompt is not None:
+                    if self.enable_thinking:
+                        messages.append({"role": "assistant", "content": f"<think>\n{tmp_response}\n</think>"})
+                    else:
+                        messages.append({"role": "assistant", "content": tmp_response})
+
+                    if batch_other_prompt is not None:      # help other q
                         messages.append({"role": "user", "content": batch_other_prompt[idx]})
                         add_generation_prompt = True
 
                     token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
+                    if self.model_name_or_path == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B":
+                        token_ids = token_ids[:-1]       # remove new line at the end
+
                     # Remove trailing special tokens
                     end = len(token_ids)
                     while end > 0 and token_ids[end - 1] in self.special_ids:
@@ -368,8 +355,10 @@ class ClassmateWorker(Worker):
                     if len(token_ids) + 1 > self.classmate_vllm_configs["max_model_len"]:       # +1 for generation token (i.e. generate 1 more token will exceed max length)
                         print(f"⚠️ Warning: Input for classmate is too long (have length {len(token_ids)})")
                         batch_input_prompts.append(None)
+                        batch_input_prompt_ids.append(None)
                     else:
                         batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False, add_generation_prompt=False))
+                        batch_input_prompt_ids.append(TokensPrompt(prompt_token_ids=token_ids))
 
                 # Get batch-wise max token len
                 # prompt_attn_mask = self.tokenizer(
@@ -382,11 +371,13 @@ class ClassmateWorker(Worker):
                 # Generate via API for this batch
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts)
-                batch_completions, batch_completion_lens = self._generate_via_vllm(batch_input_prompts)
+
+                batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(batch_input_prompt_ids, is_eval=is_eval)
                 classmate_prompts.extend(batch_input_prompts)
                 # Extend back to with padding
                 classmate_outputs.extend(batch_completions)
                 classmate_output_lens.extend(batch_completion_lens)
+                classmate_prompt_logprobs.extend(batch_prompt_logprobs)
 
                 # print(f"🐛🐛🐛 Classmate completions: {classmate_outputs}")
         except Exception as e:
@@ -401,15 +392,16 @@ class ClassmateWorker(Worker):
 
         # TODO need to fix this to support num_return_sequences > 1
         classmate_outputs = [[output] for output in classmate_outputs]  # Wrap each output in a list
-
         classmate_output_lens = [[length] for length in classmate_output_lens]
+        classmate_prompt_logprobs = [[logprobs] for logprobs in classmate_prompt_logprobs]  # Wrap each logprobs in a list
 
         result_non_tensor_batch = {
             "classmate_prompts": np.array(classmate_prompts),    # Should have shape (bsz,)
-            "classmate_output": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
+            "classmate_outputs": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
+            "classmate_prompt_logprobs": np.array(classmate_prompt_logprobs, dtype=object),  # Should have shape (bsz, num_return_sequences, input_seq_len)
             "classmate_output_lens": np.array(classmate_output_lens),  # Should have shape (bsz, num_return_sequences)
         }
 
-        # print(f"🐛 From classmateWorker {self.model_index} classmate_output", result_non_tensor_batch["classmate_output"])
+        # print(f"🐛 From classmateWorker {self.model_index} classmate_output", result_non_tensor_batch["classmate_outputs"])
 
         return DataProto(batch=None, non_tensor_batch=result_non_tensor_batch)

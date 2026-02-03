@@ -2,6 +2,6 @@
 
 export PYTHONPATH=:${PYTHONPATH}
 
-python src/analysis_module/utils_across_models.py
+python my_eval/src/analysis_module/sycophancy_across_models.py
 
-#bash scripts/run_utils_across_models.sh
+#bash my_eval/scripts/run_sycophancy_across_models.sh

@@ -43,21 +43,23 @@ def load_config_and_setup_output_dir(configs):
     short_dataset_name = configs.data_args.dataset_name.split("/")[-1]
     short_model_name = configs.model_args.model_name_or_path.split("/")[-1]
 
+    outputs_root_dir = "outputs_eval"
+
     if configs.running_args.exp_type == "inference_main_model":
         dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
-        configs.running_args.output_dir = f"outputs/{configs.running_args.exp_type}/{short_model_name}/step_{configs.model_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}"
+        configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_model_name}/step_{configs.model_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}"
 
         if "mmlu_sycophancy" in configs.data_args.dataset_name:
-            configs.data_args.dataset_name = "data/mmlu_sycophancy/test.parquet"
+            configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
 
     elif configs.running_args.exp_type == "cot_utility_to_classmate":
         short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]
         dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
         if not configs.data_args.wo_cot:
-            configs.data_args.dataset_name = f"outputs/inference_main_model/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}/preds.jsonl"
-            configs.running_args.output_dir = f"outputs/{configs.running_args.exp_type}/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
+            configs.data_args.dataset_name = f"{outputs_root_dir}/inference_main_model/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}/preds.jsonl"
+            configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
         else:
-            configs.running_args.output_dir = f"outputs/{configs.running_args.exp_type}/{short_main_model_name}/wo_cot/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
+            configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/wo_cot/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
     elif configs.running_args.exp_type == "reward_classmate_model":
         raise NotImplementedError
         # if args.main_model_step_idx is not None:
@@ -66,8 +68,8 @@ def load_config_and_setup_output_dir(configs):
         #     configs.model_args.model_name_or_path = args.model_name_or_path
         #     short_model_name = configs.model_args.model_name_or_path.split("/")[-1]
         # short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]
-        # configs.data_args.dataset_name = f"outputs/cot_utility_to_classmate/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}/correct_preds.jsonl"
-        # configs.running_args.output_dir = f"outputs/cot_utility_to_classmate/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}"
+        # configs.data_args.dataset_name = f"{outputs_root_dir}/cot_utility_to_classmate/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}/correct_preds.jsonl"
+        # configs.running_args.output_dir = f"{outputs_root_dir}/cot_utility_to_classmate/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}"
     else:
         raise ValueError(f"Unknown exp_type {configs.running_args.exp_type}")
 

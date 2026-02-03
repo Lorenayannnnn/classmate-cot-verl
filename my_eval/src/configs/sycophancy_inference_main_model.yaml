@@ -1,0 +1,35 @@
+data_args:
+  dataset_name: null    # openai/gsm8k, EleutherAI/hendrycks_math, AI-MO/aimo-validation-aime
+  dataset_subset_name: main   # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_split_name: test
+  max_predict_samples: null
+
+  cache_dir: null
+  wo_cot: null    # Just a placeholder; irrelevant for the main model inference
+
+model_args:
+#  model_name_or_path: LorenaYannnnn/20251217-Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes
+#  base_model_name_or_path: Qwen/Qwen3-4B-Base
+  model_name_or_path: null
+  base_model_name_or_path: null
+  main_model_step_idx: null
+  inference_backend: vllm
+  vllm_gpu_memory_utilization: 0.9
+  dtype: bfloat16
+  main_cot_keep_rate: 0.8
+
+  enable_thinking: True
+
+running_args:
+  exp_type: "inference_main_model"
+  batch_size: 1
+  max_tokens: null
+  output_dir: null    # will be overwritten in the main script
+
+  monitor_template_name: mmlu_sycophancy
+  monitor_model_name: gpt-4o-mini
+
+hydra:
+  output_subdir: null
+  job:
+    chdir: False

@@ -20,6 +20,7 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import json
 import os
+import re
 import uuid
 from collections import defaultdict
 from copy import deepcopy
@@ -36,6 +37,7 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 
 from verl import DataProto
+from verl.utils.cot_monitor.monitor import monitor_cot, process_main_cot_helper
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
@@ -56,6 +58,7 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, shou
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
+from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.torch_functional import masked_mean
@@ -232,7 +235,7 @@ def compute_advantage(
         grpo_calculation_mask = data.batch["response_mask"]
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
+        advantages, returns, group_reward_mean, group_reward_std = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -240,6 +243,10 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
+        # data.batch["group_reward_mean"] = group_reward_mean
+        # data.batch["group_reward_std"] = group_reward_std
+        data.batch["main_group_reward_mean"] = group_reward_mean
+        data.batch["main_group_reward_std"] = group_reward_std
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
@@ -285,6 +292,7 @@ class RayPPOTrainer:
         collate_fn=None,
         train_sampler: Optional[Sampler] = None,
         device_name=None,
+        enable_thinking=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -340,6 +348,15 @@ class RayPPOTrainer:
             self.kl_ctrl_in_reward = core_algos.get_kl_controller(self.config.algorithm.kl_ctrl)
 
         self._create_dataloader(train_dataset, val_dataset, collate_fn, train_sampler)
+
+        # for CoT monitoring
+        if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
+            # Initialize openai client
+            from openai import OpenAI
+            from keys import OPENAI_KEY
+            self.openai_client = OpenAI(api_key=OPENAI_KEY)
+
+        self.enable_thinking = enable_thinking
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -536,6 +553,10 @@ class RayPPOTrainer:
         sample_turns = []
         sample_uids = []
 
+        all_main_rewards = []
+        all_monitor_use_hint = []
+        all_monitor_explanations = []
+
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
 
@@ -601,6 +622,49 @@ class RayPPOTrainer:
             test_batch = test_batch.union(test_output_gen_batch)
             test_batch.meta_info["validate"] = True
 
+            # (modify) cot monitor
+            if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
+                from verl.utils.cot_monitor.monitor import monitor_cot_wrapper
+
+                test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
+                    test_batch.batch["responses"], skip_special_tokens=True
+                ))
+
+                # Extract CoTs, questions, and hints
+                all_main_cots, all_raw_questions, all_hint_strs = [], [], []
+                for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
+                    truncated_main_cot, _, _ = process_main_cot_helper(
+                        self.tokenizer,
+                        self.enable_thinking,
+                        item.non_tensor_batch["data_source"],
+                        response,
+                        item.batch["responses"],  # token ids
+                        None,  # response masks
+                        self.config.reward_model["main_cot_keep_rate"]
+                    )
+                    # all_main_cots.append(parse_out_main_cot_output(response)[0])
+                    all_main_cots.append(truncated_main_cot)
+                    all_raw_questions.append(item.non_tensor_batch.get("reward_model", {}).get("raw_question_for_monitor", ""))
+                    all_hint_strs.append(item.non_tensor_batch.get("reward_model", {}).get("hint_str_for_monitor", ""))
+
+                # Execute monitor_cot calls in parallel
+                all_monitor_use_hint_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
+                    all_main_cots=all_main_cots,
+                    all_raw_questions=all_raw_questions,
+                    all_hint_strs=all_hint_strs,
+                    monitor_template_name=self.config.reward_model.get("monitor_template_name"),
+                    openai_client=self.openai_client,
+                    model_name=self.config.reward_model.get("monitor_model_name")
+                )
+
+                test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
+                test_batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint_batch)
+                test_batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations_batch)
+                
+                # Accumulate monitor results across all batches
+                all_monitor_use_hint.extend(all_monitor_use_hint_batch)
+                all_monitor_explanations.extend(all_monitor_explanations_batch)
+
             # evaluate using reward_function
             if self.val_reward_fn is None:
                 raise ValueError("val_reward_fn must be provided for validation.")
@@ -619,6 +683,8 @@ class RayPPOTrainer:
                 sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
+
+            all_main_rewards.extend(scores)
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
@@ -679,6 +745,41 @@ class RayPPOTrainer:
             metric_dict["val-aux/num_turns/min"] = sample_turns.min()
             metric_dict["val-aux/num_turns/max"] = sample_turns.max()
             metric_dict["val-aux/num_turns/mean"] = sample_turns.mean()
+
+        # (modify) cot monitor
+        if len(all_monitor_use_hint) > 0:
+            # Convert to numpy arrays for computation
+            monitor_use_hint = np.array(all_monitor_use_hint)
+            main_model_reward = np.array(all_main_rewards)
+
+            valid_mask = monitor_use_hint != None  # noqa: E711
+            monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
+            main_model_reward = main_model_reward[valid_mask]
+
+            # Convert rewards to binary (1/0)
+            main_reward_bin = (main_model_reward == 1).astype(bool)
+
+            tp = np.sum(main_reward_bin & monitor_use_hint)
+            tn = np.sum(~main_reward_bin & ~monitor_use_hint)
+            fp = np.sum(~main_reward_bin & monitor_use_hint)
+            fn = np.sum(main_reward_bin & ~monitor_use_hint)
+
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+
+            metric_dict.update(
+                {
+                    "val-core/monitor/total_monitored_entries": int(len(monitor_use_hint)),
+                    "val-core/monitor/tp": float(tp),
+                    "val-core/monitor/tn": float(tn),
+                    "val-core/monitor/fp": float(fp),
+                    "val-core/monitor/fn": float(fn),
+                    "val-core/monitor/precision": float(precision),
+                    "val-core/monitor/recall": float(recall),
+                    "val-core/monitor/f1": float(f1),
+                }
+            )
 
         return metric_dict
 
@@ -1134,6 +1235,55 @@ class RayPPOTrainer:
                     # repeat to align with repeated responses in rollout
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     batch = batch.union(gen_batch_output)
+                
+                    # TODO: not doing monitor during training for now to save money
+                    # if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
+                    #     from concurrent.futures import ThreadPoolExecutor, as_completed
+                    #
+                    #     batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
+                    #         batch.batch["responses"], skip_special_tokens=True
+                    #     ))
+                    #
+                    #     # Prepare all monitor tasks
+                    #     monitor_tasks = []
+                    #     for item in batch:
+                    #         # (skipping for now) 1. get enable_thinking from apply_chat_template_kwargs.enable_thinking (enable_thinking attribute may not exist)
+                    #         # get main cot in-between think tag
+                    #         main_cot_for_monitor, _, _ = parse_out_main_cot_output(item.non_tensor_batch["decoded_responses"])
+                    #
+                    #         # call monitor: monitor_cot(user_message, hint_message, main_pred, monitor_template_name, openai_client, model_name="gpt-4o-mini"):
+                    #         user_message = item.non_tensor_batch.get("reward_model", {}).get("raw_question_for_monitor", "")
+                    #         hint_message = item.non_tensor_batch.get("reward_model", {}).get("hint_str_for_monitor", "")
+                    #         monitor_tasks.append((user_message, hint_message, main_cot_for_monitor))
+                    #
+                    #     # Execute monitor_cot calls in parallel
+                    #     all_monitor_use_hint = [None] * len(monitor_tasks)
+                    #     all_monitor_explanations = [None] * len(monitor_tasks)
+                    #
+                    #     with ThreadPoolExecutor(max_workers=min(32, len(monitor_tasks))) as executor:
+                    #         # Submit all tasks
+                    #         future_to_idx = {
+                    #             executor.submit(
+                    #                 monitor_cot,
+                    #                 user_msg,
+                    #                 hint_msg,
+                    #                 main_cot,
+                    #                 self.config.reward_model.get("monitor_template_name"),
+                    #                 self.openai_client,
+                    #                 model_name=self.config.reward_model.get("monitor_model_name")
+                    #             ): idx
+                    #             for idx, (user_msg, hint_msg, main_cot) in enumerate(monitor_tasks)
+                    #         }
+                    #
+                    #         # Collect results as they complete
+                    #         for future in as_completed(future_to_idx):
+                    #             idx = future_to_idx[future]
+                    #             monitor_result_dict = future.result()
+                    #             all_monitor_use_hint[idx] = monitor_result_dict['use_hint']
+                    #             all_monitor_explanations[idx] = monitor_result_dict['explanation']
+                    #
+                    #     batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint)
+                    #     batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations)
 
                     if "response_mask" not in batch.batch.keys():
                         batch.batch["response_mask"] = compute_response_mask(batch)

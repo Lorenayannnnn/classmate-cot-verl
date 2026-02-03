@@ -1,16 +1,19 @@
-from my_eval.src.data_module.dataset_objects.gpqa import GPQA
+# from my_eval.src.data_module.dataset_objects.gpqa import GPQA
 
 from my_eval.src.data_module.dataset_objects.aime import AIME
 from my_eval.src.data_module.dataset_objects.gsm8k import GSM8K
 from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
-from my_eval.src.data_module.dataset_objects.mmlu import MMLU
+from verl.utils.reward_score.mmlu_sycophancy_verifier import MMLU as MMLUSycophancy
+
+# from my_eval.src.data_module.dataset_objects.mmlu import MMLU
 
 DATASET_NAME_TO_CLASS = {
     "gsm8k": GSM8K,
     "hendrycks_math": HendrycksMath,
     "aimo-validation-aime": AIME,
-    "gpqa": GPQA,
-    "mmlu": MMLU
+    # "gpqa": GPQA,
+    # "mmlu": MMLU
+    "mmlu_sycophancy": MMLUSycophancy
 }
 
 DATASET_NAME_TO_SUBSET_NAME_LIST = {

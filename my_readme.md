@@ -111,8 +111,8 @@
   - Modify bashrc:
     ```
     conda activate verl
-    cd $HOME/east/classmate-cot-verl
     cd $HOME/midwest/classmate-cot-verl
+    cd $HOME/east/classmate-cot-verl
     ```
 - Install dependency:
   ```
@@ -139,7 +139,7 @@
   - Common utils: [math_utils.py](verl/utils/math_utils.py)
 - Add config: [classmate_cot_ppo_trainer.yaml](verl/trainer/config/classmate_cot_ppo_trainer.yaml)
   - (optional) custom compute_score function
-- [classmate training main ppo script](verl/trainer/classmate_cot_main_ppo.py):
+- [classmate training main ppo script](verl/trainer/deprecate_classmate_cot_main_ppo.py):
   - Change config file name at the top
   - add_classmate_rollout_worker() and call it in run() in TaskRunner
   - Change reward manager & ClassmateCoTRayPPOTrainer loading

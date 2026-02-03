@@ -11,13 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import re
 from collections import defaultdict
 from typing import Any
 
 import torch
 
 from verl import DataProto
+from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
@@ -28,7 +29,7 @@ from verl.workers.reward_manager.abstract import AbstractRewardManager
 class NaiveRewardManager(AbstractRewardManager):
     """The reward manager."""
     def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source",
-                 code_api_url=None, llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
+                 code_api_url=None, enable_thinking=False, llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
                  llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None):
         """
         Initialize the NaiveRewardManager instance.
@@ -81,6 +82,8 @@ class NaiveRewardManager(AbstractRewardManager):
         # else:
         #     self.code_verifier_src_to_verifier = None
 
+        self.enable_thinking = enable_thinking
+
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """We will expand this function gradually based on the available datasets"""
 
@@ -117,6 +120,13 @@ class NaiveRewardManager(AbstractRewardManager):
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
+            # Extract things after <think>...</think> as output if enable_thinking is True
+            if self.enable_thinking:
+                main_cot, main_output, _ = parse_out_main_cot_output(response_str)
+            else:
+                main_cot = response_str
+                main_output = response_str
+
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
@@ -130,7 +140,8 @@ class NaiveRewardManager(AbstractRewardManager):
 
             score = self.compute_score(
                 data_source=data_source,
-                solution_str=response_str,
+                # solution_str=response_str,
+                solution_str=main_output,
                 ground_truth=ground_truth,
                 extra_info=extra_info,
                 return_dict=True,
@@ -156,7 +167,8 @@ class NaiveRewardManager(AbstractRewardManager):
                 # Store the information including original reward
                 for key, value in score.items():
                     if key == "score":
-                        reward_extra_info["main_model_reward"].append(value)
+                        # reward_extra_info["main_model_reward"].append(value)
+                        reward_extra_info["main_reward"].append(value)
                     else:
                         reward_extra_info[f"main_model_{key}"].append(value)
             else:
@@ -173,6 +185,9 @@ class NaiveRewardManager(AbstractRewardManager):
                 print("🐛[raw_prompt]", raw_prompt)
                 print("🐛[main_prompt]", prompt_str)
                 print("🐛[main_response]", response_str)
+                if self.enable_thinking:
+                    print("🐛[main_cot]", main_cot)
+                    print("🐛[main_output]", main_output)
                 if extracted_sol is not None:
                     print("🐛[main_extracted]", extracted_sol)
                 print("🐛[ground_truth]", ground_truth)
@@ -182,6 +197,12 @@ class NaiveRewardManager(AbstractRewardManager):
                         print(f"🐛[{key}]", value)
                 else:
                     print("[main_reward]", score)
+                
+                if "monitor_use_hint" in data_item.non_tensor_batch:
+                    print("🐛[truncated_main_cot]", data_item.non_tensor_batch["truncated_main_cot"])
+                    print("🐛[monitor_use_hint]", data_item.non_tensor_batch["monitor_use_hint"])
+                    print("🐛[monitor_explanation]", data_item.non_tensor_batch["monitor_explanations"])
+                    print("🐛[main_monitor_consistent]", (score == 1) == (data_item.non_tensor_batch["monitor_use_hint"] == True))
         if return_dict:
             return {
                 "reward_tensor": reward_tensor,

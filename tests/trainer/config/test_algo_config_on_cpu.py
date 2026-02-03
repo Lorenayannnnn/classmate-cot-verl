@@ -189,7 +189,7 @@ class TestAlgoCompute(unittest.TestCase):
         response_mask = torch.ones(batch_size, seq_len)
         index = np.array([0, 0, 1, 1])  # Two groups
 
-        advantages, returns = compute_grpo_outcome_advantage(
+        advantages, returns, _, _ = compute_grpo_outcome_advantage(
             token_level_rewards=token_level_rewards,
             response_mask=response_mask,
             index=index,

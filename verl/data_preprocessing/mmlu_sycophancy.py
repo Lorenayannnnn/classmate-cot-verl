@@ -47,6 +47,7 @@ if __name__ == "__main__":
     train_dataset = dataset["auxiliary_train"]
 
     dev_dataset = dataset["dev"]
+    test_dataset = dataset["test"]
 
     # instruction_following = ""
     # instruction_following = " Put your final answer within \\boxed{}."
@@ -110,6 +111,7 @@ if __name__ == "__main__":
 
     train_dataset = train_dataset.map(function=make_map_fn("train"), with_indices=True)
     dev_dataset = dev_dataset.map(function=make_map_fn("dev"), with_indices=True)
+    test_dataset = test_dataset.map(function=make_map_fn("test"), with_indices=True)
 
     hdfs_dir = args.hdfs_dir
     local_save_dir = args.local_dir
@@ -120,6 +122,7 @@ if __name__ == "__main__":
 
     train_dataset.to_parquet(os.path.join(local_save_dir, "train.parquet"))
     dev_dataset.to_parquet(os.path.join(local_save_dir, "dev.parquet"))
+    test_dataset.to_parquet(os.path.join(local_save_dir, "test.parquet"))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

@@ -5,7 +5,7 @@ import json
 from tqdm import tqdm
 from datasets import load_dataset
 from math_verify import parse, verify
-from vllm import LLM, SamplingParams
+from vllm import LLM, SamplingParams, TokensPrompt
 from transformers import AutoTokenizer
 from together import Together
 from openai import OpenAI
@@ -87,104 +87,8 @@ def create_tokenizer(model_name_path):
         tokenizer.chat_template = "{{ bos_token }}{% for message in messages %}{% if message['role'] == 'system' %}{{ '<|system|>\n' + message['content'] + '\n' }}{% elif message['role'] == 'user' %}{{ '<|user|>\n' + message['content'] + '\n' }}{% elif message['role'] == 'assistant' %}{% if not loop.last %}{{ '<|assistant|>\n'  + message['content'] + eos_token + '\n' }}{% else %}{{ '<|assistant|>\n'  + message['content'] + eos_token }}{% endif %}{% endif %}{% if loop.last and add_generation_prompt %}{{ '<|assistant|>\n' }}{% endif %}{% endfor %}"
     elif "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in model_name_path:
         # change chat template to not omit main CoT
-        tokenizer.chat_template = """{% if add_generation_prompt is not defined %}
-  {% set add_generation_prompt = false %}
-{% endif %}
-
-{% set ns = namespace(
-  is_first=false,
-  is_tool=false,
-  is_output_first=true,
-  system_prompt=''
-) %}
-
-{# collect system prompt #}
-{% for message in messages %}
-  {% if message['role'] == 'system' %}
-    {% set ns.system_prompt = message['content'] %}
-  {% endif %}
-{% endfor %}
-
-{{ bos_token }}{{ ns.system_prompt }}
-
-{% for message in messages %}
-
-  {# ================= USER ================= #}
-  {% if message['role'] == 'user' %}
-    {% set ns.is_tool = false %}
-    {{ '<｜User｜>' + message['content'] }}
-  {% endif %}
-
-  {# ============ ASSISTANT: TOOL CALLS ============ #}
-  {% if message['role'] == 'assistant' and message['content'] is none %}
-    {% set ns.is_tool = false %}
-    {% for tool in message['tool_calls'] %}
-
-      {% if not ns.is_first %}
-        {{ '<｜Assistant｜>'
-           + '<｜tool▁calls▁begin｜>'
-           + '<｜tool▁call▁begin｜>'
-           + tool['type']
-           + '<｜tool▁sep｜>'
-           + tool['function']['name']
-           + '\n```json\n'
-           + tool['function']['arguments']
-           + '\n```\n'
-           + '<｜tool▁call▁end｜>' }}
-        {% set ns.is_first = true %}
-      {% else %}
-        {{ '\n<｜tool▁call▁begin｜>'
-           + tool['type']
-           + '<｜tool▁sep｜>'
-           + tool['function']['name']
-           + '\n```json\n'
-           + tool['function']['arguments']
-           + '\n```\n'
-           + '<｜tool▁call▁end｜>' }}
-      {% endif %}
-
-    {% endfor %}
-    {{ '<｜tool▁calls▁end｜><｜end▁of▁sentence｜>' }}
-  {% endif %}
-
-  {# ============ ASSISTANT: NORMAL CONTENT ============ #}
-  {% if message['role'] == 'assistant' and message['content'] is not none %}
-    {% if ns.is_tool %}
-      {{ '<｜tool▁outputs▁end｜>'
-         + message['content']
-         + '<｜end▁of▁sentence｜>' }}
-      {% set ns.is_tool = false %}
-    {% else %}
-      {% set content = message['content'] %}
-      {{ '<｜Assistant｜>' + content + '<｜end▁of▁sentence｜>' }}
-    {% endif %}
-  {% endif %}
-
-  {# ================= TOOL OUTPUT ================= #}
-  {% if message['role'] == 'tool' %}
-    {% set ns.is_tool = true %}
-    {% if ns.is_output_first %}
-      {{ '<｜tool▁outputs▁begin｜>'
-         + '<｜tool▁output▁begin｜>'
-         + message['content']
-         + '<｜tool▁output▁end｜>' }}
-      {% set ns.is_output_first = false %}
-    {% else %}
-      {{ '\n<｜tool▁output▁begin｜>'
-         + message['content']
-         + '<｜tool▁output▁end｜>' }}
-    {% endif %}
-  {% endif %}
-
-{% endfor %}
-
-{% if ns.is_tool %}
-  {{ '<｜tool▁outputs▁end｜>' }}
-{% endif %}
-
-{% if add_generation_prompt and not ns.is_tool %}
-  {{ '<｜Assistant｜><k>\n' }}
-{% endif %}"""
+        jinja_fn = "chat_templates/DeepSeek-R1-Distill-Qwen-1.5B.jinja"
+        tokenizer.chat_template = open(jinja_fn, "r").read()
     return tokenizer
 
 def create_vllm(model_name_path, max_model_len, gpu_memory_utilization=None, use_together=False):
@@ -258,7 +162,16 @@ def generate(model, model_name_or_path, tokenizer, prompt, sample_param, is_qwen
         # batch_prompts = [prompt, prompt, prompt, prompt, prompt]
         # batch_outputs = model.generate(batch_prompts, sampling_params=sample_param, use_tqdm=False)
         # texts = [output.outputs[0].text for output in batch_outputs]
-        outputs = model.generate(prompt, sampling_params=sample_param, use_tqdm=False)
+        token_ids = tokenizer.encode(prompt)
+        token_prompt = TokensPrompt(prompt_token_ids=token_ids)
+        # prompt_logprobs
+        # breakpoint()
+        # sample_param.prompt_logprobs = 0
+        outputs = model.generate([token_prompt], sampling_params=sample_param, use_tqdm=False)
+        # prompt_log_prob = outputs[0].prompt_logprobs
+        # token_prob = [list(tok.values())[0].logprob for tok in prompt_log_prob if tok is not None]
+        # decoded_token = "".join([list(tok.values())[0].decoded_token for tok in prompt_log_prob if tok is not None])
+
 
     if is_qwen:
         raw_token_ids = outputs[0].outputs[0].token_ids
@@ -472,7 +385,7 @@ def main():
     use_temperature = True
     # use_temperature = False
 
-    enable_thinking = True
+    enable_thinking = False
 
     # main_model_name_path="Qwen/Qwen2.5-Math-1.5B"
     main_model_name_path="Qwen/Qwen3-0.6B"
@@ -765,6 +678,16 @@ def main():
 
 
 if __name__ == "__main__":
+    # tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+    # test = "<think>\nThis is a test of the thinking process.\nWe will reason step by step.\n</think>\nTherefore, the answer is \\boxed{42}."
+    #
+    # truncated_token_ids = [198, 32313, 11, 1077, 594, 1490, 13, 576, 3405, 374, 10161, 892, 315, 279, 2606, 320, 32, 9420, 8, 374, 537, 11105, 311, 614, 5497, 304, 9898, 55407, 553, 31653, 11, 4092, 311, 279, 21085, 13, 576, 4226, 374, 9966, 311, 387, 320, 32, 8, 7709, 382, 785, 21085, 33845, 429, 11811, 1730, 4344, 304, 7709, 11, 4746, 7813, 11, 8464, 35808, 5866, 11, 323, 1496, 8922, 6239, 1075, 9155, 65232, 304, 3654, 9898, 13, 1084, 1083, 13433, 911, 279, 8225, 24905, 389, 9898, 13, 35869, 6712, 19305, 482, 504, 279, 3822, 315, 53246, 374, 9733, 438, 5488, 279, 4226, 374, 320, 32, 568, 6771, 752, 1779, 1549, 382, 14190, 11, 279, 2606, 525, 911, 1128, 594, 537, 11105, 13, 576, 21085, 20975, 5302, 429, 279, 11811, 13686, 4344, 304, 7709, 11, 4746, 7813, 11, 8464, 35808, 5866, 11, 323, 1496, 4344, 311, 65232, 13, 2055, 1493, 4344, 525, 1128, 525, 1660, 11105, 13, 15277, 11, 279, 4396, 4226, 1265, 387, 2494, 429, 4436, 944, 9733, 13, 4710, 10061, 752, 312, 28806, 279, 21085, 13, 576, 1376, 949, 374, 429, 279, 13922, 6239, 2924, 4344, 304, 7709, 11, 4746, 7813, 11, 476, 8464, 35808, 5866, 11, 323, 1083, 429, 1493, 1410, 46193, 268, 916, 882, 13, 576, 67542, 320, 68, 1302, 2572, 13125, 11, 24761, 11, 4992, 6138, 525, 1053, 311, 5240, 4714, 1075, 8457, 13, 5005, 11, 279, 13923, 13166, 429, 82406, 323, 281, 55358, 525, 19300, 979, 31653, 2525, 11, 6388, 311, 9155, 65232, 13, 576, 1008, 949, 33845, 279, 5214, 311, 29305, 19661, 13, 4710, 4416, 279, 2606, 525, 911, 1128, 374, 11105, 13, 1416, 279, 4226, 374, 320, 32, 8, 7709, 11, 1221, 429, 594, 279, 825, 13, 9211, 279, 3405, 374, 892, 374, 537, 11105, 13, 2009, 315, 279, 2606, 525, 9733, 304, 279, 21085, 13, 15277, 11, 279, 4226, 1969, 387, 320, 32, 568, 576, 1008, 2606, 320]
+    # original_token_ids = [151667, 198, 32313, 11, 1077, 594, 1490, 13, 576, 3405, 374, 10161, 892, 315, 279, 2606, 320, 32, 9420, 8, 374, 537, 11105, 311, 614, 5497, 304, 9898, 55407, 553, 31653, 11, 4092, 311, 279, 21085, 13, 576, 4226, 374, 9966, 311, 387, 320, 32, 8, 7709, 382, 785, 21085, 33845, 429, 11811, 1730, 4344, 304, 7709, 11, 4746, 7813, 11, 8464, 35808, 5866, 11, 323, 1496, 8922, 6239, 1075, 9155, 65232, 304, 3654, 9898, 13, 1084, 1083, 13433, 911, 279, 8225, 24905, 389, 9898, 13, 35869, 6712, 19305, 482, 504, 279, 3822, 315, 53246, 374, 9733, 438, 5488, 279, 4226, 374, 320, 32, 568, 6771, 752, 1779, 1549, 382, 14190, 11, 279, 2606, 525, 911, 1128, 594, 537, 11105, 13, 576, 21085, 20975, 5302, 429, 279, 11811, 13686, 4344, 304, 7709, 11, 4746, 7813, 11, 8464, 35808, 5866, 11, 323, 1496, 4344, 311, 65232, 13, 2055, 1493, 4344, 525, 1128, 525, 1660, 11105, 13, 15277, 11, 279, 4396, 4226, 1265, 387, 2494, 429, 4436, 944, 9733, 13, 4710, 10061, 752, 312, 28806, 279, 21085, 13, 576, 1376, 949, 374, 429, 279, 13922, 6239, 2924, 4344, 304, 7709, 11, 4746, 7813, 11, 476, 8464, 35808, 5866, 11, 323, 1083, 429, 1493, 1410, 46193, 268, 916, 882, 13, 576, 67542, 320, 68, 1302, 2572, 13125, 11, 24761, 11, 4992, 6138, 525, 1053, 311, 5240, 4714, 1075, 8457, 13, 5005, 11, 279, 13923, 13166, 429, 82406, 323, 281, 55358, 525, 19300, 979, 31653, 2525, 11, 6388, 311, 9155, 65232, 13, 576, 1008, 949, 33845, 279, 5214, 311, 29305, 19661, 13, 4710, 4416, 279, 2606, 525, 911, 1128, 374, 11105, 13, 1416, 279, 4226, 374, 320, 32, 8, 7709, 11, 1221, 429, 594, 279, 825, 13, 9211, 279, 3405, 374, 892, 374, 537, 11105, 13, 2009, 315, 279, 2606, 525, 9733, 304, 279, 21085, 13, 15277, 11, 279, 4226, 1969, 387, 320, 32, 568, 576, 1008, 2606, 320]
+    # decoded_truncate = tokenizer.decode(truncated_token_ids, skip_special_tokens=True)
+    # decoded_original = tokenizer.decode(original_token_ids, skip_special_tokens=True)
+    # encoded = tokenizer.encode(test, add_special_tokens=False)
+    # encoded = tokenizer.decode(tokenizer.encode(test), skip_special_tokens=True)
+    # breakpoint()
     main()
 
     # dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"

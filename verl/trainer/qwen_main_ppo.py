@@ -293,6 +293,7 @@ class TaskRunner:
             llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
             llm_judge_temperature=config.reward_model.llm_judge_temperature,
             seed=config.data.seed,
+            enable_thinking=config.data.apply_chat_template_kwargs.get("enable_thinking", False),
             **config.reward_model.get("reward_kwargs", {})
         )
         val_reward_fn = load_reward_manager(
@@ -304,6 +305,7 @@ class TaskRunner:
             llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
             llm_judge_temperature=config.reward_model.llm_judge_temperature,
             seed=config.data.seed,
+            enable_thinking=config.data.apply_chat_template_kwargs.get("enable_thinking", False),
             **config.reward_model.get("reward_kwargs", {})
         )
 
@@ -344,6 +346,7 @@ class TaskRunner:
             val_dataset=val_dataset,
             collate_fn=collate_fn,
             train_sampler=train_sampler,
+            enable_thinking=config.data.apply_chat_template_kwargs["enable_thinking"]
         )
         # Initialize the workers of the trainer.
         trainer.init_workers()

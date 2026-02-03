@@ -179,14 +179,16 @@ def compute_main_classmate_reward(data: DataProto, reward_fn: AbstractRewardMana
         reward_result = reward_fn(data, return_dict=True)
         main_reward_tensor = reward_result["main_reward_tensor"]
         classmate_reward_tensor = reward_result["classmate_reward_tensor"]
-        consistency_reward_tensor = reward_result.get("consistency_reward_tensor", None)
+        # consistency_reward_tensor = reward_result.get("consistency_reward_tensor", None)
         reward_extra_infos_dict = reward_result.get("reward_extra_info", {})
     except Exception as e:
         print(f"Error in reward_fn: {e}")
-        main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor = reward_fn(data)
+        # main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor = reward_fn(data)
+        main_reward_tensor, classmate_reward_tensor = reward_fn(data)
         reward_extra_infos_dict = {}
 
-    return main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict
+    # return main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict
+    return main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict
 
 
 @tqbridge(put_data=False)

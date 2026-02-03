@@ -238,7 +238,7 @@ def compute_advantage(
     num_repeat: int = 1,
     norm_adv_by_std_in_grpo: bool = True,
     config: Optional[AlgoConfig] = None,
-) -> tuple[Any, Any]:
+) -> tuple[Any, Any, Any | None, Any | None]:
     """Compute advantage estimates for policy optimization.
 
     This function computes advantage estimates using various estimators like GAE, GRPO, REINFORCE++, etc.
@@ -258,6 +258,8 @@ def compute_advantage(
         tuple: A tuple containing:
             - advantages: The computed advantage estimates.
             - returns: The computed returns.
+            - group_reward_mean: Group-wise reward mean per sample (GRPO only, else None).
+            - group_reward_std: Group-wise reward std per sample (GRPO only, else None).
     """
     # prepare response group
     if adv_estimator == AdvantageEstimator.GAE:
@@ -280,7 +282,7 @@ def compute_advantage(
         # Initialize the mask for GRPO calculation
         grpo_calculation_mask = data.batch["response_mask"]
         # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
+        advantages, returns, group_reward_mean, group_reward_std = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -301,7 +303,9 @@ def compute_advantage(
 
         # calculate advantage estimator
         advantages, returns = adv_estimator_fn(**adv_kwargs)
-    return advantages, returns
+    if adv_estimator == AdvantageEstimator.GRPO:
+        return advantages, returns, group_reward_mean, group_reward_std
+    return advantages, returns, None, None
 
 
 @tqbridge(put_data=False)
@@ -1647,7 +1651,7 @@ class RayPPOTrainer:
                         )
                         compute_advantage_meta.reorder(balanced_idx)
 
-                        advantages, returns = compute_advantage(
+                        advantages, returns, group_reward_mean, group_reward_std = compute_advantage(
                             compute_advantage_meta,
                             adv_estimator=self.config.algorithm.adv_estimator,
                             gamma=self.config.algorithm.gamma,
@@ -1657,9 +1661,11 @@ class RayPPOTrainer:
                             config=self.config.algorithm,
                         )
 
-                        advantages_td = TensorDict(
-                            {"advantages": advantages, "returns": returns}, batch_size=advantages.size(0)
-                        )
+                        advantages_payload = {"advantages": advantages, "returns": returns}
+                        if group_reward_mean is not None and group_reward_std is not None:
+                            advantages_payload["group_reward_mean"] = group_reward_mean
+                            advantages_payload["group_reward_std"] = group_reward_std
+                        advantages_td = TensorDict(advantages_payload, batch_size=advantages.size(0))
                         asyncio.run(
                             self.data_system_client.async_put(data=advantages_td, metadata=compute_advantage_meta)
                         )

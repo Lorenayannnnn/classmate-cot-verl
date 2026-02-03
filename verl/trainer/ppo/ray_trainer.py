@@ -232,7 +232,7 @@ def compute_advantage(
         grpo_calculation_mask = data.batch["response_mask"]
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
+        advantages, returns, group_reward_mean, group_reward_std = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -240,6 +240,8 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
+        data.batch["group_reward_mean"] = group_reward_mean
+        data.batch["group_reward_std"] = group_reward_std
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)

@@ -58,8 +58,10 @@ from verl.trainer.ppo.reward import compute_reward, compute_reward_async, comput
 from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference_policy, need_reward_model
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
+from verl.utils.cot_monitor.monitor import monitor_cot, process_main_cot_helper
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
+from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score.olmo_verifiers import process_code_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
@@ -239,7 +241,7 @@ def compute_advantage(
         grpo_calculation_mask = data.batch["response_mask"]
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
+        advantages, returns, group_reward_mean, group_reward_std = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -247,6 +249,8 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
+        data.batch["group_reward_mean"] = group_reward_mean
+        data.batch["group_reward_std"] = group_reward_std
     elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
         # Initialize the mask for GRPO calculation
 
@@ -257,7 +261,7 @@ def compute_advantage(
         advantages, returns = core_algos.compute_grpo_main_classmate_separated_outcome_advantage(
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
+            # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
             main_response_mask=main_calculation_mask,
             classmate_input_mask=classmate_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -291,11 +295,13 @@ def compute_advantage(
         main_calculation_mask = data.batch["response_mask"]
         classmate_calculation_mask = data.batch["classmate_input_mask"]
 
-        # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_gdpo_outcome_advantage(
+        # Call compute_gdpo_outcome_advantage with parameters matching its definition
+        (advantages, returns, 
+         main_group_reward_mean, main_group_reward_std,
+         classmate_group_reward_mean, classmate_group_reward_std) = core_algos.compute_gdpo_outcome_advantage(
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
+            # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
             main_response_mask=main_calculation_mask,
             classmate_input_mask=classmate_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -304,6 +310,12 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
+        data.batch["main_group_reward_mean"] = main_group_reward_mean
+        data.batch["main_group_reward_std"] = main_group_reward_std
+        data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean        # Note these are weighted
+        data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std  
+        # data.batch["consistency_group_reward_mean"] = consistency_group_reward_mean
+        # data.batch["consistency_group_reward_std"] = consistency_group_reward_std
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
@@ -359,6 +371,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_generation_configs=None,
         classmate_vllm_configs=None,
         seed=None,
+        enable_thinking=None,
         # host_classmate_name_to_url_json_fn=None,
     ):
         """
@@ -440,8 +453,8 @@ class ClassmateCoTRayPPOTrainer:
                 "seed": seed
             })
 
-            if type(self.classmate_generation_configs["max_tokens"]) == str:
-                self.classmate_generation_configs["max_tokens"] = int(eval(self.classmate_generation_configs["max_tokens"]))
+        if type(self.classmate_generation_configs["max_tokens"]) == str:
+            self.classmate_generation_configs["max_tokens"] = int(eval(self.classmate_generation_configs["max_tokens"]))
 
         # self.classmate_tokenizers = {}
 
@@ -468,6 +481,16 @@ class ClassmateCoTRayPPOTrainer:
             self.kl_ctrl_in_reward = core_algos.get_kl_controller(self.config.algorithm.kl_ctrl)
 
         self._create_dataloader(train_dataset, val_dataset, collate_fn, train_sampler)
+
+        # for CoT monitoring
+        if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
+            # Initialize openai client
+            from openai import OpenAI
+            from keys import OPENAI_KEY
+            self.openai_client = OpenAI(api_key=OPENAI_KEY)
+
+        assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
+        self.enable_thinking = enable_thinking
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -664,6 +687,10 @@ class ClassmateCoTRayPPOTrainer:
         sample_turns = []
         sample_uids = []
 
+        all_main_rewards = []
+        all_monitor_use_hint = []
+        all_monitor_explanations = []
+
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
 
@@ -729,6 +756,51 @@ class ClassmateCoTRayPPOTrainer:
             test_batch = test_batch.union(test_output_gen_batch)
             test_batch.meta_info["validate"] = True
 
+            test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
+                test_batch.batch["responses"], skip_special_tokens=True
+            ))
+
+            # modify cot monitor
+            if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
+                print("Performing CoT monitoring...")
+                from verl.utils.cot_monitor.monitor import monitor_cot_wrapper
+
+                # Extract CoTs, questions, and hints
+                all_main_cots, all_raw_questions, all_hint_strs = [], [], []
+                for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
+                    truncated_main_cot, _, _ = process_main_cot_helper(
+                        self.tokenizer,
+                        self.enable_thinking,
+                        item.non_tensor_batch["data_source"],
+                        response,
+                        item.batch["responses"],  # token ids
+                        None,  # response masks
+                        self.classmate_cot_reward_configs.main_cot_keep_rate
+                    )
+                    # all_main_cots.append(parse_out_main_cot_output(response)[0])
+                    all_main_cots.append(truncated_main_cot)
+                    all_raw_questions.append(item.non_tensor_batch.get("reward_model", {}).get("raw_question_for_monitor", ""))
+                    all_hint_strs.append(item.non_tensor_batch.get("reward_model", {}).get("hint_str_for_monitor", ""))
+
+                # Execute monitor_cot calls in parallel
+                all_monitor_use_hint_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
+                    all_main_cots=all_main_cots,
+                    all_raw_questions=all_raw_questions,
+                    all_hint_strs=all_hint_strs,
+                    monitor_template_name=self.config.reward_model.get("monitor_template_name"),
+                    openai_client=self.openai_client,
+                    model_name=self.config.reward_model.get("monitor_model_name")
+                )
+
+                test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
+                test_batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint_batch)
+                test_batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations_batch)
+                
+                # Accumulate monitor results across all batches
+                all_monitor_use_hint.extend(all_monitor_use_hint_batch)
+                all_monitor_explanations.extend(all_monitor_explanations_batch)
+                print("CoT monitoring completed.")
+
             # Generate classmate continuations for validation
             print("Generating classmate continuations for validation...")
             test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)
@@ -740,7 +812,8 @@ class ClassmateCoTRayPPOTrainer:
 
             # main_reward_tensor, classmate_reward_tensor, reward_extra_info
             # reward_tensor = result["reward_tensor"]
-            reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"] + result.get("consistency_reward_tensor", 0)
+            # reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"] + result.get("consistency_reward_tensor", 0)
+            reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
             scores = reward_tensor.sum(-1).cpu().tolist()
             sample_scores.extend(scores)
 
@@ -754,6 +827,8 @@ class ClassmateCoTRayPPOTrainer:
                 sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
+
+            all_main_rewards.extend(scores)
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
@@ -785,7 +860,8 @@ class ClassmateCoTRayPPOTrainer:
             # else:
             #     core_var = "reward"
             
-            core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "consistency_reward", "final_reward", "reward"}
+            # core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "consistency_reward", "final_reward", "reward"}
+            core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "final_reward", "reward"}
             # TODO haha for code & test case generation
             code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
             core_reward_vars.update(code_test_case_reward_keys)
@@ -812,6 +888,40 @@ class ClassmateCoTRayPPOTrainer:
             metric_dict["val-aux/num_turns/min"] = sample_turns.min()
             metric_dict["val-aux/num_turns/max"] = sample_turns.max()
             metric_dict["val-aux/num_turns/mean"] = sample_turns.mean()
+        
+        if len(all_monitor_use_hint) > 0:
+            # Convert to numpy arrays for computation
+            monitor_use_hint = np.array(all_monitor_use_hint)
+            main_model_reward = np.array(all_main_rewards)
+
+            valid_mask = monitor_use_hint != None  # noqa: E711
+            monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
+            main_model_reward = main_model_reward[valid_mask]
+
+            # Convert rewards to binary (1/0)
+            main_reward_bin = (main_model_reward == 1).astype(bool)
+
+            tp = np.sum(main_reward_bin & monitor_use_hint)
+            tn = np.sum(~main_reward_bin & ~monitor_use_hint)
+            fp = np.sum(~main_reward_bin & monitor_use_hint)
+            fn = np.sum(main_reward_bin & ~monitor_use_hint)
+
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+
+            metric_dict.update(
+                {
+                    "val-core/monitor/total_monitored_entries": int(len(monitor_use_hint)),
+                    "val-core/monitor/tp": float(tp),
+                    "val-core/monitor/tn": float(tn),
+                    "val-core/monitor/fp": float(fp),
+                    "val-core/monitor/fn": float(fn),
+                    "val-core/monitor/precision": float(precision),
+                    "val-core/monitor/recall": float(recall),
+                    "val-core/monitor/f1": float(f1),
+                }
+            )
 
         return metric_dict
 
@@ -887,6 +997,7 @@ class ClassmateCoTRayPPOTrainer:
                 max_tokens=self.classmate_generation_configs.max_tokens,
                 generation_config=self.classmate_generation_configs,
                 vllm_config=self.classmate_vllm_configs,
+                enable_thinking=self.enable_thinking
                 # Deprecated. Now using TogetherAI
                 # api_host=host_classmate_name_to_url[model_path]["local_host"],
                 # api_port=host_classmate_name_to_url[model_path]["port"],
@@ -1010,66 +1121,72 @@ class ClassmateCoTRayPPOTrainer:
 
         return -1
 
-    def _process_main_cot_helper(self, data_source, main_pred, main_pred_token_ids, main_response_mask, keep_ratio):
-        """
-        Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
-        """
-        # TODO haha double check for code_contests_modify_code
-        if data_source == "code_contests_modify_code":
-            breakpoint()
-            reason_section_name = "### Reasoning"
-            test_case_section_name = "### Test Inputs and Outputs"
-            main_pred = reason_section_name + "\n" + main_pred.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
-        # elif data_source == "code_stdio" or data_source == "code":
-        #     used in olmo3 CodeVerifier
-            # main_pred = process_code_output(main_pred)
-
-        _SPLIT_WS = re.compile(r"\S+|\s+")
-        num_to_keep = int(len(main_pred.split()) * keep_ratio)  # counts non-whitespace tokens
-        if num_to_keep <= 0:
-            # Keep the entire main CoT when it's too short
-            return main_pred, main_response_mask.tolist()
-
-        kept = []
-        count = 0
-        for m in _SPLIT_WS.finditer(main_pred):
-            t = m.group(0)
-            # whitespace tokens start with a whitespace char
-            if t[0].isspace():
-                kept.append(t)
-            else:
-                count += 1
-                if count > num_to_keep:
-                    break
-                kept.append(t)
-
-        truncated_text = "".join(kept)
-        
-        # Find the token index that corresponds to the truncated text
-        token_index = self._find_token_subsequence_for_string(main_pred_token_ids, truncated_text)
-        
-        if token_index == -1:
-            # # store to output file
-            # with open("debug_truncation_failure.txt", "a") as f:
-            #     f.write(f"Data source: {data_source}\n")
-            #     f.write(f"Original main_pred: {main_pred}\n")
-            #     f.write(f"Truncated text: {truncated_text}\n")
-            #     f.write(f"Token IDs: {main_pred_token_ids.tolist()}\n")
-            #     f.write("\n" + "="*80 + "\n\n")
-            raise ValueError(
-                f"Could not find token subsequence matching truncated text.\n"
-                f"Truncated text: {truncated_text}\n"
-                f"Token IDs: {main_pred_token_ids.tolist()}"
-            )
-
-        # print("🐛🐛🐛 original main_pred", main_pred)
-        # print("🐛🐛🐛 truncated_text", truncated_text)
-        # print("🐛🐛🐛 token_index", token_index)
-        # print("🐛🐛🐛 main_response_mask", main_response_mask)
-        # print("🐛🐛🐛 classmate_input_mask", main_response_mask[:token_index].tolist())
-        # print("🐛🐛🐛 final_classmate_input_mask", main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index))
-
-        return truncated_text, main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index)
+    # def _old_process_main_cot_helper(self, data_source, main_cot, main_pred_token_ids, main_response_mask, keep_ratio):
+    #     """
+    #     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
+    #     """
+    #     # TODO haha double check for code_contests_modify_code
+    #     if data_source == "code_contests_modify_code":
+    #         breakpoint()
+    #         reason_section_name = "### Reasoning"
+    #         test_case_section_name = "### Test Inputs and Outputs"
+    #         main_cot = reason_section_name + "\n" + main_cot.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
+    #     # elif data_source == "code_stdio" or data_source == "code":
+    #     #     used in olmo3 CodeVerifier
+    #         # main_pred = process_code_output(main_pred)
+    #
+    #     if self.enable_thinking:
+    #         main_cot, _, _ = self.parse_out_main_cot_output(main_cot)
+    #
+    #     _SPLIT_WS = re.compile(r"\S+|\s+")
+    #     num_to_keep = int(len(main_cot.split()) * keep_ratio)  # counts non-whitespace tokens
+    #     if num_to_keep <= 0:
+    #         # Keep the entire main CoT when it's too short
+    #         return main_cot, main_response_mask.tolist()
+    #
+    #     kept = []
+    #     count = 0
+    #     for m in _SPLIT_WS.finditer(main_cot):
+    #         t = m.group(0)
+    #         # whitespace tokens start with a whitespace char
+    #         if t[0].isspace():
+    #             kept.append(t)
+    #         else:
+    #             count += 1
+    #             if count > num_to_keep:
+    #                 break
+    #             kept.append(t)
+    #
+    #     truncated_text = "".join(kept)
+    #
+    #     if self.enable_thinking:
+    #         truncated_text = "<think>" + truncated_text
+    #
+    #     # Find the token index that corresponds to the truncated text
+    #     token_index = self._find_token_subsequence_for_string(main_pred_token_ids, truncated_text)
+    #
+    #     if token_index == -1:
+    #         # # store to output file
+    #         # with open("debug_truncation_failure.txt", "a") as f:
+    #         #     f.write(f"Data source: {data_source}\n")
+    #         #     f.write(f"Original main_pred: {main_pred}\n")
+    #         #     f.write(f"Truncated text: {truncated_text}\n")
+    #         #     f.write(f"Token IDs: {main_pred_token_ids.tolist()}\n")
+    #         #     f.write("\n" + "="*80 + "\n\n")
+    #         raise ValueError(
+    #             f"Could not find token subsequence matching truncated text.\n"
+    #             f"Truncated text: {truncated_text}\n"
+    #             f"Token IDs: {main_pred_token_ids.tolist()}"
+    #         )
+    #
+    #     # print("🐛🐛🐛 original main_pred", main_pred)
+    #     # print("🐛🐛🐛 truncated_text", truncated_text)
+    #     # print("🐛🐛🐛 token_index", token_index)
+    #     # print("🐛🐛🐛 main_response_mask", main_response_mask)
+    #     # print("🐛🐛🐛 classmate_input_mask", main_response_mask[:token_index].tolist())
+    #     # print("🐛🐛🐛 final_classmate_input_mask", main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index))
+    #
+    #     return truncated_text, main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index)
 
     # def derangement(self, lst):
     #     n = len(lst)
@@ -1121,9 +1238,7 @@ class ClassmateCoTRayPPOTrainer:
         if "response_mask" not in data.batch.keys():
             data.batch["response_mask"] = compute_response_mask(data)
 
-        all_actor_responses = self.tokenizer.batch_decode(
-            data.batch["responses"], skip_special_tokens=True
-        )
+        all_actor_responses = data.non_tensor_batch["decoded_responses"]
         max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
 
         all_prompts = data.non_tensor_batch["raw_prompt"]
@@ -1134,21 +1249,21 @@ class ClassmateCoTRayPPOTrainer:
         all_other_prompts = None
         all_other_prompt_gts = None
 
-        if "help_other" in self.classmate_cot_reward_configs.classmate_reward_type:
-            all_processed_actor_responses = all_actor_responses
-            all_classmate_input_mask = [[1] * max_response_len] * len(all_prompts)
-            all_keep_rates = [1.0] * len(all_prompts)
-            all_reward_model_info = data.non_tensor_batch["reward_model"].tolist()
-            if self.classmate_cot_reward_configs.classmate_reward_type == "help_other_questions":       # a random, different in-batch question
-                all_other_prompt_gts = [info["ground_truth"] for info in all_reward_model_info]
-                all_other_prompts, all_other_prompt_gts = self.derange_two_lists(all_prompts, all_other_prompt_gts)
-            elif self.classmate_cot_reward_configs.classmate_reward_type == "help_other_similar_questions":     # preprocessed, paired question from the same category/type
-                all_other_prompts = []
-                all_other_prompt_gts = []
-                for info in all_reward_model_info:
-                    all_other_prompts.append(info["paired_similar_q"])
-                    all_other_prompt_gts.append(info["paired_similar_q_gt"])
-        elif self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward", "random_truncate", "remove_wo_cot"]:
+        # if "help_other" in self.classmate_cot_reward_configs.classmate_reward_type:
+        #     all_processed_actor_responses = all_actor_responses
+        #     all_classmate_input_mask = [[1] * max_response_len] * len(all_prompts)
+        #     all_keep_rates = [1.0] * len(all_prompts)
+        #     all_reward_model_info = data.non_tensor_batch["reward_model"].tolist()
+        #     if self.classmate_cot_reward_configs.classmate_reward_type == "help_other_questions":       # a random, different in-batch question
+        #         all_other_prompt_gts = [info["ground_truth"] for info in all_reward_model_info]
+        #         all_other_prompts, all_other_prompt_gts = self.derange_two_lists(all_prompts, all_other_prompt_gts)
+        #     elif self.classmate_cot_reward_configs.classmate_reward_type == "help_other_similar_questions":     # preprocessed, paired question from the same category/type
+        #         all_other_prompts = []
+        #         all_other_prompt_gts = []
+        #         for info in all_reward_model_info:
+        #             all_other_prompts.append(info["paired_similar_q"])
+        #             all_other_prompt_gts.append(info["paired_similar_q_gt"])
+        if self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward", "random_truncate", "remove_wo_cot"]:
             # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
             # all_prompts = self.tokenizer.batch_decode(
             #     data.non_tensor_batch["raw_prompt"], skip_special_tokens=True
@@ -1181,11 +1296,13 @@ class ClassmateCoTRayPPOTrainer:
                 else:
                     raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 
-                truncated_main_cot, classmate_input_mask = self._process_main_cot_helper(
+                truncated_main_cot, _, classmate_input_mask = process_main_cot_helper(
+                    self.tokenizer,
+                    self.enable_thinking,
                     data_source_list[res_idx],
                     response,
-                    data.batch["responses"][res_idx],
-                    data.batch["response_mask"][res_idx],
+                    data.batch["responses"][res_idx],       # token ids
+                    data.batch["response_mask"][res_idx],   # response masks
                     keep_rate
                 )
                 all_processed_actor_responses.append(truncated_main_cot)
@@ -1259,7 +1376,7 @@ class ClassmateCoTRayPPOTrainer:
         """
         Launch sampling on each classmate model in parallel and collect results.
 
-        Expects each worker group to return a result with `.non_tensor_batch["classmate_output"]`
+        Expects each worker group to return a result with `.non_tensor_batch["classmate_outputs"]`
         where `classmate_output` has shape (bsz_per_worker, num_return_sequences).
 
         For worker groups with multiple workers (data parallel), results are collected
@@ -1277,6 +1394,9 @@ class ClassmateCoTRayPPOTrainer:
 
         num_models = len(self.classmate_workers)
 
+        # Set is_eval in meta_info for dispatch compatibility
+        classmate_batch.meta_info["is_eval"] = is_eval
+
         futures = []  # list[(classmate_idx, future, pad_size)]
         for classmate_idx, worker_group in enumerate(self.classmate_workers):
             size_divisor = getattr(worker_group, "world_size", 1)
@@ -1284,6 +1404,7 @@ class ClassmateCoTRayPPOTrainer:
                 # Pad the entire batch once to be divisible by world_size
                 # Worker group internally handles distribution across workers
                 classmate_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor, pad_val=None)
+                classmate_batch_padded.meta_info["is_eval"] = is_eval
                 fut = worker_group.generate_classmate_continuations(data=classmate_batch_padded)
                 futures.append((classmate_idx, fut, pad_size))
             else:
@@ -1298,10 +1419,12 @@ class ClassmateCoTRayPPOTrainer:
         classmate_prompts = np.empty((bsz, num_models), dtype=object)
         outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
         classmate_response_length = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=np.int32)
+        classmate_prompt_logprobs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
         for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
             cls_prompts = result_dp.non_tensor_batch["classmate_prompts"]  # (bsz_padded, )
-            cls_out = result_dp.non_tensor_batch["classmate_output"]  # (bsz_padded, num_return_sequences)
+            cls_out = result_dp.non_tensor_batch["classmate_outputs"]  # (bsz_padded, num_return_sequences)
             cls_out_lens = result_dp.non_tensor_batch["classmate_output_lens"]  # (bsz_padded, num_return_sequences)
+            cls_prompt_logprobs = result_dp.non_tensor_batch["classmate_prompt_logprobs"]  # (bsz_padded, num_return_sequences)
 
             # Followings are not needed; padding is already removed in generate_classmate_continuations()
             # print("🐛 before cls_out", cls_out, cls_out.shape)
@@ -1318,6 +1441,7 @@ class ClassmateCoTRayPPOTrainer:
             )
             outputs[:, classmate_idx] = cls_out
             classmate_prompts[:, classmate_idx] = cls_prompts
+            classmate_prompt_logprobs[:, classmate_idx] = cls_prompt_logprobs
             # tokenized_output = self.classmate_tokenizers[classmate_idx](outputs.flatten().tolist())["input_ids"]
             classmate_response_length[:, classmate_idx] = cls_out_lens
 
@@ -1326,6 +1450,7 @@ class ClassmateCoTRayPPOTrainer:
             f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
         batch.non_tensor_batch["classmate_prompts"] = classmate_prompts
         batch.non_tensor_batch["classmate_outputs"] = outputs
+        batch.non_tensor_batch["classmate_prompt_logprobs"] = classmate_prompt_logprobs
 
         batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
         batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
@@ -1684,6 +1809,55 @@ class ClassmateCoTRayPPOTrainer:
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     batch = batch.union(gen_batch_output)
 
+                    batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
+                        batch.batch["responses"], skip_special_tokens=True
+                    ))
+
+                    # TODO: not doing monitor during training for now to save money
+                    # if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
+                    #     from concurrent.futures import ThreadPoolExecutor, as_completed
+                    #
+                    #     # Prepare all monitor tasks
+                    #     monitor_tasks = []
+                    #     for item in batch:
+                    #         # (skipping for now) 1. get enable_thinking from apply_chat_template_kwargs.enable_thinking (enable_thinking attribute may not exist)
+                    #         # get main cot in-between think tag
+                    #         main_cot_for_monitor = self.parse_out_main_cot(item.non_tensor_batch["decoded_responses"])
+                    #
+                    #         # call monitor: monitor_cot(user_message, hint_message, main_pred, monitor_template_name, openai_client, model_name="gpt-4o-mini"):
+                    #         user_message = item.non_tensor_batch.get("reward_model", {}).get("raw_question_for_monitor", "")
+                    #         hint_message = item.non_tensor_batch.get("reward_model", {}).get("hint_str_for_monitor", "")
+                    #         monitor_tasks.append((user_message, hint_message, main_cot_for_monitor))
+                    #
+                    #     # Execute monitor_cot calls in parallel
+                    #     all_monitor_use_hint = [None] * len(monitor_tasks)
+                    #     all_monitor_explanations = [None] * len(monitor_tasks)
+                    #
+                    #     with ThreadPoolExecutor(max_workers=min(32, len(monitor_tasks))) as executor:
+                    #         # Submit all tasks
+                    #         future_to_idx = {
+                    #             executor.submit(
+                    #                 monitor_cot,
+                    #                 user_msg,
+                    #                 hint_msg,
+                    #                 main_cot,
+                    #                 self.config.reward_model.get("monitor_template_name"),
+                    #                 self.openai_client,
+                    #                 model_name=self.config.reward_model.get("monitor_model_name")
+                    #             ): idx
+                    #             for idx, (user_msg, hint_msg, main_cot) in enumerate(monitor_tasks)
+                    #         }
+                    #
+                    #         # Collect results as they complete
+                    #         for future in as_completed(future_to_idx):
+                    #             idx = future_to_idx[future]
+                    #             monitor_result_dict = future.result()
+                    #             all_monitor_use_hint[idx] = monitor_result_dict['use_hint']
+                    #             all_monitor_explanations[idx] = monitor_result_dict['explanation']
+                    #
+                    #     batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint)
+                    #     batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations)
+
                     # TODO modify Generate classmate continuations if workers are available
                     with marked_timer("classmate_cot", timing_raw, color="magenta"):
                         batch = self._generate_classmate_continuations(batch)
@@ -1705,10 +1879,11 @@ class ClassmateCoTRayPPOTrainer:
                         if self.use_rm and "rm_scores" not in batch.batch.keys():
                             # reward_tensor = self.rm_wg.compute_rm_score(batch)
                             # batch = batch.union(reward_tensor)
-                            main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor = self.rm_wg.compute_rm_score(batch)
+                            # main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor = self.rm_wg.compute_rm_score(batch)
+                            main_reward_tensor, classmate_reward_tensor, _ = self.rm_wg.compute_rm_score(batch)
                             batch = batch.union(main_reward_tensor)
                             batch = batch.union(classmate_reward_tensor)
-                            batch = batch.union(consistency_reward_tensor)
+                            # batch = batch.union(consistency_reward_tensor)
 
                         if self.config.reward_model.launch_reward_fn_async:
                             future_reward = compute_reward_async.remote(
@@ -1716,7 +1891,8 @@ class ClassmateCoTRayPPOTrainer:
                             )
                         else:
                             # reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
-                            main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = compute_main_classmate_reward(batch, self.reward_fn)
+                            # main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = compute_main_classmate_reward(batch, self.reward_fn)
+                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = compute_main_classmate_reward(batch, self.reward_fn)
 
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
@@ -1756,15 +1932,17 @@ class ClassmateCoTRayPPOTrainer:
                         reward_extra_infos_dict: dict[str, list]
                         if self.config.reward_model.launch_reward_fn_async:
                             # reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
-                            main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                            # main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                         # batch.batch["token_level_scores"] = reward_tensor
 
                         if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                             batch.batch["main_token_level_scores"] = main_reward_tensor
                             batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
-                            batch.batch["consistency_token_level_scores"] = consistency_reward_tensor if consistency_reward_tensor is not None else 0
+                            # batch.batch["consistency_token_level_scores"] = consistency_reward_tensor if consistency_reward_tensor is not None else 0
                         else:
-                            reward_tensor = main_reward_tensor + classmate_reward_tensor + consistency_reward_tensor if consistency_reward_tensor is not None else 0
+                            # reward_tensor = main_reward_tensor + classmate_reward_tensor + consistency_reward_tensor if consistency_reward_tensor is not None else 0
+                            reward_tensor = main_reward_tensor + classmate_reward_tensor
                             batch.batch["token_level_scores"] = reward_tensor
 
                         if reward_extra_infos_dict:
@@ -1782,7 +1960,7 @@ class ClassmateCoTRayPPOTrainer:
                             if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                                 batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
                                 batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
-                                batch.batch["consistency_token_level_rewards"] = batch.batch["consistency_token_level_scores"]
+                                # batch.batch["consistency_token_level_rewards"] = batch.batch["consistency_token_level_scores"]
                             else:
                                 batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 

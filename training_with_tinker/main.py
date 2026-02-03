@@ -650,7 +650,7 @@ def main(configs):
         logger.info(f"No pre-filtered dataset found, loading unfiltered dataset and filtering now")
         # load from parquet
         train_dataset = load_data(f"data/{configs.data_args.dataset_name}/train.parquet", seed=configs.training_args.seed)
-        # TODO haha
+        # TODO hehe
         # test_dataset = load_data(f"data/{configs.data_args.dataset_name}/eval.parquet", seed=None)
         test_dataset = load_data(f"data/{configs.data_args.dataset_name}/test.parquet", seed=None)
 
