@@ -23,14 +23,6 @@ import datasets
 
 from verl.utils.hdfs_io import copy, makedirs
 
-monitor_templates = {
-    "mmlu_sycophancy": """"""
-}
-
-def monitor_cot(input_cot, monitor_template_name):
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local_dir", default=None, help="The save directory for the preprocessed dataset.")
