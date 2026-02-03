@@ -94,7 +94,7 @@ def plot_monitor_metrics_across_steps(model_name_or_path_list, dataset_list, all
                     model_name = "main + (always) classmate reward"
 
                 for step_idx in all_step_idx_list:
-                    main_model_dir = f"{output_dir_path}/inference_main_model/{main_model_name_or_path}"
+                    main_model_dir = f"{output_dir_path}/{main_model_name_or_path}"
                     result_dir = f"{main_model_dir}/step_{step_idx}/{dataset_name}/main"
                     metrics_fn = os.path.join(result_dir, "monitor_metrics.json")
 
@@ -162,7 +162,7 @@ def plot_monitor_metrics_across_steps(model_name_or_path_list, dataset_list, all
         fig.suptitle(f"Monitor Metrics across RL Steps on {dataset_name}")
         fig.tight_layout(rect=[0, 0.05, 1, 0.95])
 
-        combined_output_dir = f"{output_dir_path}/inference_main_model/combined_comparison"
+        combined_output_dir = f"{output_dir_path}/combined_comparison"
         os.makedirs(combined_output_dir, exist_ok=True)
         output_fn = f"{combined_output_dir}/{dataset_name}_monitor_metrics_comparison.png"
         fig.savefig(output_fn, bbox_inches="tight")
@@ -174,10 +174,10 @@ if __name__ == "__main__":
         "20260203-Qwen3-0.6B_mmlu_sycophancy_new_baseline_627984_episodes_seed_42",
         "20260203-Qwen3-0.6B_mmlu_sycophan_new_vanilla_always_cl_partial_deepseek_627984_ep_seed_42",
     ]
-    max_step_num = 6  # start form 0
+    max_step_num = 7  # start form 0
     step_size = 48
 
-    output_dir = "outputs_eval"
+    output_dir = "outputs_eval/inference_main_model"
     dataset_name_list = ["mmlu_sycophancy"]
     max_y, min_y = None, None
 
