@@ -43,7 +43,6 @@ import torch
 import verl.utils.torch_functional as verl_F
 from verl.protocol import DataProto
 
-
 def compute_rollout_importance_weights(
     old_log_prob: torch.Tensor,
     rollout_log_prob: torch.Tensor,
@@ -53,6 +52,7 @@ def compute_rollout_importance_weights(
     rollout_is_threshold: Optional[float] = None,
     rollout_is_threshold_lower: Optional[float] = None,
     rollout_is_veto_threshold: Optional[float] = 1e-4,
+    rollout_is_weights_key_name="rollout_is_weights"
 ) -> tuple[Optional[DataProto], dict[str, Any]]:
     """Compute importance sampling weights and metrics for rollout-training mismatch correction.
 
@@ -214,7 +214,7 @@ def compute_rollout_importance_weights(
     rollout_is_weights = rollout_is_weights * response_mask
 
     # Wrap in DataProto for consistency with worker methods
-    rollout_is_weights_proto = DataProto.from_dict(tensors={"rollout_is_weights": rollout_is_weights})
+    rollout_is_weights_proto = DataProto.from_dict(tensors={rollout_is_weights_key_name: rollout_is_weights})
 
     # Compute mismatch metrics (KL, PPL, etc.) and merge with IS metrics
     mismatch_metrics = compute_mismatch_metrics(

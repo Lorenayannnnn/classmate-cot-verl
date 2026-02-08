@@ -215,10 +215,11 @@ class RLHFDataset(Dataset):
                 lambda doc: doc2len(doc) <= self.max_prompt_length,
                 num_proc=self.num_workers,
                 desc=f"Filtering prompts longer than {self.max_prompt_length} tokens",
-                new_fingerprint=fingerprint,
+                # TODO haha
+                # new_fingerprint=fingerprint,
             )
 
-            print(f"filter dataset len: {len(dataframe)}")
+            print(f"📊📊Filter dataset len: {len(dataframe)}")
         return dataframe
 
     def resume_dataset_state(self):

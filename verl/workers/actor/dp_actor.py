@@ -369,7 +369,6 @@ class DataParallelPPOActor(BasePPOActor):
             "attention_mask",
             "position_ids",
             "old_log_probs",
-            "advantages",
         ]
         if self.config.use_kl_loss:
             select_keys.append("ref_log_prob")
@@ -377,131 +376,315 @@ class DataParallelPPOActor(BasePPOActor):
         # Weights are computed centrally in trainer and added to batch when algorithm.rollout_is=True
         if "rollout_is_weights" in data.batch.keys():
             select_keys.append("rollout_is_weights")
+        
+        if "classmate_advantages" in data.batch.keys():
+            assert "main_advantages" in data.batch.keys(), "Both main and classmate advantages must be present"
+            select_keys.append("main_advantages")
+            select_keys.append("classmate_advantages")
+            select_keys.append("advantages")
+            if "classmate_input_mask" in data.batch.keys():
+                select_keys.append("classmate_input_mask")
+            if "classmate_rollout_is_weights" in data.batch.keys():
+                select_keys.append("classmate_rollout_is_weights")
+            if "classmate_prompt_logprobs_mask" in data.batch.keys():
+                select_keys.append("classmate_prompt_logprobs_mask")
 
-        has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
-        non_tensor_select_keys = ["multi_modal_inputs"] if has_multi_modal_inputs else []
+            has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
+            non_tensor_select_keys = ["multi_modal_inputs"] if has_multi_modal_inputs else []
 
-        data = data.select(batch_keys=select_keys, non_tensor_batch_keys=non_tensor_select_keys)
+            data = data.select(batch_keys=select_keys, non_tensor_batch_keys=non_tensor_select_keys)
 
-        # Split to make minibatch iterator for updating the actor
-        # See PPO paper for details. https://arxiv.org/abs/1707.06347
-        mini_batches = data.split(self.config.ppo_mini_batch_size)
+            # Split to make minibatch iterator for updating the actor
+            # See PPO paper for details. https://arxiv.org/abs/1707.06347
+            mini_batches = data.split(self.config.ppo_mini_batch_size)
 
-        on_policy = len(mini_batches) == 1 and self.config.ppo_epochs == 1
+            on_policy = len(mini_batches) == 1 and self.config.ppo_epochs == 1
 
-        metrics = {}
-        for _ in range(self.config.ppo_epochs):
-            for batch_idx, mini_batch in enumerate(mini_batches):
-                if self.config.use_dynamic_bsz:
-                    max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
-                    micro_batches, _ = prepare_dynamic_batch(mini_batch, max_token_len=max_token_len)
-                else:
-                    self.gradient_accumulation = (
-                        self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
-                    )
-                    micro_batches = mini_batch.split(self.config.ppo_micro_batch_size_per_gpu)
-
-                self.actor_optimizer.zero_grad()
-
-                for micro_batch in micro_batches:
-                    micro_batch = micro_batch.to(get_device_id())
-                    micro_batch_metrics = {}
-                    model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
-                    response_mask = model_inputs["response_mask"]
-                    old_log_prob = model_inputs["old_log_probs"]
-                    advantages = model_inputs["advantages"]
-
-                    entropy_coeff = self.config.entropy_coeff
-                    loss_agg_mode = self.config.loss_agg_mode
-
+            metrics = {}
+            for _ in range(self.config.ppo_epochs):
+                for batch_idx, mini_batch in enumerate(mini_batches):
                     if self.config.use_dynamic_bsz:
-                        loss_scale_factor = response_mask.shape[0] / self.config.ppo_mini_batch_size
+                        max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
+                        micro_batches, _ = prepare_dynamic_batch(mini_batch, max_token_len=max_token_len)
                     else:
-                        loss_scale_factor = 1 / self.gradient_accumulation
-
-                    # all return: (bsz, response_length)
-                    calculate_entropy = False
-                    if entropy_coeff != 0:
-                        calculate_entropy = True
-                    entropy, log_prob = self._forward_micro_batch(
-                        model_inputs, temperature=temperature, calculate_entropy=calculate_entropy
-                    )
-
-                    # for fully_async_policy recipe
-                    if hasattr(self.config, "use_rollout_log_probs") and self.config.use_rollout_log_probs:
-                        old_log_prob = model_inputs["old_log_probs"]
-                    else:
-                        if on_policy:
-                            old_log_prob = log_prob.detach()
-                        else:
-                            old_log_prob = model_inputs["old_log_probs"]
-
-                    loss_mode = self.config.policy_loss.get("loss_mode", "vanilla")
-                    # vanilla -> verl.trainer.ppo.core_algos.compute_policy_loss_vanilla
-
-                    # Extract pre-computed rollout importance sampling weights if present
-                    # Weights are computed centrally in trainer and added when algorithm.rollout_is=True
-                    rollout_is_weights = model_inputs.get("rollout_is_weights", None)
-
-                    # NOTE: Both mismatch diagnostic metrics (PPL, KL, etc.) and IS weight metrics
-                    # are computed centrally in ray_trainer.py for consistency and efficiency.
-                    # This ensures metrics are computed uniformly across all batches at the trainer level
-                    # and avoids redundant computation across workers and micro-batches.
-
-                    # gpg -> verl.trainer.ppo.core_algos.compute_policy_loss_gpg
-                    # clip_cov -> verl.trainer.ppo.core_algos.compute_policy_loss_clip_cov
-                    policy_loss_fn = get_policy_loss_fn(loss_mode)
-
-                    # Compute policy loss (all functions return 4 values)
-                    pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = policy_loss_fn(
-                        old_log_prob=old_log_prob,
-                        log_prob=log_prob,
-                        advantages=advantages,
-                        response_mask=response_mask,
-                        loss_agg_mode=loss_agg_mode,
-                        config=self.config,
-                        rollout_is_weights=rollout_is_weights,
-                    )
-
-                    if entropy_coeff != 0:
-                        entropy_loss = agg_loss(loss_mat=entropy, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
-
-                        # compute policy loss
-                        policy_loss = pg_loss - entropy_loss * entropy_coeff
-                    else:
-                        policy_loss = pg_loss
-
-                    if self.config.use_kl_loss:
-                        ref_log_prob = model_inputs["ref_log_prob"]
-                        # compute kl loss
-                        kld = kl_penalty(
-                            logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                        self.gradient_accumulation = (
+                            self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
                         )
-                        kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+                        micro_batches = mini_batch.split(self.config.ppo_micro_batch_size_per_gpu)
 
-                        policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
-                        micro_batch_metrics["actor/kl_loss"] = kl_loss.detach().item() * loss_scale_factor
-                        micro_batch_metrics["actor/kl_coef"] = self.config.kl_loss_coef
+                    self.actor_optimizer.zero_grad()
 
+                    for micro_batch in micro_batches:
+                        micro_batch = micro_batch.to(get_device_id())
+                        micro_batch_metrics = {}
+                        model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
+                        response_mask = model_inputs["response_mask"]
+                        old_log_prob = model_inputs["old_log_probs"]
+                        advantages = model_inputs["advantages"]
+
+                        entropy_coeff = self.config.entropy_coeff
+                        loss_agg_mode = self.config.loss_agg_mode
+
+                        if self.config.use_dynamic_bsz:
+                            loss_scale_factor = response_mask.shape[0] / self.config.ppo_mini_batch_size
+                        else:
+                            loss_scale_factor = 1 / self.gradient_accumulation
+
+                        # all return: (bsz, response_length)
+                        calculate_entropy = False
+                        if entropy_coeff != 0:
+                            calculate_entropy = True
+                        entropy, log_prob = self._forward_micro_batch(
+                            model_inputs, temperature=temperature, calculate_entropy=calculate_entropy
+                        )
+
+                        # for fully_async_policy recipe
+                        if hasattr(self.config, "use_rollout_log_probs") and self.config.use_rollout_log_probs:
+                            old_log_prob = model_inputs["old_log_probs"]
+                        else:
+                            if on_policy:
+                                old_log_prob = log_prob.detach()
+                            else:
+                                old_log_prob = model_inputs["old_log_probs"]
+
+                        loss_mode = self.config.policy_loss.get("loss_mode", "vanilla")
+                        # vanilla -> verl.trainer.ppo.core_algos.compute_policy_loss_vanilla
+
+                        # Extract pre-computed rollout importance sampling weights if present
+                        # Weights are computed centrally in trainer and added when algorithm.rollout_is=True
+                        rollout_is_weights = model_inputs["rollout_is_weights"]
+
+                        # Separate reweighting for main vs classmate advantages
+                        main_advantages = model_inputs["main_advantages"]
+                        classmate_advantages = model_inputs["classmate_advantages"]
+                        classmate_rollout_is_weights = model_inputs["classmate_rollout_is_weights"]
+                        classmate_input_mask = model_inputs["classmate_input_mask"]
+
+                        # if (
+                        #     rollout_is_weights is not None
+                        #     and main_advantages is not None
+                        #     and classmate_advantages is not None
+                        #     and classmate_rollout_is_weights is not None
+                        #     and classmate_input_mask is not None
+                        # ):
+                        #     # Reweight main advantages using rollout IS weights
+                        main_adv_reweighted = main_advantages * rollout_is_weights
+
+                        # Classmate IS weights are already token-shaped and masked
+                        classmate_adv_reweighted = classmate_advantages * classmate_rollout_is_weights
+
+                        # Apply masks: rollout tokens vs classmate tokens
+                        classmate_mask = classmate_input_mask.to(main_adv_reweighted.device).float()
+
+                        combined_advantages = main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask
+
+                        # Batch-wise normalization only over classmate prefix tokens
+                        norm_mask = classmate_mask
+                        adv_mean = verl_F.masked_mean(combined_advantages, norm_mask)
+                        adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), norm_mask)
+                        advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
+
+                        # TODO haha
+                        print("🐛🐛🐛 classmate adjusted")
+                        print("🐛🐛🐛 main_adv_reweighted", main_adv_reweighted[0].tolist())
+                        print("🐛🐛🐛 response_mask", response_mask[0].tolist())
+                        print("🐛🐛🐛 classmate_adv_reweighted", classmate_adv_reweighted[0].tolist())
+                        print("🐛🐛🐛 classmate_mask", classmate_mask[0].tolist())
+                        print("🐛🐛🐛 combined advantage", (main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask)[0].tolist())
+                        print("🐛🐛🐛 combined_advantages_after_normalize", combined_advantages[0].tolist())
+
+                        # Avoid double-applying IS weights in policy loss
+                        rollout_is_weights = None
+
+                        # NOTE: Both mismatch diagnostic metrics (PPL, KL, etc.) and IS weight metrics
+                        # are computed centrally in ray_trainer.py for consistency and efficiency.
+                        # This ensures metrics are computed uniformly across all batches at the trainer level
+                        # and avoids redundant computation across workers and micro-batches.
+
+                        # gpg -> verl.trainer.ppo.core_algos.compute_policy_loss_gpg
+                        # clip_cov -> verl.trainer.ppo.core_algos.compute_policy_loss_clip_cov
+                        policy_loss_fn = get_policy_loss_fn(loss_mode)
+
+                        # Compute policy loss (all functions return 4 values)
+                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = policy_loss_fn(
+                            old_log_prob=old_log_prob,
+                            log_prob=log_prob,
+                            advantages=advantages,
+                            response_mask=response_mask,
+                            loss_agg_mode=loss_agg_mode,
+                            config=self.config,
+                            rollout_is_weights=rollout_is_weights,
+                        )
+
+                        if entropy_coeff != 0:
+                            entropy_loss = agg_loss(loss_mat=entropy, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+                            # compute policy loss
+                            policy_loss = pg_loss - entropy_loss * entropy_coeff
+                        else:
+                            policy_loss = pg_loss
+
+                        if self.config.use_kl_loss:
+                            ref_log_prob = model_inputs["ref_log_prob"]
+                            # compute kl loss
+                            kld = kl_penalty(
+                                logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                            )
+                            kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+                            policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
+                            micro_batch_metrics["actor/kl_loss"] = kl_loss.detach().item() * loss_scale_factor
+                            micro_batch_metrics["actor/kl_coef"] = self.config.kl_loss_coef
+
+                        if self.config.use_dynamic_bsz:
+                            # relative to the dynamic bsz
+                            loss = policy_loss * loss_scale_factor
+                        else:
+                            loss = policy_loss * loss_scale_factor
+                        loss.backward()
+
+                        micro_batch_metrics.update(
+                            {
+                                "actor/pg_loss": pg_loss.detach().item() * loss_scale_factor,
+                                "actor/pg_clipfrac": pg_clipfrac.detach().item(),
+                                "actor/ppo_kl": ppo_kl.detach().item(),
+                                "actor/pg_clipfrac_lower": pg_clipfrac_lower.detach().item(),
+                            }
+                        )
+                        append_to_dict(metrics, micro_batch_metrics)
+
+                    grad_norm = self._optimizer_step()
+                    mini_batch_metrics = {"actor/grad_norm": grad_norm.detach().item()}
+                    append_to_dict(metrics, mini_batch_metrics)
+            self.actor_optimizer.zero_grad()
+            return metrics
+        if "advantages" in data.batch.keys():
+            select_keys.append("advantages")
+
+            has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
+            non_tensor_select_keys = ["multi_modal_inputs"] if has_multi_modal_inputs else []
+
+            data = data.select(batch_keys=select_keys, non_tensor_batch_keys=non_tensor_select_keys)
+
+            # Split to make minibatch iterator for updating the actor
+            # See PPO paper for details. https://arxiv.org/abs/1707.06347
+            mini_batches = data.split(self.config.ppo_mini_batch_size)
+
+            on_policy = len(mini_batches) == 1 and self.config.ppo_epochs == 1
+
+            metrics = {}
+            for _ in range(self.config.ppo_epochs):
+                for batch_idx, mini_batch in enumerate(mini_batches):
                     if self.config.use_dynamic_bsz:
-                        # relative to the dynamic bsz
-                        loss = policy_loss * loss_scale_factor
+                        max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
+                        micro_batches, _ = prepare_dynamic_batch(mini_batch, max_token_len=max_token_len)
                     else:
-                        loss = policy_loss * loss_scale_factor
-                    loss.backward()
+                        self.gradient_accumulation = (
+                            self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
+                        )
+                        micro_batches = mini_batch.split(self.config.ppo_micro_batch_size_per_gpu)
 
-                    micro_batch_metrics.update(
-                        {
-                            "actor/pg_loss": pg_loss.detach().item() * loss_scale_factor,
-                            "actor/pg_clipfrac": pg_clipfrac.detach().item(),
-                            "actor/ppo_kl": ppo_kl.detach().item(),
-                            "actor/pg_clipfrac_lower": pg_clipfrac_lower.detach().item(),
-                        }
-                    )
-                    append_to_dict(metrics, micro_batch_metrics)
+                    self.actor_optimizer.zero_grad()
 
-                grad_norm = self._optimizer_step()
-                mini_batch_metrics = {"actor/grad_norm": grad_norm.detach().item()}
-                append_to_dict(metrics, mini_batch_metrics)
-        self.actor_optimizer.zero_grad()
-        return metrics
+                    for micro_batch in micro_batches:
+                        micro_batch = micro_batch.to(get_device_id())
+                        micro_batch_metrics = {}
+                        model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
+                        response_mask = model_inputs["response_mask"]
+                        old_log_prob = model_inputs["old_log_probs"]
+                        advantages = model_inputs["advantages"]
+
+                        entropy_coeff = self.config.entropy_coeff
+                        loss_agg_mode = self.config.loss_agg_mode
+
+                        if self.config.use_dynamic_bsz:
+                            loss_scale_factor = response_mask.shape[0] / self.config.ppo_mini_batch_size
+                        else:
+                            loss_scale_factor = 1 / self.gradient_accumulation
+
+                        # all return: (bsz, response_length)
+                        calculate_entropy = False
+                        if entropy_coeff != 0:
+                            calculate_entropy = True
+                        entropy, log_prob = self._forward_micro_batch(
+                            model_inputs, temperature=temperature, calculate_entropy=calculate_entropy
+                        )
+
+                        # for fully_async_policy recipe
+                        if hasattr(self.config, "use_rollout_log_probs") and self.config.use_rollout_log_probs:
+                            old_log_prob = model_inputs["old_log_probs"]
+                        else:
+                            if on_policy:
+                                old_log_prob = log_prob.detach()
+                            else:
+                                old_log_prob = model_inputs["old_log_probs"]
+
+                        loss_mode = self.config.policy_loss.get("loss_mode", "vanilla")
+                        # vanilla -> verl.trainer.ppo.core_algos.compute_policy_loss_vanilla
+
+                        # Extract pre-computed rollout importance sampling weights if present
+                        # Weights are computed centrally in trainer and added when algorithm.rollout_is=True
+                        rollout_is_weights = model_inputs.get("rollout_is_weights", None)
+
+                        # NOTE: Both mismatch diagnostic metrics (PPL, KL, etc.) and IS weight metrics
+                        # are computed centrally in ray_trainer.py for consistency and efficiency.
+                        # This ensures metrics are computed uniformly across all batches at the trainer level
+                        # and avoids redundant computation across workers and micro-batches.
+
+                        # gpg -> verl.trainer.ppo.core_algos.compute_policy_loss_gpg
+                        # clip_cov -> verl.trainer.ppo.core_algos.compute_policy_loss_clip_cov
+                        policy_loss_fn = get_policy_loss_fn(loss_mode)
+
+                        # Compute policy loss (all functions return 4 values)
+                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = policy_loss_fn(
+                            old_log_prob=old_log_prob,
+                            log_prob=log_prob,
+                            advantages=advantages,
+                            response_mask=response_mask,
+                            loss_agg_mode=loss_agg_mode,
+                            config=self.config,
+                            rollout_is_weights=rollout_is_weights,
+                        )
+
+                        if entropy_coeff != 0:
+                            entropy_loss = agg_loss(loss_mat=entropy, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+                            # compute policy loss
+                            policy_loss = pg_loss - entropy_loss * entropy_coeff
+                        else:
+                            policy_loss = pg_loss
+
+                        if self.config.use_kl_loss:
+                            ref_log_prob = model_inputs["ref_log_prob"]
+                            # compute kl loss
+                            kld = kl_penalty(
+                                logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                            )
+                            kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+                            policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
+                            micro_batch_metrics["actor/kl_loss"] = kl_loss.detach().item() * loss_scale_factor
+                            micro_batch_metrics["actor/kl_coef"] = self.config.kl_loss_coef
+
+                        if self.config.use_dynamic_bsz:
+                            # relative to the dynamic bsz
+                            loss = policy_loss * loss_scale_factor
+                        else:
+                            loss = policy_loss * loss_scale_factor
+                        loss.backward()
+
+                        micro_batch_metrics.update(
+                            {
+                                "actor/pg_loss": pg_loss.detach().item() * loss_scale_factor,
+                                "actor/pg_clipfrac": pg_clipfrac.detach().item(),
+                                "actor/ppo_kl": ppo_kl.detach().item(),
+                                "actor/pg_clipfrac_lower": pg_clipfrac_lower.detach().item(),
+                            }
+                        )
+                        append_to_dict(metrics, micro_batch_metrics)
+
+                    grad_norm = self._optimizer_step()
+                    mini_batch_metrics = {"actor/grad_norm": grad_norm.detach().item()}
+                    append_to_dict(metrics, mini_batch_metrics)
+            self.actor_optimizer.zero_grad()
+            return metrics

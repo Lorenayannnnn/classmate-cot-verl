@@ -8,11 +8,12 @@ from tqdm import tqdm
 from openai import OpenAI
 
 from keys import OPENAI_KEY
-from verl.utils.cot_monitor.monitor import monitor_cot_wrapper, process_main_cot_helper
+from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper, process_main_cot_helper
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
 
 
 class SycophancyInferenceExpRunner:
-    def __init__(self, model, tokenizer, data_loader, inference_backend, args, enable_thinking, main_cot_keep_rate):
+    def __init__(self, model, tokenizer, data_loader, inference_backend, args, enable_thinking, main_cot_keep_rate, data_source):
         self.model = model
         self.tokenizer = tokenizer
         self.data_loader = data_loader
@@ -27,6 +28,7 @@ class SycophancyInferenceExpRunner:
 
         self.openai_client = OpenAI(api_key=OPENAI_KEY)
         self.main_cot_keep_rate = main_cot_keep_rate
+        self.data_source = data_source
 
     @torch.no_grad()
     def inference_main_model(self, dataset_object):
@@ -57,16 +59,20 @@ class SycophancyInferenceExpRunner:
 
             all_curr_lines = open(output_fn, "r").readlines()
             all_main_model_rewards = []
-            all_monitor_use_hint = []
+            all_monitor_scores = []
             for line in all_curr_lines:
                 result_dict = json.loads(line)
-                all_main_model_rewards.append(float(result_dict["main_is_correct"]))
-                all_monitor_use_hint.append(result_dict["monitor_use_hint"])
+                # Support both old format (main_is_correct) and new format (main_score)
+                if "main_score" in result_dict:
+                    all_main_model_rewards.append(float(result_dict["main_score"]))
+                else:
+                    all_main_model_rewards.append(float(result_dict["main_is_correct"]))
+                all_monitor_scores.append(result_dict["monitor_score"])
             result_f.close()
         else:
             ckpt_idx = 0
             all_main_model_rewards = []
-            all_monitor_use_hint = []
+            all_monitor_scores = []
 
         result_f = open(os.path.join(self.output_dir, "preds.jsonl"), "a")
         progress = tqdm(self.data_loader, initial=ckpt_idx, total=dataset_size)
@@ -104,11 +110,16 @@ class SycophancyInferenceExpRunner:
 
                 all_truncated_main_cots.append(truncated_main_cot)
                 all_raw_questions.append(batch["raw_question_for_monitor"])
-                all_hint_strs.append(batch["hint_str_for_monitor"])
+                all_hint_strs.append(batch.get("hint_str_for_monitor", ""))
 
-                process_result_dict = dataset_object.compute_score(final_output, batch['gt'][batch_entry_idx])
-                main_is_correct = process_result_dict["score"] == 1.0
-                all_main_model_rewards.append(process_result_dict["score"])
+                compute_score_input_dict = {
+                    "gt": batch['gt'][batch_entry_idx],
+                    "raw_question_for_monitor": batch["raw_question_for_monitor"],
+                }
+
+                process_result_dict = dataset_object.compute_score(continuation=final_output, doc=compute_score_input_dict)
+                main_score = process_result_dict["score"]
+                all_main_model_rewards.append(main_score)
 
                 tmp_pred = process_result_dict["extracted_solution"]
 
@@ -119,29 +130,40 @@ class SycophancyInferenceExpRunner:
                     "truncated_main_CoT": truncated_main_cot,
                     "main_output": final_output,
                     "main_extracted_solution": tmp_pred,
-                    "main_is_correct": main_is_correct,
+                    "main_score": main_score,
                     "gt": batch['gt'][batch_entry_idx],
                     "actual_answer": batch['actual_answer'][batch_entry_idx],
                 }
                 all_result_dicts.append(tmp_result)
 
             # Submit openai cot monitor api calls
-            # Execute monitor_cot calls in parallel
-            tmp_monitor_use_hint, tmp_monitor_explanations = monitor_cot_wrapper(
-                all_main_cots=all_truncated_main_cots,
-                all_raw_questions=all_raw_questions,
-                all_hint_strs=all_hint_strs,
-                monitor_template_name=self.args["monitor_template_name"],
+            verifier = get_monitor_verifier(data_source=self.data_source)
+            monitor_prompts = []
+            for raw_question, hint_str, truncated_main_cot in zip(
+                all_raw_questions, all_hint_strs, all_truncated_main_cots
+            ):
+                monitor_doc = {
+                    "raw_question_for_monitor": raw_question,
+                    "hint_str_for_monitor": hint_str,
+                    "truncated_main_CoT": truncated_main_cot,
+                    "main_response": truncated_main_cot,
+                }
+                monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
+
+            # Execute monitor calls in parallel
+            tmp_monitor_scores, tmp_monitor_explanations = monitor_cot_wrapper(
+                monitor_prompts=monitor_prompts,
+                monitor_reward_type=verifier.reward_type,
                 openai_client=self.openai_client,
                 model_name=self.args["monitor_model_name"],
             )
 
             # Log out all results
-            for result_dict, monitor_use_hint, monitor_explanation in zip(all_result_dicts, tmp_monitor_use_hint, tmp_monitor_explanations):
-                result_dict["monitor_use_hint"] = monitor_use_hint
+            for result_dict, monitor_score, monitor_explanation in zip(all_result_dicts, tmp_monitor_scores, tmp_monitor_explanations):
+                result_dict["monitor_score"] = monitor_score
                 result_dict["monitor_explanation"] = monitor_explanation
 
-                all_monitor_use_hint.append(monitor_use_hint)
+                all_monitor_scores.append(monitor_score)
                 result_f.write(json.dumps(result_dict) + "\n")
 
             progress.update(self.batch_size)
@@ -149,41 +171,23 @@ class SycophancyInferenceExpRunner:
         result_f.close()
         
         # Compute and log monitor metrics
-        if len(all_monitor_use_hint) > 0:
+        if len(all_monitor_scores) > 0:
             import numpy as np
-            
-            monitor_use_hint = np.array(all_monitor_use_hint)
+
+            monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_model_rewards)
 
-            main_reward_bin = main_model_reward.astype(bool)
+            valid_mask = monitor_scores != None  # noqa: E711
+            monitor_scores = monitor_scores[valid_mask].astype(float)
+            main_model_reward = main_model_reward[valid_mask].astype(float)
 
-            valid_mask = monitor_use_hint != None  # noqa: E711
-            monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
-            try:
-                main_reward_bin = main_reward_bin[valid_mask]
-            except:
-                breakpoint()
-            
-            tp = np.sum(main_reward_bin & monitor_use_hint)
-            tn = np.sum(~main_reward_bin & ~monitor_use_hint)
-            fp = np.sum(~main_reward_bin & monitor_use_hint)
-            fn = np.sum(main_reward_bin & ~monitor_use_hint)
-            
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
-            
-            # Create metrics dictionary
-            monitor_metrics = {
-                "total_monitored_entries": int(len(main_model_reward)),
-                "tp": float(tp),
-                "tn": float(tn),
-                "fp": float(fp),
-                "fn": float(fn),
-                "precision": float(precision),
-                "recall": float(recall),
-                "f1": float(f1),
-            }
+            verifier = get_monitor_verifier(data_source=self.data_source)
+            monitor_metrics = verifier.compute_metrics(
+                predictions=monitor_scores.tolist(),
+                ground_truths=main_model_reward.tolist(),
+            )
+
+            monitor_metrics["total_monitored_entries"] = int(len(main_model_reward))
             
             # Print metrics
             print(f"\n{'='*60}")

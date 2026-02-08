@@ -11,11 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import time
 from collections import defaultdict
-from typing import Any, List, Dict
-import re
-
+from typing import Any
+from concurrent.futures import Future
 import torch
 import ray
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -44,6 +43,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
             classmate_cot_reward_configs=None,
             classmate_generation_configs=None,
+            max_workers=8,
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -65,11 +65,13 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 - temperature: 0.7
                 - top_p: 0.9
                 - num_return_sequences: 1
+            max_workers: Maximum number of worker threads for parallel processing.
         """
         self.tokenizer = tokenizer
         self.num_examine = num_examine
         self.compute_score = compute_score or default_compute_score
         self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
+        self.max_workers = max_workers
 
         # Store configurations
         self.classmate_cot_reward_configs = classmate_cot_reward_configs
@@ -105,7 +107,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         #                 code_max_execution_time=1.0,
         #                 code_pass_rate_reward_threshold=0.99,
         #                 code_apply_perf_penalty=False,
-        #             )
+        #             )å
         #         ),
         #     }
 
@@ -134,6 +136,17 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         # print("🐛🐛🐛 data", data)
         # print("🐛🐛🐛 classmate_outputs", data.non_tensor_batch["classmate_outputs"].shape)
+
+        def _as_future(result):
+            future = Future()
+            future.set_result(result)
+            return future
+
+        item_contexts = []
+        main_score_futures = []
+
+        # TODO haha
+        print("🐛🐛🐛 Start scoring main classmate outputs")
 
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
@@ -173,21 +186,60 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
-            # Compute base actor reward
-            actor_score = self.compute_score(
-                data_source=data_source,
-                # solution_str=response_str,
-                solution_str=main_output,
-                ground_truth=ground_truth,
-                extra_info=extra_info,
-                return_dict=True,
-                code_api_url=self.code_api_url,
-                # llm_judge_config_dict=self.llm_judge_config_dict,
-                # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
+            # Submit main model reward computation
+            main_score_futures.append(
+                _as_future(
+                    self.compute_score(
+                        data_source=data_source,
+                        # solution_str=response_str,
+                        solution_str=main_output,
+                        ground_truth=ground_truth,
+                        extra_info=extra_info,
+                        return_dict=True,
+                        code_api_url=self.code_api_url,
+                        # llm_judge_config_dict=self.llm_judge_config_dict,
+                        # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
+                    )
+                )
             )
 
-            # Debugging
-            extracted_solution = actor_score.pop("extracted_solution", None)
+            classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
+            classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
+            main_keep_rate = data_item.non_tensor_batch["main_keep_rates"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
+            classmate_ground_truth = data_item.non_tensor_batch["all_other_prompt_gts"] if "all_other_prompt_gts" in data_item.non_tensor_batch else ground_truth
+
+            item_contexts.append(
+                {
+                    "index": i,
+                    "data_item": data_item,
+                    "raw_prompt": raw_prompt,
+                    "raw_prompt_str": raw_prompt_str,
+                    "raw_response_str": raw_response_str,
+                    "response_str": response_str,
+                    "main_cot": main_cot,
+                    "main_output": main_output,
+                    "ground_truth": ground_truth,
+                    "data_source": data_source,
+                    "extra_info": extra_info,
+                    "valid_response_length": valid_response_length,
+                    "classmate_prompts": classmate_prompts,
+                    "classmate_outputs": classmate_outputs,
+                    "main_keep_rate": main_keep_rate,
+                    "classmate_ground_truth": classmate_ground_truth,
+                }
+            )
+
+        print("🐛🐛🐛 Finish submitting main outputs")
+
+        # TODO haha
+        from tqdm import tqdm
+        main_p_bar = tqdm(total=len(item_contexts), desc="Scoring main model outputs")
+
+        # Second loop: resolve main rewards and submit classmate reward computations
+        for ctx, main_score_future in zip(item_contexts, main_score_futures):
+            actor_score = main_score_future.result()
+            main_p_bar.update(1)
+            extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
 
             if isinstance(actor_score, dict):
                 base_reward = actor_score["score"]
@@ -198,75 +250,66 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 base_reward = actor_score
 
             reward_extra_info["main_model_reward"].append(base_reward)
-            # -------------------- Calculate Classmate Rewards --------------------
-            total_classmate_reward_dict = {}
-            # total_m_cl_consistency_reward_dict = {}
-            classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
-            classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
-            main_keep_rate = data_item.non_tensor_batch["main_keep_rates"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
 
-            # TODO weight for each classmate model
+            ctx["actor_score"] = actor_score
+            ctx["extracted_solution"] = extracted_solution
+            ctx["base_reward"] = base_reward
+
+            classmate_outputs = ctx["classmate_outputs"]
             classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
+            classmate_future_groups = []
 
-            # Debug
-            extracted_classmate_sol = []
-            classmate_ground_truth = data_item.non_tensor_batch["all_other_prompt_gts"] if "all_other_prompt_gts" in data_item.non_tensor_batch else ground_truth
-
-            for classmate_idx, classmate_output in enumerate(classmate_outputs):   # Iterate over num_classmate_models
-                tmp_total_classmate_reward_dict = {}
-                # tmp_total_m_cl_consistency_reward_dict = {}
-                tmp_extracted_classmate_sol_list = []
-                for classmate_output_sample in classmate_output:   # Iterate over num_return_sequences
-                    tmp_classmate_result = self.compute_score(
-                        data_source=data_source,
-                        solution_str=classmate_output_sample,
-                        ground_truth=classmate_ground_truth,
-                        extra_info=extra_info,
-                        method="flexible",      # this doesn't matter; just a dummy placeholder
-                        return_dict=True,
-                        code_api_url=self.code_api_url,
-                        # llm_judge_config_dict=self.llm_judge_config_dict,
-                        # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+            for classmate_output in classmate_outputs:
+                sample_futures = []
+                for classmate_output_sample in classmate_output:
+                    sample_futures.append(
+                        _as_future(
+                            self.compute_score(
+                                data_source=ctx["data_source"],
+                                solution_str=classmate_output_sample,
+                                ground_truth=ctx["classmate_ground_truth"],
+                                extra_info=ctx["extra_info"],
+                                method="flexible",      # this doesn't matter; just a dummy placeholder
+                                return_dict=True,
+                                code_api_url=self.code_api_url,
+                                # llm_judge_config_dict=self.llm_judge_config_dict,
+                                # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+                            )
+                        )
                     )
-                    # Debug
+                classmate_future_groups.append(sample_futures)
+
+            ctx["classmate_model_weights"] = classmate_model_weights
+            ctx["classmate_future_groups"] = classmate_future_groups
+
+            main_reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = base_reward
+
+        # TODO haha
+        classmate_p_bar = tqdm(total=len(item_contexts), desc="Scoring classmate model outputs")
+
+        # Third loop: resolve classmate rewards
+        for ctx in item_contexts:
+            total_classmate_reward_dict = {}
+            extracted_classmate_sol = []
+
+            classmate_outputs = ctx["classmate_outputs"]
+            classmate_model_weights = ctx["classmate_model_weights"]
+            classmate_future_groups = ctx["classmate_future_groups"]
+
+            for classmate_idx, (classmate_output, classmate_futures) in enumerate(
+                zip(classmate_outputs, classmate_future_groups)
+            ):
+                tmp_total_classmate_reward_dict = {}
+                tmp_extracted_classmate_sol_list = []
+                for classmate_future in classmate_futures:
+                    tmp_classmate_result = classmate_future.result()
                     tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
                     tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
-
-                    # if self.classmate_cot_reward_configs.add_consistency_reward:
-                    #     tmp_m_cl_consistency_result = self.compute_score(
-                    #         data_source=data_source,
-                    #         solution_str=classmate_output_sample,
-                    #         ground_truth=response_str,      # Use main model response as "ground truth" for consistency reward
-                    #         extra_info=extra_info,
-                    #         method="flexible",
-                    #         return_dict=True,
-                    #         code_api_url=self.code_api_url,
-                    #         # llm_judge_config_dict=self.llm_judge_config_dict,
-                    #         # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
-                    #     )
-                    #     tmp_m_cl_consistency_result.pop("extracted_solution")
 
                     for k, v in tmp_classmate_result.items():       # Should only have "score"
                         if k not in tmp_total_classmate_reward_dict:
                             tmp_total_classmate_reward_dict[k] = 0.0
                         tmp_total_classmate_reward_dict[k] += v
-
-                    # if self.classmate_cot_reward_configs.add_consistency_reward:
-                    #     for k, v in tmp_m_cl_consistency_result.items():       # Should only have "score"
-                    #         if k not in tmp_total_m_cl_consistency_reward_dict:
-                    #             tmp_total_m_cl_consistency_reward_dict[k] = 0.0
-                    #         tmp_total_m_cl_consistency_reward_dict[k] += v
-
-                    # print(f"""
-                    # 🐛 Sample data_source: {data_source}
-                    # 🐛 Sample ground_truth: {ground_truth}
-                    # 🐛 Sample extra_info: {extra_info}
-                    # 🐛 Sample main model response: {response_str}
-                    # 🐛 Sample main model reward: {base_reward}
-                    # 🐛 Sample classmate response: {classmate_output_sample}
-                    # 🐛 Sample tmp_classmate_reward: {tmp_classmate_reward}
-                    # """)
-                # Average over num_return_sequences
 
                 extracted_classmate_sol.append(tmp_extracted_classmate_sol_list)
 
@@ -275,40 +318,18 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         total_classmate_reward_dict[k] = 0.0
                     total_classmate_reward_dict[k] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
 
-                # if self.classmate_cot_reward_configs.add_consistency_reward:
-                #     for k, v in tmp_total_m_cl_consistency_reward_dict.items():
-                #         if k not in total_m_cl_consistency_reward_dict:
-                #             total_m_cl_consistency_reward_dict[k] = 0.0
-                #         total_m_cl_consistency_reward_dict[k] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
-
-
-            # print(f"🐛classmate_outputs: {classmate_outputs} classmate_reward: {classmate_reward}")
-            # breakpoint()
-
-            # Combine actor and classmate rewards
-            # final_reward = base_reward + classmate_reward * self.classmate_reward_weight
-            # final_reward = (1 - self.classmate_reward_weight) * base_reward + self.classmate_reward_weight * classmate_reward
+            base_reward = ctx["base_reward"]
             classmate_reward = total_classmate_reward_dict["score"]
-            # if self.classmate_cot_reward_configs.add_consistency_reward:
-            #     consistency_reward = total_m_cl_consistency_reward_dict["score"]
 
             weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
-            # if self.classmate_cot_reward_configs.add_consistency_reward:
-            #     weighted_consistency_reward = consistency_reward
             if self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate":
                 weighted_classmate_reward = 0
-                # if self.classmate_cot_reward_configs.add_consistency_reward:
-                #     weighted_consistency_reward = 0
             elif self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate_when_main_incorrect":
                 # Multiply 0!!! Don't set it to 0!! Or it's possible that you are setting classmate reward to 1 when main & classmate are incorrect
                 weighted_classmate_reward *= 0 if base_reward <= 0 else 1        # TODO assuming RLVR binary reward: 0 classmate reward when main is incorrect
-                # if self.classmate_cot_reward_configs.add_consistency_reward:
-                #     weighted_consistency_reward *= 0 if base_reward <= 0 else 1
             elif self.classmate_cot_reward_configs.use_classmate_main_cond == "neg_classmate_when_main_incorrect":
                 if base_reward <= 0:
                     weighted_classmate_reward = -weighted_classmate_reward
-                    # if self.classmate_cot_reward_configs.add_consistency_reward:
-                    #     weighted_consistency_reward = -weighted_consistency_reward
 
             # Update total_classmate_reward_dict to reward_extra_info
             for key, value in total_classmate_reward_dict.items():
@@ -317,73 +338,74 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 else:
                     reward_extra_info[f"classmate_{key}"].append(value)
 
-            # for key, value in total_m_cl_consistency_reward_dict.items():
-            #     if key == "score":
-            #         reward_extra_info["consistency_reward"].append(consistency_reward)
-            #     else:
-            #         reward_extra_info[f"consistency_{key}"].append(value)
-
             reward_extra_info[f"weighted_classmate_reward"].append(weighted_classmate_reward)
-            # reward_extra_info[f"weighted_consistency_reward"].append(weighted_consistency_reward)
 
-            reward_extra_info[f"classmate_response_length"].append(data_item.non_tensor_batch["classmate_response_length"])
-            reward_extra_info[f"classmate_max_tokens_len"].append(data_item.non_tensor_batch["classmate_max_tokens_len"])
-
-            # print(f"🐛🐛🐛use_classmate_main_cond", self.classmate_cot_reward_configs.use_classmate_main_cond, type(self.classmate_cot_reward_configs.use_classmate_main_cond))
-            # print(f"🐛🐛🐛base_reward", base_reward, type(base_reward))
-            # print(f"🐛🐛🐛classmate_reward", classmate_reward, type(classmate_reward))
-            # print(f"🐛🐛🐛weighted_classmate_reward", weighted_classmate_reward, type(weighted_classmate_reward))
+            reward_extra_info[f"classmate_response_length"].append(ctx["data_item"].non_tensor_batch["classmate_response_length"])
+            reward_extra_info[f"classmate_max_tokens_len"].append(ctx["data_item"].non_tensor_batch["classmate_max_tokens_len"])
 
             # Note: this is only for logging; token-level reward might be different
-            # final_reward = base_reward + weighted_classmate_reward + weighted_consistency_reward
             final_reward = base_reward + weighted_classmate_reward
             reward_extra_info["final_reward"].append(final_reward)
 
-            main_reward_tensor[i, valid_response_length - 1] = base_reward
-            classmate_reward_tensor[i, valid_response_length - 1] = weighted_classmate_reward
-            # if self.classmate_cot_reward_configs.add_consistency_reward:
-            #     consistency_reward_tensor[i, valid_response_length - 1] = weighted_consistency_reward
+            classmate_reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = weighted_classmate_reward
 
+            data_source = ctx["data_source"]
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
 
+            # TODO haha
+            classmate_p_bar.update(1)
+
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print("🐛[raw_prompt]", raw_prompt)
-                print("🐛[main_prompt]", raw_prompt_str)
-                print("🐛[main_response]", raw_response_str)
+                print("🐛[raw_prompt]", ctx["raw_prompt"])
+                print("🐛[main_prompt]", ctx["raw_prompt_str"])
+                print("🐛[main_response]", ctx["raw_response_str"])
                 if self.enable_thinking:
-                    print("🐛[main_cot]", main_cot)
-                    print("🐛[main_output]", main_output)
-                if extracted_solution is not None:
+                    print("🐛[main_cot]", ctx["main_cot"])
+                    print("🐛[main_output]", ctx["main_output"])
+                ground_truth = ctx["ground_truth"]
+                actor_score = ctx["actor_score"]
+                extracted_solution = ctx["extracted_solution"]
+                if ground_truth is None:
+                    # for open-ended generation
+                    ground_truth = actor_score.get("score", None) if isinstance(actor_score, dict) else None
+                    print("🐛[llm judge score]", ground_truth)
+                    if isinstance(actor_score, dict):
+                        print("🐛[llm judge explanation]", actor_score.get("judge_explanation", None))
+                else:
+                    # if extracted_solution is not None:
                     print("🐛[main_extracted]", extracted_solution)
-                print("🐛[ground_truth]", ground_truth)
-                print("🐛[main_reward]", base_reward)
+                    print("🐛[ground_truth]", ground_truth)
+                    print("🐛[main_reward]", base_reward)
                 import numpy as np
-                print("🐛[classmate_prompt]", classmate_prompts[0])   # 0th classmate model
-                print("🐛[main_keep_rate]", np.array2string(main_keep_rate, precision=3))   # 0th classmate model, 0th sample
-                print("🐛[classmate_output]", classmate_outputs[0][0])     # 0th classmate model
+                print("🐛[classmate_prompt]", ctx["classmate_prompts"][0])   # 0th classmate model
+                print("🐛[main_keep_rate]", np.array2string(ctx["main_keep_rate"], precision=3))   # 0th classmate model, 0th sample
+                print("🐛[classmate_output]", ctx["classmate_outputs"][0][0])     # 0th classmate model
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
-                print("🐛[classmate_ground_truth]", classmate_ground_truth)
+                if ground_truth is not None:
+                    print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)
                 print("🐛[classmate_reward]", classmate_reward)
                 print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
-                # if self.classmate_cot_reward_configs.add_consistency_reward:
-                #     print("🐛[consistency_reward]", consistency_reward)
-                #     print("🐛[weighted_consistency_reward]", weighted_consistency_reward)
-                # if isinstance(score, dict):
-                #     for key, value in score.items():
-                #         print(f"[{key}]", value)
-                # else:
-                #     print("[score]", score)
                 print("🐛[final_reward]", final_reward)
-                if "classmate_outputs" in data_item.non_tensor_batch:
-                    print(f"[num_classmate_outputs]", len(data_item.non_tensor_batch["classmate_outputs"]))
+                if "classmate_outputs" in ctx["data_item"].non_tensor_batch:
+                    print(f"[num_classmate_outputs]", len(ctx["data_item"].non_tensor_batch["classmate_outputs"]))
 
-                if "monitor_use_hint" in data_item.non_tensor_batch:
-                    print("🐛[truncated_main_cot]", data_item.non_tensor_batch["truncated_main_cot"])
-                    print("🐛[monitor_use_hint]", data_item.non_tensor_batch["monitor_use_hint"])
-                    print("🐛[monitor_explanation]", data_item.non_tensor_batch["monitor_explanations"])
-                    print("🐛[main_monitor_consistent]", (base_reward == 1) == (data_item.non_tensor_batch["monitor_use_hint"] == True))
+                if "monitor_score" in ctx["data_item"].non_tensor_batch:
+                    print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
+                    print("🐛[monitor_score]", ctx["data_item"].non_tensor_batch["monitor_score"])
+                    print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
+                    monitor_reward_type = ctx["data_item"].non_tensor_batch.get("monitor_reward_type", "binary")
+                    monitor_score_value = ctx["data_item"].non_tensor_batch["monitor_score"]
+                    if monitor_reward_type == "binary":
+                        main_monitor_consistent = (base_reward == 1) == (monitor_score_value == 1)
+                        print("🐛[main_monitor_consistent]", main_monitor_consistent)
+                    else:
+                        try:
+                            main_monitor_consistent = (float(base_reward) - float(monitor_score_value)) ** 2
+                        except (TypeError, ValueError):
+                            main_monitor_consistent = None
+                        print("🐛[main_monitor_mse_diff]", main_monitor_consistent)
 
 
         if return_dict:

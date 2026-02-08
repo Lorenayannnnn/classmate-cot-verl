@@ -1,0 +1,262 @@
+import re
+from abc import ABC, abstractmethod
+import logging
+from typing import Any, Dict, List
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+class BaseVerifier(ABC):
+    """
+    Base class for verifiers that support different reward types.
+
+    Supports:
+    - Binary rewards: reports TP, TN, FP, FN, precision, recall, F1
+    - Non-binary rewards: reports MSE
+    """
+
+    def __init__(self, reward_type: str = "binary"):
+        """
+        Initialize the verifier with a reward type.
+
+        Args:
+            reward_type: Either "binary" or "non_binary"
+        """
+        if reward_type not in ["binary", "non_binary"]:
+            raise ValueError(f"reward_type must be 'binary' or 'non_binary', got {reward_type}")
+        self.reward_type = reward_type
+
+    @abstractmethod
+    def extract_answer(self, continuation: str) -> Dict[str, Any]:
+        """
+        Extract the answer from the model's continuation.
+
+        Args:
+            continuation: The model's generated text
+
+        Returns:
+            Dict containing:
+                - answer: The extracted answer
+                - answer_format_correct: Whether the format is correct (1.0 or 0.0)
+                - pre_answer_text: Text before the answer
+        """
+        pass
+
+    @abstractmethod
+    def create_monitor_message(self, doc: Dict[str, Any]) -> str:
+        """
+        Create a monitor message for evaluation.
+
+        Args:
+            doc: Document containing question and metadata
+
+        Returns:
+            Formatted monitor message string
+        """
+        pass
+
+    @abstractmethod
+    def get_gt(self, user_message: str, continuation: str) -> Dict[str, Any]:
+        """
+        Get the ground truth answer for a given user message and continuation.
+
+        Args:
+            user_message: The original user message
+            continuation: The model's generated text
+
+        Returns:
+            Dict containing:
+                - answer: The ground truth answer
+                - answer_format_correct: Whether the format is correct (1.0 or 0.0)
+                - pre_answer_text: Text before the answer
+        """
+        pass
+
+    @abstractmethod
+    def compute_score_for_eval(self, continuation: str, doc: dict):
+        pass
+
+    def compute_metrics(self, predictions: List[float], ground_truths: List[float]) -> Dict[str, float]:
+        """
+        Compute metrics based on reward type.
+
+        Args:
+            predictions: List of predicted values
+            ground_truths: List of ground truth values
+
+        Returns:
+            Dictionary of metric names to values
+        """
+        predictions = np.array(predictions)
+        ground_truths = np.array(ground_truths)
+
+        if self.reward_type == "binary":
+            return self._compute_binary_metrics(predictions, ground_truths)
+        else:  # non_binary
+            return self._compute_non_binary_metrics(predictions, ground_truths)
+
+    def _compute_binary_metrics(self, predictions: np.ndarray, ground_truths: np.ndarray) -> Dict[str, float]:
+        """
+        Compute binary classification metrics.
+
+        Returns:
+            Dict with tp, tn, fp, fn, precision, recall, f1
+        """
+        # Ensure binary values
+        predictions = (predictions > 0.5).astype(int)
+        ground_truths = (ground_truths > 0.5).astype(int)
+
+        tp = np.sum((predictions == 1) & (ground_truths == 1))
+        tn = np.sum((predictions == 0) & (ground_truths == 0))
+        fp = np.sum((predictions == 1) & (ground_truths == 0))
+        fn = np.sum((predictions == 0) & (ground_truths == 1))
+
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+
+        return {
+            "tp": float(tp),
+            "tn": float(tn),
+            "fp": float(fp),
+            "fn": float(fn),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1
+        }
+
+    def _compute_non_binary_metrics(self, predictions: np.ndarray, ground_truths: np.ndarray) -> Dict[str, float]:
+        """
+        Compute non-binary regression metrics.
+
+        Returns:
+            Dict with mse, rmse, mae
+        """
+        mse = np.mean((predictions - ground_truths) ** 2)
+        rmse = np.sqrt(mse)
+        mae = np.mean(np.abs(predictions - ground_truths))
+
+        return {
+            "mse": float(mse),
+            "rmse": float(rmse),
+            "mae": float(mae)
+        }
+
+    def compute_score(self, continuation: str, gt: Any, debug: bool = False, **kwargs) -> Dict[str, Any]:
+        """
+        Compute the score for a continuation.
+
+        Args:
+            continuation: The model's generated text
+            gt: Ground truth value
+            debug: Whether to output debug information
+            **kwargs: Additional arguments
+
+        Returns:
+            Dict containing score and extracted_solution
+        """
+        try:
+            res = self.extract_answer(continuation)
+
+            if self.reward_type == "binary":
+                score = 1.0 if res["answer"] == gt else 0.0
+            else:
+                # For non-binary, we might need to parse both answer and gt as floats
+                try:
+                    answer_val = float(res["answer"])
+                    gt_val = float(gt)
+                    # For non-binary, we could return the actual value or a normalized score
+                    # Here we'll return the actual predicted value
+                    score = answer_val
+                except ValueError:
+                    score = 0.0
+
+            return {
+                "score": score,
+                "extracted_solution": res["answer"],
+                "answer_format_correct": res.get("answer_format_correct", 1.0)
+            }
+        except Exception as e:
+            return {
+                "score": 0.0,
+                "extracted_solution": f"empty result (probably didn't end with </think>)" if continuation is None else f"ERROR: {str(e)}",
+                "answer_format_correct": 0.0
+            }
+
+
+def _normalize_data_sources(data_source) -> List[str]:
+    """Normalize data_source into a list of strings."""
+    if data_source is None:
+        return []
+    if isinstance(data_source, str):
+        return [data_source]
+    if isinstance(data_source, np.ndarray):
+        return [str(item) for item in data_source.ravel().tolist()]
+    if isinstance(data_source, (list, tuple, set)):
+        return [str(item) for item in data_source]
+    return [str(data_source)]
+
+
+def get_monitor_verifier(data_source=None) -> BaseVerifier:
+    # TODO: if data_source is a list, currently assuming all elements are the same type
+    """Get the appropriate verifier based on data_source.
+
+    Args:
+        data_source: Data source string or list/array to determine verifier type
+
+    Returns:
+        BaseVerifier instance appropriate for the data source
+    """
+    data_sources = _normalize_data_sources(data_source)
+    data_source_joined = " ".join(data_sources)
+
+    is_mmlu = "mmlu" in data_source_joined
+    is_mmlu_pro = "mmlu_pro" in data_source_joined
+    is_helpful = any(source == "helpful_instructions" for source in data_sources)
+
+    if is_mmlu:
+        from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
+        return MMLUSycophancyVerifier(do_pro=is_mmlu_pro, reward_type="binary")
+    elif is_helpful:
+        from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
+        return GeneralSycophancyVerifier(reward_type="non_binary")
+    else:
+        raise ValueError(f"Unsupported data_source for verifier: {data_source}")
+
+
+def compute_score(
+    data_source,
+    solution_str,
+    ground_truth=None,
+    extra_info=None,
+    sandbox_fusion_url=None,
+    concurrent_semaphore=None,
+    memory_limit_mb=None,
+    method=None,
+    return_dict=True,
+    **kwargs,
+):
+    verifier = get_monitor_verifier(data_source=data_source)
+
+    if ground_truth is None:
+        # Verifier should score the output
+        ground_truth, explanation = verifier.get_gt(user_message=extra_info["reward_model"]["raw_question_for_monitor"], continuation=solution_str)
+        if ground_truth is None:
+            logger.warning("⚠️Ground truth could not be obtained; defaulting to None; judge output")
+            logger.warning(f"⚠️ {ground_truth}")
+            ground_truth = 0.0      # no reward if we can't get a gt, but this is a fallback and ideally shouldn't happen
+        score = ground_truth
+        extracted_sol = solution_str
+    else:
+        res = verifier.compute_score(solution_str, ground_truth, debug=False)
+        score = res["score"]
+        extracted_sol = res["extracted_solution"]
+
+    if return_dict:
+        return {
+            "score": score,
+            "extracted_solution": extracted_sol
+        }
+    else:
+        return score

@@ -30,7 +30,8 @@ def sub_main(configs, model):
                                               inference_backend=configs.model_args.inference_backend,
                                               args=configs.running_args,
                                               enable_thinking=configs.model_args.enable_thinking,
-                                              main_cot_keep_rate=configs.model_args.main_cot_keep_rate)
+                                              main_cot_keep_rate=configs.model_args.main_cot_keep_rate,
+                                              data_source=configs.data_args.dataset_name)
 
     try:
         # if configs.running_args.exp_type == "inference_main_model":

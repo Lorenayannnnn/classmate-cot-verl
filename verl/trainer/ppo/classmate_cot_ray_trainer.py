@@ -53,12 +53,14 @@ from verl.trainer.ppo.metric_utils import (
     compute_timing_metrics,
     process_validation_metrics,
 )
-from verl.trainer.ppo.mismatch_helper import compute_rollout_importance_weights
+from verl.trainer.ppo.mismatch_helper import (
+    compute_rollout_importance_weights
+)
 from verl.trainer.ppo.reward import compute_reward, compute_reward_async, compute_main_classmate_reward
 from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference_policy, need_reward_model
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.cot_monitor.monitor import monitor_cot, process_main_cot_helper
+from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
 from verl.utils.my_utils import parse_out_main_cot_output
@@ -296,9 +298,14 @@ def compute_advantage(
         classmate_calculation_mask = data.batch["classmate_input_mask"]
 
         # Call compute_gdpo_outcome_advantage with parameters matching its definition
-        (advantages, returns, 
-         main_group_reward_mean, main_group_reward_std,
-         classmate_group_reward_mean, classmate_group_reward_std) = core_algos.compute_gdpo_outcome_advantage(
+        (
+            main_advantages,
+            classmate_advantages,
+            main_group_reward_mean,
+            main_group_reward_std,
+            classmate_group_reward_mean,
+            classmate_group_reward_std,
+        ) = core_algos.compute_gdpo_outcome_advantage_separate(
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
             # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
@@ -308,8 +315,10 @@ def compute_advantage(
             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
             token_level_classmate_reward_mode=token_level_classmate_reward_mode
         )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
+        data.batch["main_advantages"] = main_advantages
+        data.batch["classmate_advantages"] = classmate_advantages
+        # data.batch["advantages"] = main_advantages + classmate_advantages
+        data.batch["returns"] = data.batch["advantages"]
         data.batch["main_group_reward_mean"] = main_group_reward_mean
         data.batch["main_group_reward_std"] = main_group_reward_std
         data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean        # Note these are weighted
@@ -488,6 +497,8 @@ class ClassmateCoTRayPPOTrainer:
             from openai import OpenAI
             from keys import OPENAI_KEY
             self.openai_client = OpenAI(api_key=OPENAI_KEY)
+            self._monitor_verifier = None
+            self._monitor_verifier_key = None
 
         assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
         self.enable_thinking = enable_thinking
@@ -675,6 +686,36 @@ class ClassmateCoTRayPPOTrainer:
 
         return gen_batch
 
+    def _get_monitor_verifier(self, data_sources=None):
+        # Optimize this later
+        is_mmlu = False
+        is_mmlu_pro = False
+        data_source_values = []
+        if data_sources is not None:
+            if isinstance(data_sources, (list, tuple, np.ndarray)):
+                data_source_values = data_sources
+            else:
+                data_source_values = [data_sources]
+
+            try:
+                is_mmlu = any("mmlu" in str(src) for src in data_source_values)
+                is_mmlu_pro = any("mmlu_pro" in str(src) for src in data_source_values)
+            except TypeError:
+                is_mmlu = False
+                is_mmlu_pro = False
+
+        cache_key = (is_mmlu, is_mmlu_pro)
+        if self._monitor_verifier is not None and self._monitor_verifier_key == cache_key:
+            return self._monitor_verifier
+
+        from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+
+        verifier = get_monitor_verifier(data_source=data_source_values)
+
+        self._monitor_verifier = verifier
+        self._monitor_verifier_key = cache_key
+        return verifier
+
     def _validate(self):
         data_source_lst = []
         reward_extra_infos_dict: dict[str, list] = defaultdict(list)
@@ -688,7 +729,7 @@ class ClassmateCoTRayPPOTrainer:
         sample_uids = []
 
         all_main_rewards = []
-        all_monitor_use_hint = []
+        all_monitor_scores = []
         all_monitor_explanations = []
 
         for test_data in self.val_dataloader:
@@ -763,10 +804,16 @@ class ClassmateCoTRayPPOTrainer:
             # modify cot monitor
             if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
                 print("Performing CoT monitoring...")
-                from verl.utils.cot_monitor.monitor import monitor_cot_wrapper
+                from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper
+
+                data_sources_batch = test_batch.non_tensor_batch.get("data_source")
+                verifier = self._get_monitor_verifier(data_sources=data_sources_batch)
+                if verifier is None:
+                    raise ValueError("Monitor verifier could not be initialized from data_source.")
 
                 # Extract CoTs, questions, and hints
                 all_main_cots, all_raw_questions, all_hint_strs = [], [], []
+                monitor_prompts = []
                 for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
                     truncated_main_cot, _, _ = process_main_cot_helper(
                         self.tokenizer,
@@ -779,25 +826,33 @@ class ClassmateCoTRayPPOTrainer:
                     )
                     # all_main_cots.append(parse_out_main_cot_output(response)[0])
                     all_main_cots.append(truncated_main_cot)
-                    all_raw_questions.append(item.non_tensor_batch.get("reward_model", {}).get("raw_question_for_monitor", ""))
-                    all_hint_strs.append(item.non_tensor_batch.get("reward_model", {}).get("hint_str_for_monitor", ""))
+                    raw_question_for_monitor = item.non_tensor_batch["reward_model"]["raw_question_for_monitor"]
+                    hint_str_for_monitor = item.non_tensor_batch["reward_model"].get("hint_str_for_monitor")
+                    all_raw_questions.append(raw_question_for_monitor)
+                    all_hint_strs.append(hint_str_for_monitor)
+
+                    monitor_doc = {
+                        "raw_question_for_monitor": raw_question_for_monitor,
+                        "hint_str_for_monitor": hint_str_for_monitor,
+                        "truncated_main_CoT": truncated_main_cot,
+                    }
+                    monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
 
                 # Execute monitor_cot calls in parallel
-                all_monitor_use_hint_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
-                    all_main_cots=all_main_cots,
-                    all_raw_questions=all_raw_questions,
-                    all_hint_strs=all_hint_strs,
-                    monitor_template_name=self.config.reward_model.get("monitor_template_name"),
+                all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
+                    monitor_prompts=monitor_prompts,
+                    monitor_reward_type=verifier.reward_type,
                     openai_client=self.openai_client,
-                    model_name=self.config.reward_model.get("monitor_model_name")
+                    model_name=self.config.reward_model["monitor_model_name"]
                 )
 
                 test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
-                test_batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint_batch)
+                test_batch.non_tensor_batch["monitor_score"] = np.array(all_monitor_scores_batch)
                 test_batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations_batch)
+                test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(all_monitor_scores_batch))
                 
                 # Accumulate monitor results across all batches
-                all_monitor_use_hint.extend(all_monitor_use_hint_batch)
+                all_monitor_scores.extend(all_monitor_scores_batch)
                 all_monitor_explanations.extend(all_monitor_explanations_batch)
                 print("CoT monitoring completed.")
 
@@ -889,39 +944,29 @@ class ClassmateCoTRayPPOTrainer:
             metric_dict["val-aux/num_turns/max"] = sample_turns.max()
             metric_dict["val-aux/num_turns/mean"] = sample_turns.mean()
         
-        if len(all_monitor_use_hint) > 0:
+        if len(all_monitor_scores) > 0:
             # Convert to numpy arrays for computation
-            monitor_use_hint = np.array(all_monitor_use_hint)
+            monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_rewards)
 
-            valid_mask = monitor_use_hint != None  # noqa: E711
-            monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
+            valid_mask = monitor_scores != None  # noqa: E711
+            monitor_scores = monitor_scores[valid_mask]
             main_model_reward = main_model_reward[valid_mask]
 
-            # Convert rewards to binary (1/0)
-            main_reward_bin = (main_model_reward == 1).astype(bool)
+            monitor_scores = monitor_scores.astype(float)
+            main_model_reward = main_model_reward.astype(float)
 
-            tp = np.sum(main_reward_bin & monitor_use_hint)
-            tn = np.sum(~main_reward_bin & ~monitor_use_hint)
-            fp = np.sum(~main_reward_bin & monitor_use_hint)
-            fn = np.sum(main_reward_bin & ~monitor_use_hint)
-
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
-
-            metric_dict.update(
-                {
-                    "val-core/monitor/total_monitored_entries": int(len(monitor_use_hint)),
-                    "val-core/monitor/tp": float(tp),
-                    "val-core/monitor/tn": float(tn),
-                    "val-core/monitor/fp": float(fp),
-                    "val-core/monitor/fn": float(fn),
-                    "val-core/monitor/precision": float(precision),
-                    "val-core/monitor/recall": float(recall),
-                    "val-core/monitor/f1": float(f1),
-                }
-            )
+            verifier = self._get_monitor_verifier(data_sources=data_sources)
+            if verifier is not None:
+                monitor_metrics = verifier.compute_metrics(
+                    predictions=monitor_scores.tolist(),
+                    ground_truths=main_model_reward.tolist(),
+                )
+                metric_dict["val-core/monitor/total_monitored_entries"] = int(len(monitor_scores))
+                metric_dict.update({
+                    f"val-core/monitor/{metric_name}": float(metric_val)
+                    for metric_name, metric_val in monitor_metrics.items()
+                })
 
         return metric_dict
 
@@ -1086,40 +1131,40 @@ class ClassmateCoTRayPPOTrainer:
                 config=self.config, worker_group=self.actor_rollout_wg, rm_wg=self.rm_wg
             )
 
-    def _find_token_subsequence_for_string(self, token_ids, target_string):
-        """
-        Find the shortest subsequence of token_ids that decodes to target_string.
+    # def _find_token_subsequence_for_string(self, token_ids, target_string):
+    #     """
+    #     Find the shortest subsequence of token_ids that decodes to target_string.
 
-        Args:
-            token_ids: Sequence of token IDs (list or tensor)
-            target_string: Target string to match
+    #     Args:
+    #         token_ids: Sequence of token IDs (list or tensor)
+    #         target_string: Target string to match
 
-        Returns:
-            int: Index i such that tokenizer.decode(token_ids[:i]) == target_string.
-                 Returns -1 if no match found.
-        """
-        right_ptr = 1
-        while right_ptr < len(token_ids):
-            decoded = self.tokenizer.decode(token_ids[:right_ptr], skip_special_tokens=True)
-            # Exact match found - try to extend to include trailing whitespace tokens
-            if decoded.strip() == target_string.strip():
-                # Check if we can include additional whitespace tokens
-                while right_ptr < len(token_ids):
-                    decoded = self.tokenizer.decode(token_ids[:right_ptr + 1], skip_special_tokens=True)
-                    # Stop if we exceed target length or lose the match
-                    if len(decoded) > len(target_string) or decoded.strip() != target_string.strip():
-                        break
-                    right_ptr += 1
-                return right_ptr
+    #     Returns:
+    #         int: Index i such that tokenizer.decode(token_ids[:i]) == target_string.
+    #              Returns -1 if no match found.
+    #     """
+    #     right_ptr = 1
+    #     while right_ptr < len(token_ids):
+    #         decoded = self.tokenizer.decode(token_ids[:right_ptr], skip_special_tokens=True)
+    #         # Exact match found - try to extend to include trailing whitespace tokens
+    #         if decoded.strip() == target_string.strip():
+    #             # Check if we can include additional whitespace tokens
+    #             while right_ptr < len(token_ids):
+    #                 decoded = self.tokenizer.decode(token_ids[:right_ptr + 1], skip_special_tokens=True)
+    #                 # Stop if we exceed target length or lose the match
+    #                 if len(decoded) > len(target_string) or decoded.strip() != target_string.strip():
+    #                     break
+    #                 right_ptr += 1
+    #             return right_ptr
 
-            # Early exit: no early exit because there might be a lot of whitespace characters prepended
-            # if len(decoded) > len(target_string):
-                # Decoded is already longer than target, won't find match
-                # break
+    #         # Early exit: no early exit because there might be a lot of whitespace characters prepended
+    #         # if len(decoded) > len(target_string):
+    #             # Decoded is already longer than target, won't find match
+    #             # break
 
-            right_ptr += 1
+    #         right_ptr += 1
 
-        return -1
+    #     return -1
 
     # def _old_process_main_cot_helper(self, data_source, main_cot, main_pred_token_ids, main_response_mask, keep_ratio):
     #     """
@@ -1419,38 +1464,33 @@ class ClassmateCoTRayPPOTrainer:
         classmate_prompts = np.empty((bsz, num_models), dtype=object)
         outputs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
         classmate_response_length = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=np.int32)
-        classmate_prompt_logprobs = np.empty((bsz, num_models, self.classmate_num_return_sequences), dtype=object)
+        classmate_prompt_logprobs_list = np.empty((bsz, num_models, self.classmate_num_return_sequences, self.classmate_generation_configs["max_tokens"]))
+        classmate_prompt_logprobs_mask_list = np.empty((bsz, num_models, self.classmate_num_return_sequences, self.classmate_generation_configs["max_tokens"]), dtype=bool)
         for (classmate_idx, _, pad_size), result_dp in zip(futures, resolved):
             cls_prompts = result_dp.non_tensor_batch["classmate_prompts"]  # (bsz_padded, )
             cls_out = result_dp.non_tensor_batch["classmate_outputs"]  # (bsz_padded, num_return_sequences)
             cls_out_lens = result_dp.non_tensor_batch["classmate_output_lens"]  # (bsz_padded, num_return_sequences)
-            cls_prompt_logprobs = result_dp.non_tensor_batch["classmate_prompt_logprobs"]  # (bsz_padded, num_return_sequences)
 
-            # Followings are not needed; padding is already removed in generate_classmate_continuations()
-            # print("🐛 before cls_out", cls_out, cls_out.shape)
-            # print("🐛 before cls_out", cls_out.shape, cls_prompts.shape, cls_out_lens.shape)
-            # if pad_size > 0:
-                # cls_prompts = cls_prompts[:-pad_size]
-                # cls_out = cls_out[:-pad_size]
-                # cls_out_lens = cls_out_lens[:-pad_size]
-            # print("🐛 after cls_out", cls_out.shape, cls_prompts.shape, cls_out_lens.shape)
+            cls_prompt_logprobs = result_dp.non_tensor_batch["classmate_prompt_logprobs"]  # (bsz_padded, num_return_sequences, seq_len)
+            cls_prompt_logprobs_mask = result_dp.non_tensor_batch["classmate_prompt_logprobs"]  # (bsz_padded, num_return_sequences, seq_len)
 
-            # Assign to output array
             assert len(cls_out) == bsz, (
                 f"Expected {bsz} outputs from model {classmate_idx}, got {len(cls_out)}"
             )
             outputs[:, classmate_idx] = cls_out
             classmate_prompts[:, classmate_idx] = cls_prompts
-            classmate_prompt_logprobs[:, classmate_idx] = cls_prompt_logprobs
-            # tokenized_output = self.classmate_tokenizers[classmate_idx](outputs.flatten().tolist())["input_ids"]
             classmate_response_length[:, classmate_idx] = cls_out_lens
+            classmate_prompt_logprobs_list[:, classmate_idx] = cls_prompt_logprobs
+            classmate_prompt_logprobs_mask_list[:, classmate_idx] = cls_prompt_logprobs_mask
 
         # Expected shape: (bsz, num_models, num_return_sequences)
         assert outputs.shape == (bsz, num_models, self.classmate_num_return_sequences), \
             f"Expected shape {(bsz, num_models, self.classmate_num_return_sequences)}, got {batch.non_tensor_batch['classmate_outputs'].shape}"
         batch.non_tensor_batch["classmate_prompts"] = classmate_prompts
         batch.non_tensor_batch["classmate_outputs"] = outputs
-        batch.non_tensor_batch["classmate_prompt_logprobs"] = classmate_prompt_logprobs
+        
+        batch.batch["classmate_prompt_logprobs"] = torch.tensor(classmate_prompt_logprobs_list)
+        batch.batch["classmate_prompt_logprobs_mask"] = torch.tensor(classmate_prompt_logprobs_mask_list)
 
         batch.non_tensor_batch["classmate_response_length"] = np.array(classmate_response_length)
         batch.non_tensor_batch["classmate_max_tokens_len"] = np.array([self.classmate_generation_configs.max_tokens] * bsz)
@@ -1658,6 +1698,7 @@ class ClassmateCoTRayPPOTrainer:
         """
         # Compute rollout IS weights if enabled and data is available
         # rollout_is_threshold is the main on/off switch
+        # TODO hoho
         if self.config.algorithm.rollout_is_threshold is not None and "rollout_log_probs" in batch.batch:
             rollout_is_weights, rollout_is_metrics = compute_rollout_importance_weights(
                 old_log_prob=batch.batch["old_log_probs"],
@@ -1670,15 +1711,46 @@ class ClassmateCoTRayPPOTrainer:
                 rollout_is_veto_threshold=self.config.algorithm.rollout_is_veto_threshold,
             )
 
+            classmate_rollout_is_weights = None
+            classmate_rollout_is_metrics = {}
+            if "classmate_prompt_logprobs" in batch.batch and "classmate_prompt_logprobs_mask" in batch.batch:
+                # Assuming main and classmate has the same tokenizer
+                classmate_rollout_is_weights, classmate_rollout_is_metrics = compute_rollout_importance_weights(
+                    old_log_prob=batch.batch["old_log_probs"],
+                    rollout_log_prob=batch.batch["classmate_prompt_logprobs"],
+                    response_mask=batch.batch["classmate_prompt_logprobs_mask"],
+                    rollout_is_level=self.config.algorithm.rollout_is_level,
+                    rollout_is_mode=self.config.algorithm.rollout_is_mode,
+                    rollout_is_threshold=self.config.algorithm.rollout_is_threshold,
+                    rollout_is_threshold_lower=self.config.algorithm.rollout_is_threshold_lower,
+                    rollout_is_veto_threshold=self.config.algorithm.rollout_is_veto_threshold,
+                    rollout_is_weights_key_name="classmate_rollout_is_weights"
+                )
+
             # Control: Should we apply weights to policy loss?
             # True = add weights to batch (actor will apply them)
             # False = don't add weights (metrics only, no loss modification)
             apply_weights = self.config.algorithm.get("rollout_is", False)
 
-            if apply_weights:
+            if apply_weights and classmate_rollout_is_weights is not None:
                 # Add IS weights to batch for distribution to workers
                 batch = batch.union(rollout_is_weights)
+                # Store classmate rollout IS weights separately for custom usage
+                batch = batch.union(classmate_rollout_is_weights)
 
+            # Preserve existing classmate_mismatch/* keys for backward compatibility
+            rollout_is_metrics.update(
+                {f"classmate_{k}": v for k, v in classmate_rollout_is_metrics.items()}
+            )
+            # Add normalized mismatch/classmate_* keys for clearer logging
+            classmate_metrics_normalized = {}
+            for k, v in classmate_rollout_is_metrics.items():
+                if k.startswith("mismatch/"):
+                    classmate_key = f"mismatch/classmate_{k[len('mismatch/'):] }"
+                else:
+                    classmate_key = f"classmate_{k}"
+                classmate_metrics_normalized[classmate_key] = v
+            rollout_is_metrics.update(classmate_metrics_normalized)
             return batch, rollout_is_metrics
 
         # Return unchanged batch and empty metrics if IS is disabled
@@ -1858,7 +1930,7 @@ class ClassmateCoTRayPPOTrainer:
                     #     batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint)
                     #     batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations)
 
-                    # TODO modify Generate classmate continuations if workers are available
+                    # TODO hehe
                     with marked_timer("classmate_cot", timing_raw, color="magenta"):
                         batch = self._generate_classmate_continuations(batch)
 
@@ -1967,6 +2039,7 @@ class ClassmateCoTRayPPOTrainer:
                         # Compute rollout importance sampling weights centrally (once per batch)
                         # This corrects for mismatch between rollout policy and training policy
                         # Also computes mismatch metrics (KL, PPL, etc.)
+                        # TODO hehe
                         batch, is_metrics = self.compute_rollout_importance_weights_and_add_to_batch(batch)
                         # IS and mismatch metrics already have mismatch/ prefix
                         metrics.update(is_metrics)

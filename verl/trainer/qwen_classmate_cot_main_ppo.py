@@ -305,7 +305,7 @@ class ClassmateCoTTaskRunner:
 
         # Load the reward manager for training and validation.
         reward_fn = load_reward_manager(
-            config, tokenizer, num_examine=0,
+            config, tokenizer, num_examine=1,
             code_api_url=config.reward_model.sandbox_fusion_url,
             llm_judge_model=config.reward_model.llm_judge_model,
             llm_judge_timeout=config.reward_model.llm_judge_timeout,
@@ -424,6 +424,11 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor, is_train=Tr
     print(f"Using dataset class: {dataset_cls.__name__}")
 
     # Instantiate the dataset using the determined dataset class
+
+    # TODO haha
+    if not is_train:
+        max_samples = 8
+
     dataset = dataset_cls(
         data_files=data_paths,
         tokenizer=tokenizer,

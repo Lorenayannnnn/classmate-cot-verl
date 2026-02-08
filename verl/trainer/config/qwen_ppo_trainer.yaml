@@ -62,7 +62,8 @@ custom_reward_function:
   # The path to the file containing your customized reward function.
   # If not specified, pre-implemented reward functions will be used.
 #  path: verl/utils/reward_score/qwen_verifier.py
-  path: verl/utils/reward_score/mmlu_sycophancy_verifier.py
+#  path: verl/utils/reward_score/mmlu_sycophancy_verifier.py
+  path: verl/utils/reward_score/cot_monitor/BaseVerifier.py
 
   # The name of the reward function within the specified file. Default is 'compute_score'.
   name: compute_score
@@ -70,9 +71,10 @@ custom_reward_function:
 reward_model:
 
   do_cot_monitor: True
-  main_cot_keep_rate: 0.8
+  main_cot_keep_rate: 1
   monitor_template_name: mmlu_sycophancy
-  monitor_model_name: gpt-4o-mini
+#  monitor_model_name: gpt-4o-mini
+  monitor_model_name: gpt-4.1-nano
 
   sandbox_fusion_url: null
 

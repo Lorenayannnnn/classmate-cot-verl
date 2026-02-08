@@ -62,6 +62,7 @@ def monitor_cot(user_message, hint_message, main_pred, monitor_template_name, op
 
     # Use openai
     try:
+        # monitor_model_name
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

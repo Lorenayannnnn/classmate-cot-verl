@@ -73,9 +73,27 @@ def visualize_avg_std_across_steps(avg_vals_dict, std_vals_dict, x_labels, x_lab
 
 
 def plot_monitor_metrics_across_steps(model_name_or_path_list, dataset_list, all_step_idx_list, output_dir_path):
-    metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"]
+    def _detect_metric_mode(dataset_name):
+        for main_model_name_or_path in model_name_or_path_list:
+            for step_idx in all_step_idx_list:
+                main_model_dir = f"{output_dir_path}/{main_model_name_or_path}"
+                result_dir = f"{main_model_dir}/step_{step_idx}/{dataset_name}/main"
+                metrics_fn = os.path.join(result_dir, "monitor_metrics.json")
+                if os.path.exists(metrics_fn):
+                    with open(metrics_fn, "r") as f:
+                        metric_data = json.load(f)
+                    if "mse" in metric_data:
+                        return "non_binary"
+                    if "tp" in metric_data:
+                        return "binary"
+        return "binary"
 
     for dataset_name in dataset_list:
+        metric_mode = _detect_metric_mode(dataset_name)
+        if metric_mode == "non_binary":
+            metrics = ["mse"]
+        else:
+            metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"]
         fig, axes = mpl_plt.subplots(4, 2, figsize=(max(10, len(all_step_idx_list)) * 1.4, 12), sharex=True)
         axes = axes.flatten()
 
@@ -135,7 +153,7 @@ def plot_monitor_metrics_across_steps(model_name_or_path_list, dataset_list, all
                 x = step_to_x.get(row["RL Steps"], None)
                 if x is None or pd.isna(row["Value"]):
                     continue
-                if metric in {"precision", "recall", "f1"}:
+                if metric in {"precision", "recall", "f1", "mse"}:
                     value_str = f"{row['Value']:.2f}"
                 else:
                     value_str = f"{int(round(row['Value']))}"

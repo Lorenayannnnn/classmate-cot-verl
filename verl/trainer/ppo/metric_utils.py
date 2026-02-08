@@ -261,52 +261,57 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     print_if_exists("main_model_generated_code_pass_gt_test", "main_model_generated_code_pass_gt_test")
     print_if_exists("main_model_generated_code_pass_generated_test", "main_model_generated_code_pass_generated_test")
 
+    # Here are logging for training; currently only logging monitor stuff during evaluation in def _validate of the Trainer
     # 4. log metrics (do it in metric_utils.py): TP (main_reward==1 and item.non_tensor_batch["monitor_use_hint"] == True), TN (main_reward==0 and item.non_tensor_batch["monitor_use_hint"] == False), FP (main_reward==0 and item.non_tensor_batch["monitor_use_hint"] == True), FN (main_reward==1 and item.non_tensor_batch["monitor_use_hint"] == False) => precision, recall, F1
-    if "monitor_use_hint" in batch.non_tensor_batch and "main_model_reward" in batch.non_tensor_batch:
-        monitor_use_hint = batch.non_tensor_batch["monitor_use_hint"]
-        main_model_reward = batch.non_tensor_batch["main_model_reward"]
-
-        # Filter out aborted samples and None monitor results
-        non_aborted_indices = non_aborted_mask.cpu().numpy()
-        monitor_use_hint = monitor_use_hint[non_aborted_indices]
-        main_model_reward = main_model_reward[non_aborted_indices]
-
-        valid_mask = monitor_use_hint != None  # noqa: E711
-        monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
-        main_model_reward = main_model_reward[valid_mask]
-
-        # Convert rewards to binary (1/0)
-        main_reward_bin = (main_model_reward == 1).astype(bool)
-
-        tp = np.sum(main_reward_bin & monitor_use_hint)
-        tn = np.sum(~main_reward_bin & ~monitor_use_hint)
-        fp = np.sum(~main_reward_bin & monitor_use_hint)
-        fn = np.sum(main_reward_bin & ~monitor_use_hint)
-
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
-
-        metrics.update(
-            {
-                "monitor/tp": float(tp),
-                "monitor/tn": float(tn),
-                "monitor/fp": float(fp),
-                "monitor/fn": float(fn),
-                "monitor/precision": float(precision),
-                "monitor/recall": float(recall),
-                "monitor/f1": float(f1),
-            }
-        )
+    # if "monitor_use_hint" in batch.non_tensor_batch and "main_model_reward" in batch.non_tensor_batch:
+    #     monitor_use_hint = batch.non_tensor_batch["monitor_use_hint"]
+    #     main_model_reward = batch.non_tensor_batch["main_model_reward"]
+    #
+    #     # Filter out aborted samples and None monitor results
+    #     non_aborted_indices = non_aborted_mask.cpu().numpy()
+    #     monitor_use_hint = monitor_use_hint[non_aborted_indices]
+    #     main_model_reward = main_model_reward[non_aborted_indices]
+    #
+    #     valid_mask = monitor_use_hint != None  # noqa: E711
+    #     monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
+    #     main_model_reward = main_model_reward[valid_mask]
+    #
+    #     # Convert rewards to binary (1/0)
+    #     main_reward_bin = (main_model_reward == 1).astype(bool)
+    #
+    #     tp = np.sum(main_reward_bin & monitor_use_hint)
+    #     tn = np.sum(~main_reward_bin & ~monitor_use_hint)
+    #     fp = np.sum(~main_reward_bin & monitor_use_hint)
+    #     fn = np.sum(main_reward_bin & ~monitor_use_hint)
+    #
+    #     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    #     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    #     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+    #
+    #     metrics.update(
+    #         {
+    #             "monitor/tp": float(tp),
+    #             "monitor/tn": float(tn),
+    #             "monitor/fp": float(fp),
+    #             "monitor/fn": float(fn),
+    #             "monitor/precision": float(precision),
+    #             "monitor/recall": float(recall),
+    #             "monitor/f1": float(f1),
+    #         }
+    #     )
     
     # Log likelihood of partial main CoT under main and classmate models
-    # For main: use batch.batch["rollout_log_probs"] and batch.batch["classmate_input_mask"]
-    # For classmate, use batch.non_tensor_batch["classmate_prompt_logprobs"]
     # Compute per-rollout (sample-level) averages, then aggregate across the batch
-    if "rollout_log_probs" in batch.batch and "classmate_input_mask" in batch.batch and "classmate_prompt_logprobs" in batch.non_tensor_batch:
+    if (
+        "rollout_log_probs" in batch.batch
+        and "classmate_input_mask" in batch.batch
+        and "classmate_prompt_logprobs" in batch.batch
+        and "classmate_prompt_logprobs_mask" in batch.batch
+    ):
         rollout_log_probs = batch.batch["rollout_log_probs"]  # Shape: (batch_size, seq_len)
         classmate_input_mask = batch.batch["classmate_input_mask"]  # Shape: (batch_size, seq_len)
-        classmate_prompt_logprobs = batch.non_tensor_batch["classmate_prompt_logprobs"]  # Shape: (batch_size, num_models)
+        classmate_prompt_logprobs = batch.batch["classmate_prompt_logprobs"]  # Shape: (batch_size, num_models, num_return_sequences, max_len)
+        classmate_prompt_logprobs_mask = batch.batch["classmate_prompt_logprobs_mask"]  # Shape: (batch_size, num_models, num_return_sequences, max_len)
 
         # Calculate average log prob for main model over masked tokens (partial CoT)
         main_masked_log_probs = rollout_log_probs * classmate_input_mask
@@ -319,42 +324,33 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
             torch.tensor(0.0, device=rollout_log_probs.device)
         )
 
-        # Process classmate prompt logprobs per rollout and compute diff within loop
-        classmate_avg_log_probs = np.zeros((classmate_prompt_logprobs.shape[0],), dtype=np.float32)
-        per_rollout_diff = np.zeros((classmate_prompt_logprobs.shape[0],), dtype=np.float32)
-        main_avg_log_probs_np = main_avg_log_probs.detach().cpu().numpy()
-        for batch_idx in range(classmate_prompt_logprobs.shape[0]):
-            per_model_means = []
-            for model_idx in range(classmate_prompt_logprobs.shape[1]):
-                assert len(classmate_prompt_logprobs[batch_idx, model_idx]) == 1, "assuming one sequence per classmate"
-                prompt_logprobs = classmate_prompt_logprobs[batch_idx, model_idx][0]
-                # Handle None case (generation error) - use 0.0 as log prob
-                if prompt_logprobs is None:
-                    per_model_means.append(0.0)
-                else:
-                    per_model_means.append(float(np.mean(prompt_logprobs)))
-            classmate_avg_log_probs[batch_idx] = float(np.mean(per_model_means))
-            per_rollout_diff[batch_idx] = float(main_avg_log_probs_np[batch_idx] - classmate_avg_log_probs[batch_idx])
+        # Aggregate classmate prompt logprobs over models and return sequences using mask
+        masked_classmate_logprobs = classmate_prompt_logprobs * classmate_prompt_logprobs_mask
+        classmate_token_sums = masked_classmate_logprobs.sum(dim=-1)
+        classmate_token_counts = classmate_prompt_logprobs_mask.sum(dim=-1).clamp_min(1.0)
+        classmate_avg_log_probs_per_seq = classmate_token_sums / classmate_token_counts
+        classmate_avg_log_probs = classmate_avg_log_probs_per_seq.mean(dim=(1, 2))
+        per_rollout_diff = main_avg_log_probs - classmate_avg_log_probs
 
         # Aggregate statistics on non-aborted samples
-        non_aborted_indices = non_aborted_mask.cpu().numpy()
+        non_aborted_indices = non_aborted_mask
 
         if non_aborted_indices.any():
-            valid_main = main_avg_log_probs_np[non_aborted_indices]
+            valid_main = main_avg_log_probs[non_aborted_indices]
             valid_classmate = classmate_avg_log_probs[non_aborted_indices]
             valid_diff = per_rollout_diff[non_aborted_indices]
 
-            metrics["partial_cot/main_avg_log_prob/mean"] = float(np.mean(valid_main))
+            metrics["partial_cot/main_avg_log_prob/mean"] = torch.mean(valid_main).detach().item()
             # metrics["partial_cot/main_avg_log_prob/max"] = float(np.max(valid_main))
             # metrics["partial_cot/main_avg_log_prob/min"] = float(np.min(valid_main))
             # metrics["partial_cot/main_avg_log_prob/std"] = float(np.std(valid_main))
 
-            metrics["partial_cot/classmate_avg_log_prob/mean"] = float(np.mean(valid_classmate))
+            metrics["partial_cot/classmate_avg_log_prob/mean"] = torch.mean(valid_classmate).detach().item()
             # metrics["partial_cot/classmate_avg_log_prob/max"] = float(np.max(valid_classmate))
             # metrics["partial_cot/classmate_avg_log_prob/min"] = float(np.min(valid_classmate))
             # metrics["partial_cot/classmate_avg_log_prob/std"] = float(np.std(valid_classmate))
 
-            metrics["partial_cot/log_prob_diff/mean"] = float(np.mean(valid_diff))
+            metrics["partial_cot/log_prob_diff/mean"] = torch.mean(valid_diff).detach().item()
             # metrics["partial_cot/log_prob_diff/max"] = float(np.max(valid_diff))
             # metrics["partial_cot/log_prob_diff/min"] = float(np.min(valid_diff))
             # metrics["partial_cot/log_prob_diff/std"] = float(np.std(valid_diff))

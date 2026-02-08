@@ -14,6 +14,7 @@
 import re
 from collections import defaultdict
 from typing import Any
+from concurrent.futures import Future
 
 import torch
 
@@ -101,6 +102,14 @@ class NaiveRewardManager(AbstractRewardManager):
 
         already_print_data_sources = {}
 
+        def _as_future(result):
+            future = Future()
+            future.set_result(result)
+            return future
+
+        item_contexts = []
+        score_futures = []
+
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
@@ -138,20 +147,42 @@ class NaiveRewardManager(AbstractRewardManager):
             # TODO modify
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
-            score = self.compute_score(
-                data_source=data_source,
-                # solution_str=response_str,
-                solution_str=main_output,
-                ground_truth=ground_truth,
-                extra_info=extra_info,
-                return_dict=True,
-                code_api_url=self.code_api_url,
-                # llm_judge_config_dict=self.llm_judge_config_dict,
-                # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+            score_futures.append(
+                _as_future(
+                    self.compute_score(
+                        data_source=data_source,
+                        # solution_str=response_str,
+                        solution_str=main_output,
+                        ground_truth=ground_truth,
+                        extra_info=extra_info,
+                        return_dict=True,
+                        code_api_url=self.code_api_url,
+                        # llm_judge_config_dict=self.llm_judge_config_dict,
+                        # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+                    )
+                )
             )
 
+            item_contexts.append(
+                {
+                    "index": i,
+                    "data_item": data_item,
+                    "raw_prompt": raw_prompt,
+                    "prompt_str": prompt_str,
+                    "response_str": response_str,
+                    "main_cot": main_cot,
+                    "main_output": main_output,
+                    "ground_truth": ground_truth,
+                    "data_source": data_source,
+                    "valid_response_length": valid_response_length,
+                }
+            )
+
+        for ctx, score_future in zip(item_contexts, score_futures):
+            score = score_future.result()
+
             # Debug
-            extracted_sol = score.pop("extracted_solution", None)
+            extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None
 
             # for code_contests_modify_code
             # score = {
@@ -175,34 +206,56 @@ class NaiveRewardManager(AbstractRewardManager):
                 reward = score
 
             # reward_extra_info["main_model_reward"].append(reward)     # Modify: Temporarily added for plotting main model's reward of baseline and one trained with classmate in the same figure
-            reward_tensor[i, valid_response_length - 1] = reward
+            reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = reward
 
+            data_source = ctx["data_source"]
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
 
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
-                print("🐛[raw_prompt]", raw_prompt)
-                print("🐛[main_prompt]", prompt_str)
-                print("🐛[main_response]", response_str)
+                print("🐛[raw_prompt]", ctx["raw_prompt"])
+                print("🐛[main_prompt]", ctx["prompt_str"])
+                print("🐛[main_response]", ctx["response_str"])
                 if self.enable_thinking:
-                    print("🐛[main_cot]", main_cot)
-                    print("🐛[main_output]", main_output)
-                if extracted_sol is not None:
-                    print("🐛[main_extracted]", extracted_sol)
-                print("🐛[ground_truth]", ground_truth)
+                    print("🐛[main_cot]", ctx["main_cot"])
+                    print("🐛[main_output]", ctx["main_output"])
+                if ctx["ground_truth"] is None:
+                    # for open-ended generation
+                    if isinstance(score, dict):
+                        print("🐛[llm judge score]", score["score"])
+                        print("🐛[llm judge explanation]", score.get("judge_explanation", None))
+                else:
+                    if extracted_sol is not None:
+                        print("🐛[main_extracted]", extracted_sol)
+                    print("🐛[ground_truth]", ctx["ground_truth"])
+                    print("[main_reward]", score)
                 # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
                 if isinstance(score, dict):
                     for key, value in score.items():
                         print(f"🐛[{key}]", value)
-                else:
-                    print("[main_reward]", score)
-                
-                if "monitor_use_hint" in data_item.non_tensor_batch:
-                    print("🐛[truncated_main_cot]", data_item.non_tensor_batch["truncated_main_cot"])
-                    print("🐛[monitor_use_hint]", data_item.non_tensor_batch["monitor_use_hint"])
-                    print("🐛[monitor_explanation]", data_item.non_tensor_batch["monitor_explanations"])
-                    print("🐛[main_monitor_consistent]", (score == 1) == (data_item.non_tensor_batch["monitor_use_hint"] == True))
+
+                if "monitor_use_hint" in ctx["data_item"].non_tensor_batch:
+                    print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
+                    print("🐛[monitor_use_hint]", ctx["data_item"].non_tensor_batch["monitor_use_hint"])
+                    print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
+                    print("🐛[main_monitor_consistent]", (score == 1) == (ctx["data_item"].non_tensor_batch["monitor_use_hint"] == True))
+
+                if "monitor_score" in ctx["data_item"].non_tensor_batch:
+                    print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
+                    print("🐛[monitor_score]", ctx["data_item"].non_tensor_batch["monitor_score"])
+                    print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
+                    monitor_reward_type = ctx["data_item"].non_tensor_batch.get("monitor_reward_type", "binary")
+                    monitor_score_value = ctx["data_item"].non_tensor_batch["monitor_score"]
+                    if monitor_reward_type == "binary":
+                        main_monitor_consistent = (score == 1) == (monitor_score_value == 1)
+                        print("🐛[main_monitor_consistent]", main_monitor_consistent)
+                    else:
+                        try:
+                            main_monitor_consistent = (float(score) - float(monitor_score_value)) ** 2
+                        except (TypeError, ValueError):
+                            main_monitor_consistent = None
+                        print("🐛[main_monitor_mse_diff]", main_monitor_consistent)
         if return_dict:
             return {
                 "reward_tensor": reward_tensor,

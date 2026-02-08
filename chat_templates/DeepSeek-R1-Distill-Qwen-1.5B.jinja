@@ -6,22 +6,18 @@
   is_tool=false,
   is_output_first=true,
   system_prompt=''
-) %}
-{# ================= COLLECT SYSTEM PROMPT ================= #}
+) %}{# ================= COLLECT SYSTEM PROMPT ================= #}
 {% for message in messages %}
   {% if message['role'] == 'system' %}
     {% set ns.system_prompt = message['content'] %}
   {% endif %}
 {% endfor %}
-{{ bos_token }}{{ ns.system_prompt }}
-{# ================= MAIN MESSAGE LOOP ================= #}
-{% for message in messages %}
-  {# ---------------- USER ---------------- #}
+{{ bos_token }}{{ ns.system_prompt }}{# ================= MAIN MESSAGE LOOP ================= #}
+{% for message in messages %}{# ---------------- USER ---------------- #}
   {% if message['role'] == 'user' %}
     {% set ns.is_tool = false %}
     {{ '<｜User｜>' + message['content'] }}
-  {% endif %}
-  {# -------- ASSISTANT: TOOL CALLS -------- #}
+  {% endif %}{# -------- ASSISTANT: TOOL CALLS -------- #}
   {% if message['role'] == 'assistant' and message['content'] is none %}
     {% set ns.is_tool = false %}
     {% for tool in message['tool_calls'] %}
@@ -49,8 +45,7 @@
       {% endif %}
     {% endfor %}
     {{ '<｜tool▁calls▁end｜><｜end▁of▁sentence｜>' }}
-  {% endif %}
-  {# -------- ASSISTANT: NORMAL CONTENT -------- #}
+  {% endif %}{# -------- ASSISTANT: NORMAL CONTENT -------- #}
   {% if message['role'] == 'assistant' and message['content'] is not none %}
     {% if ns.is_tool %}
       {{ '<｜tool▁outputs▁end｜>'
@@ -58,14 +53,10 @@
          + '<｜end▁of▁sentence｜>' }}
       {% set ns.is_tool = false %}
     {% else %}
-      {% set content = message['content'] %}
-{#      {% if '</think>' in content %}#}
-{#        {% set content = content.split('</think>')[-1] %}#}
-{#      {% endif %}#}
+      {% set content = message['content'] %}{#      {% if '</think>' in content %}#}{#        {% set content = content.split('</think>')[-1] %}#}{#      {% endif %}#}
       {{ '<｜Assistant｜>' + content + '<｜end▁of▁sentence｜>' }}
     {% endif %}
-  {% endif %}
-  {# ---------------- TOOL OUTPUT ---------------- #}
+  {% endif %}{# ---------------- TOOL OUTPUT ---------------- #}
   {% if message['role'] == 'tool' %}
     {% set ns.is_tool = true %}
     {% if ns.is_output_first %}
@@ -80,8 +71,7 @@
          + '<｜tool▁output▁end｜>' }}
     {% endif %}
   {% endif %}
-{% endfor %}
-{# ================= FINALIZATION ================= #}
+{% endfor %}{# ================= FINALIZATION ================= #}
 {% if ns.is_tool %}
   {{ '<｜tool▁outputs▁end｜>' }}
 {% endif %}

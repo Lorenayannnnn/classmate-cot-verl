@@ -109,7 +109,6 @@ class AdvantageEstimator(str, Enum):
     GRPO_MAIN_CLASSMATE_SEPARATED = "grpo_main_classmate_separated"
     GDPO = "gdpo"
     GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL = "grpo_main_classmate_separated_non_neg_cl"
-    GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_ADV_WHEN_MAIN_CORRECT = "grpo_main_classmate_separated_non_neg_adv_when_main_correct"
 
 
 ADV_ESTIMATOR_REGISTRY: dict[str, Any] = {}
@@ -358,6 +357,7 @@ def compute_grpo_main_classmate_separated_outcome_advantage(
     norm_adv_by_std_in_grpo: bool = True,
     config: Optional[AlgoConfig] = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED is not supported.")
     """
     Compute advantage for GRPO, operating only on Outcome reward
     (with only one scalar reward for each response).
@@ -459,6 +459,7 @@ def compute_grpo_main_classmate_separated_non_neg_cl_outcome_advantage(
     norm_adv_by_std_in_grpo: bool = True,
     config: Optional[AlgoConfig] = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL is not supported.")
     """
     Compute advantage for GRPO, operating only on Outcome reward
     (with only one scalar reward for each response).
@@ -628,6 +629,63 @@ def compute_gdpo_outcome_advantage(
 
     # return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, consistency_group_mean, consistency_group_std
     return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std
+
+
+def compute_gdpo_outcome_advantage_separate(
+    main_token_level_rewards: torch.Tensor,
+    classmate_token_level_rewards: torch.Tensor,
+    main_response_mask: torch.Tensor,
+    classmate_input_mask: torch.Tensor,
+    index: np.ndarray,
+    token_level_classmate_reward_mode,
+    epsilon: float = 1e-6,
+    norm_adv_by_std_in_grpo: bool = True,
+    config: Optional[AlgoConfig] = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute GDPO advantages separately for main and classmate rewards.
+
+    Returns token-level main and classmate advantages (masked), plus group stats.
+    """
+    with torch.no_grad():
+        main_scores, _, main_group_mean, main_group_std = compute_grpo_outcome_advantage(
+            main_token_level_rewards,
+            main_response_mask,
+            index,
+            epsilon,
+            norm_adv_by_std_in_grpo,
+            config,
+            return_sequence_adv=False,
+        )  # (bsz,)
+        classmate_scores, _, classmate_group_mean, classmate_group_std = compute_grpo_outcome_advantage(
+            classmate_token_level_rewards,
+            classmate_input_mask,
+            index,
+            epsilon,
+            norm_adv_by_std_in_grpo,
+            config,
+            return_sequence_adv=False,
+        )  # (bsz,)
+
+        if token_level_classmate_reward_mode == "classmate_partial":
+            main_mask = main_response_mask * (1 - classmate_input_mask)
+            classmate_mask = classmate_input_mask
+        elif token_level_classmate_reward_mode == "all":
+            main_mask = main_response_mask
+            classmate_mask = classmate_input_mask
+        else:
+            raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
+
+        main_advantages = main_scores.unsqueeze(-1) * main_mask
+        classmate_advantages = classmate_scores.unsqueeze(-1) * classmate_mask
+
+    return (
+        main_advantages,
+        classmate_advantages,
+        main_group_mean,
+        main_group_std,
+        classmate_group_mean,
+        classmate_group_std,
+    )
 
 
 @register_adv_est(AdvantageEstimator.GRPO_VECTORIZED)

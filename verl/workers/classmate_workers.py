@@ -19,8 +19,10 @@ import os
 import time
 
 import numpy as np
-from together import Together
+# from together import Together
 from transformers import AutoTokenizer
+import torch
+from tensordict import TensorDict
 import requests
 from vllm import LLM, SamplingParams, TokensPrompt
 
@@ -372,7 +374,9 @@ class ClassmateWorker(Worker):
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts)
 
-                batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(batch_input_prompt_ids, is_eval=is_eval)
+                batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(
+                    batch_input_prompt_ids, is_eval=is_eval
+                )
                 classmate_prompts.extend(batch_input_prompts)
                 # Extend back to with padding
                 classmate_outputs.extend(batch_completions)
@@ -390,18 +394,33 @@ class ClassmateWorker(Worker):
             self._offload_model()
             log_gpu_memory_usage(f"After offloading classmate model {self.model_index} post-generation", logger=logger)
 
+        # Pad classmate_prompt_logprobs to self.classmate_vllm_configs["max_model_len"] with None for inputs that were too long or None
+        padded_classmate_prompt_logprobs = []
+        padded_classmate_prompt_logprobs_mask = []
+        pad_val = 0
+        for logprobs in classmate_prompt_logprobs:
+            if logprobs is None:
+                padded_classmate_prompt_logprobs.append([pad_val] * self.classmate_vllm_configs["max_model_len"])
+                padded_classmate_prompt_logprobs_mask.append([pad_val] * self.classmate_vllm_configs["max_model_len"])
+            else:
+                padded_classmate_prompt_logprobs.append(logprobs + [pad_val] * (self.classmate_vllm_configs["max_model_len"] - len(logprobs)))
+                padded_classmate_prompt_logprobs_mask.append([1] * len(logprobs) + [pad_val] * (self.classmate_vllm_configs["max_model_len"] - len(logprobs)))
+
         # TODO need to fix this to support num_return_sequences > 1
         classmate_outputs = [[output] for output in classmate_outputs]  # Wrap each output in a list
         classmate_output_lens = [[length] for length in classmate_output_lens]
-        classmate_prompt_logprobs = [[logprobs] for logprobs in classmate_prompt_logprobs]  # Wrap each logprobs in a list
+        padded_classmate_prompt_logprobs = [[logprobs] for logprobs in padded_classmate_prompt_logprobs]
+        padded_classmate_prompt_logprobs_mask = [[mask] for mask in padded_classmate_prompt_logprobs_mask]
 
         result_non_tensor_batch = {
             "classmate_prompts": np.array(classmate_prompts),    # Should have shape (bsz,)
             "classmate_outputs": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
-            "classmate_prompt_logprobs": np.array(classmate_prompt_logprobs, dtype=object),  # Should have shape (bsz, num_return_sequences, input_seq_len)
             "classmate_output_lens": np.array(classmate_output_lens),  # Should have shape (bsz, num_return_sequences)
+            "classmate_prompt_logprobs": np.array(padded_classmate_prompt_logprobs),  # Should have shape (bsz, num_return_sequences, input_seq_len)
+            "classmate_prompt_logprobs_mask": np.array(padded_classmate_prompt_logprobs_mask),  # Should have shape (bsz, num_return_sequences, input_seq_len)
         }
 
         # print(f"🐛 From classmateWorker {self.model_index} classmate_output", result_non_tensor_batch["classmate_outputs"])
+        print(f"Finish sampling from classmate model {self.model_name_or_path} ({self.model_index})")
 
         return DataProto(batch=None, non_tensor_batch=result_non_tensor_batch)
