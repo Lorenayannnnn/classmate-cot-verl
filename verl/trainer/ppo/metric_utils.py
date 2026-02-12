@@ -114,7 +114,10 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         sequence_reward = batch.batch["token_level_rewards"].sum(-1)
 
 
-    advantages = batch.batch["advantages"]
+    if "advantages" in batch.batch:
+        advantages = batch.batch["advantages"]
+    else:
+        advantages = batch.batch["main_advantages"] + batch.batch["classmate_advantages"]
     returns = batch.batch["returns"]
 
     max_response_length = batch.batch["responses"].shape[-1]
@@ -299,62 +302,9 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     #             "monitor/f1": float(f1),
     #         }
     #     )
-    
-    # Log likelihood of partial main CoT under main and classmate models
-    # Compute per-rollout (sample-level) averages, then aggregate across the batch
-    if (
-        "rollout_log_probs" in batch.batch
-        and "classmate_input_mask" in batch.batch
-        and "classmate_prompt_logprobs" in batch.batch
-        and "classmate_prompt_logprobs_mask" in batch.batch
-    ):
-        rollout_log_probs = batch.batch["rollout_log_probs"]  # Shape: (batch_size, seq_len)
-        classmate_input_mask = batch.batch["classmate_input_mask"]  # Shape: (batch_size, seq_len)
-        classmate_prompt_logprobs = batch.batch["classmate_prompt_logprobs"]  # Shape: (batch_size, num_models, num_return_sequences, max_len)
-        classmate_prompt_logprobs_mask = batch.batch["classmate_prompt_logprobs_mask"]  # Shape: (batch_size, num_models, num_return_sequences, max_len)
 
-        # Calculate average log prob for main model over masked tokens (partial CoT)
-        main_masked_log_probs = rollout_log_probs * classmate_input_mask
-        main_mask_sum = classmate_input_mask.sum(dim=-1)  # (batch_size,)
-
-        # Avoid division by zero
-        main_avg_log_probs = torch.where(
-            main_mask_sum > 0,
-            main_masked_log_probs.sum(dim=-1) / main_mask_sum,
-            torch.tensor(0.0, device=rollout_log_probs.device)
-        )
-
-        # Aggregate classmate prompt logprobs over models and return sequences using mask
-        masked_classmate_logprobs = classmate_prompt_logprobs * classmate_prompt_logprobs_mask
-        classmate_token_sums = masked_classmate_logprobs.sum(dim=-1)
-        classmate_token_counts = classmate_prompt_logprobs_mask.sum(dim=-1).clamp_min(1.0)
-        classmate_avg_log_probs_per_seq = classmate_token_sums / classmate_token_counts
-        classmate_avg_log_probs = classmate_avg_log_probs_per_seq.mean(dim=(1, 2))
-        per_rollout_diff = main_avg_log_probs - classmate_avg_log_probs
-
-        # Aggregate statistics on non-aborted samples
-        non_aborted_indices = non_aborted_mask
-
-        if non_aborted_indices.any():
-            valid_main = main_avg_log_probs[non_aborted_indices]
-            valid_classmate = classmate_avg_log_probs[non_aborted_indices]
-            valid_diff = per_rollout_diff[non_aborted_indices]
-
-            metrics["partial_cot/main_avg_log_prob/mean"] = torch.mean(valid_main).detach().item()
-            # metrics["partial_cot/main_avg_log_prob/max"] = float(np.max(valid_main))
-            # metrics["partial_cot/main_avg_log_prob/min"] = float(np.min(valid_main))
-            # metrics["partial_cot/main_avg_log_prob/std"] = float(np.std(valid_main))
-
-            metrics["partial_cot/classmate_avg_log_prob/mean"] = torch.mean(valid_classmate).detach().item()
-            # metrics["partial_cot/classmate_avg_log_prob/max"] = float(np.max(valid_classmate))
-            # metrics["partial_cot/classmate_avg_log_prob/min"] = float(np.min(valid_classmate))
-            # metrics["partial_cot/classmate_avg_log_prob/std"] = float(np.std(valid_classmate))
-
-            metrics["partial_cot/log_prob_diff/mean"] = torch.mean(valid_diff).detach().item()
-            # metrics["partial_cot/log_prob_diff/max"] = float(np.max(valid_diff))
-            # metrics["partial_cot/log_prob_diff/min"] = float(np.min(valid_diff))
-            # metrics["partial_cot/log_prob_diff/std"] = float(np.std(valid_diff))
-
+    print_if_exists("rollout_is_weights", "rollout_is_weights")
+    print_if_exists("classmate_rollout_is_weights", "classmate_rollout_is_weights")
 
     # (Deprecated) Modify for leetcode: For code + test case generation
     # print_if_exists("base_test_case_format_score", "main_model_test_case_format_score")

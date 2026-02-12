@@ -86,6 +86,9 @@ if __name__ == "__main__":
     dev_dataset = datasets.Dataset.from_list(dev_records)
     test_dataset = datasets.Dataset.from_list(test_records)
 
+    max_dev_set_num = 200
+    dev_dataset = dev_dataset.select(range(max_dev_set_num))
+
     # add a row to each data item that represents a unique id
     idx_to_choice = ["A", "B", "C", "D"]
     def make_map_fn(split):

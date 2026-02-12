@@ -6,7 +6,7 @@ from datasets import load_dataset
 from math_verify import parse, verify
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
-from together import Together
+# from together import Together
 
 from verl.code_utils.testing_util import TimeoutException
 

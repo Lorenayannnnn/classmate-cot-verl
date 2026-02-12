@@ -215,7 +215,7 @@ class RLHFDataset(Dataset):
                 lambda doc: doc2len(doc) <= self.max_prompt_length,
                 num_proc=self.num_workers,
                 desc=f"Filtering prompts longer than {self.max_prompt_length} tokens",
-                # TODO haha
+                # haha
                 # new_fingerprint=fingerprint,
             )
 

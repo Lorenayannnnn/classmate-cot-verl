@@ -1,3 +1,4 @@
+conda install setuptools
 pip install -r my_requirements.txt
 
 # Install flash attention and flash infer
@@ -14,10 +15,10 @@ pip install lm-eval[math]
 bash scripts/build_omegaconf_hydra_w_antlr_4110.sh
 
 git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
+
 (
-cd tinker-cookbook
-# Switch to your virtual environment
-pip install -e .
+  cd tinker-cookbook
+  pip install -e .
 )
 
 rm -rf tinker-cookbook

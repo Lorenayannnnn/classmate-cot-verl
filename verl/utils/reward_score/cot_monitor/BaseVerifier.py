@@ -43,6 +43,12 @@ class BaseVerifier(ABC):
         """
         pass
 
+    def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
+        pass
+
+    def parse_llm_judge_output(self, judge_response, judge_client_config=None):
+        pass
+
     @abstractmethod
     def create_monitor_message(self, doc: Dict[str, Any]) -> str:
         """
@@ -56,22 +62,22 @@ class BaseVerifier(ABC):
         """
         pass
 
-    @abstractmethod
-    def get_gt(self, user_message: str, continuation: str) -> Dict[str, Any]:
-        """
-        Get the ground truth answer for a given user message and continuation.
-
-        Args:
-            user_message: The original user message
-            continuation: The model's generated text
-
-        Returns:
-            Dict containing:
-                - answer: The ground truth answer
-                - answer_format_correct: Whether the format is correct (1.0 or 0.0)
-                - pre_answer_text: Text before the answer
-        """
-        pass
+    # @abstractmethod
+    # def get_gt(self, user_message: str, continuation: str) -> Dict[str, Any]:
+    #     """
+    #     Get the ground truth answer for a given user message and continuation.
+    #
+    #     Args:
+    #         user_message: The original user message
+    #         continuation: The model's generated text
+    #
+    #     Returns:
+    #         Dict containing:
+    #             - answer: The ground truth answer
+    #             - answer_format_correct: Whether the format is correct (1.0 or 0.0)
+    #             - pre_answer_text: Text before the answer
+    #     """
+    #     pass
 
     @abstractmethod
     def compute_score_for_eval(self, continuation: str, doc: dict):
@@ -133,13 +139,17 @@ class BaseVerifier(ABC):
         Returns:
             Dict with mse, rmse, mae
         """
+        prediction_mean = np.mean(predictions)
+        ground_truth_mean = np.mean(ground_truths)
         mse = np.mean((predictions - ground_truths) ** 2)
-        rmse = np.sqrt(mse)
+        # rmse = np.sqrt(mse)
         mae = np.mean(np.abs(predictions - ground_truths))
 
         return {
             "mse": float(mse),
-            "rmse": float(rmse),
+            "prediction_mean": float(prediction_mean),
+            "ground_truth_mean": float(ground_truth_mean),
+            # "rmse": float(rmse),
             "mae": float(mae)
         }
 
@@ -213,14 +223,16 @@ def get_monitor_verifier(data_source=None) -> BaseVerifier:
 
     is_mmlu = "mmlu" in data_source_joined
     is_mmlu_pro = "mmlu_pro" in data_source_joined
-    is_helpful = any(source == "helpful_instructions" for source in data_sources)
+    is_helpful = any("helpful_instructions" in source for source in data_sources)
 
     if is_mmlu:
         from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
         return MMLUSycophancyVerifier(do_pro=is_mmlu_pro, reward_type="binary")
     elif is_helpful:
-        from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
-        return GeneralSycophancyVerifier(reward_type="non_binary")
+        # from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
+        # return GeneralSycophancyVerifier(reward_type="non_binary")
+        from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
+        return SycophancyVerifier(reward_type="non_binary")
     else:
         raise ValueError(f"Unsupported data_source for verifier: {data_source}")
 
@@ -238,20 +250,21 @@ def compute_score(
     **kwargs,
 ):
     verifier = get_monitor_verifier(data_source=data_source)
+    assert ground_truth is not None, "Ground truth must be provided for scoring. Otherwise use Tinker-based judge."
 
-    if ground_truth is None:
-        # Verifier should score the output
-        ground_truth, explanation = verifier.get_gt(user_message=extra_info["reward_model"]["raw_question_for_monitor"], continuation=solution_str)
-        if ground_truth is None:
-            logger.warning("⚠️Ground truth could not be obtained; defaulting to None; judge output")
-            logger.warning(f"⚠️ {ground_truth}")
-            ground_truth = 0.0      # no reward if we can't get a gt, but this is a fallback and ideally shouldn't happen
-        score = ground_truth
-        extracted_sol = solution_str
-    else:
-        res = verifier.compute_score(solution_str, ground_truth, debug=False)
-        score = res["score"]
-        extracted_sol = res["extracted_solution"]
+    # if ground_truth is None:
+    #     # Verifier should score the output
+    #     ground_truth, explanation = verifier.get_gt(user_message=extra_info["reward_model"]["raw_question_for_monitor"], continuation=solution_str)
+    #     if ground_truth is None:
+    #         logger.warning("⚠️Ground truth could not be obtained; defaulting to None; judge output")
+    #         logger.warning(f"⚠️ {ground_truth}")
+    #         ground_truth = 0.0      # no reward if we can't get a gt, but this is a fallback and ideally shouldn't happen
+    #     score = ground_truth
+    #     extracted_sol = solution_str
+    # else:
+    res = verifier.compute_score(solution_str, ground_truth, debug=False)
+    score = res["score"]
+    extracted_sol = res["extracted_solution"]
 
     if return_dict:
         return {

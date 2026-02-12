@@ -110,7 +110,7 @@
     ```
   - Modify bashrc:
     ```
-    conda activate verl
+    conda activate verl_tinker
     cd $HOME/midwest/classmate-cot-verl
     cd $HOME/east/classmate-cot-verl
     ```
@@ -118,7 +118,7 @@
 - Install dependency:
   ```
   conda create -n verl_tinker python==3.11
-  conda activate verl
+  conda activate verl_tinker
   bash install.sh
   ```
 - Login to HF and wandb:

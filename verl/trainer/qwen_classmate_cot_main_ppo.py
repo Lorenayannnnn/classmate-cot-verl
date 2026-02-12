@@ -425,9 +425,9 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor, is_train=Tr
 
     # Instantiate the dataset using the determined dataset class
 
-    # TODO haha
-    if not is_train:
-        max_samples = 8
+    # haha
+    # if not is_train:
+    #     max_samples = 8
 
     dataset = dataset_cls(
         data_files=data_paths,

@@ -21,6 +21,8 @@ import torch
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.llm_judge_utils import send_prompt_to_tinker, create_llm_judge
 from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
@@ -31,7 +33,10 @@ class NaiveRewardManager(AbstractRewardManager):
     """The reward manager."""
     def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source",
                  code_api_url=None, enable_thinking=False, llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
-                 llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None):
+                 llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
+                 user_tinker_llm_judge=True,
+                 tinker_llm_judge_model_name="openai/gpt-oss-20b"
+                 ):
         """
         Initialize the NaiveRewardManager instance.
 
@@ -85,6 +90,12 @@ class NaiveRewardManager(AbstractRewardManager):
 
         self.enable_thinking = enable_thinking
 
+        self.user_tinker_llm_judge = user_tinker_llm_judge
+        if user_tinker_llm_judge:
+            self.judge_client_config = create_llm_judge(
+                judge_model_name=tinker_llm_judge_model_name,
+            )
+
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """We will expand this function gradually based on the available datasets"""
 
@@ -131,7 +142,7 @@ class NaiveRewardManager(AbstractRewardManager):
 
             # Extract things after <think>...</think> as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _ = parse_out_main_cot_output(response_str)
+                main_cot, main_output, _, _ = parse_out_main_cot_output(response_str)
             else:
                 main_cot = response_str
                 main_output = response_str
@@ -147,21 +158,28 @@ class NaiveRewardManager(AbstractRewardManager):
             # TODO modify
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
-            score_futures.append(
-                _as_future(
-                    self.compute_score(
-                        data_source=data_source,
-                        # solution_str=response_str,
-                        solution_str=main_output,
-                        ground_truth=ground_truth,
-                        extra_info=extra_info,
-                        return_dict=True,
-                        code_api_url=self.code_api_url,
-                        # llm_judge_config_dict=self.llm_judge_config_dict,
-                        # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+            # Submit main model reward computation
+            if self.user_tinker_llm_judge and ground_truth is None:
+                verifier = get_monitor_verifier(data_source=data_source)
+                llm_judge_prompt = verifier.format_llm_judge_prompt(
+                    extra_info["reward_model"]["raw_question_for_monitor"], main_output)
+                score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+            else:
+                score_futures.append(
+                    _as_future(
+                        self.compute_score(
+                            data_source=data_source,
+                            # solution_str=response_str,
+                            solution_str=main_output,
+                            ground_truth=ground_truth,
+                            extra_info=extra_info,
+                            return_dict=True,
+                            code_api_url=self.code_api_url,
+                            # llm_judge_config_dict=self.llm_judge_config_dict,
+                            # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+                        )
                     )
                 )
-            )
 
             item_contexts.append(
                 {
@@ -181,8 +199,18 @@ class NaiveRewardManager(AbstractRewardManager):
         for ctx, score_future in zip(item_contexts, score_futures):
             score = score_future.result()
 
+            if self.user_tinker_llm_judge and ctx["ground_truth"] is None:
+                verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
+                score = {
+                    "score": judge_score,
+                    "extracted_solution": ctx["main_output"],
+                    "judge_explanation": judge_explanation,
+                }
+
             # Debug
             extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None
+            judge_explanation = score.pop("judge_explanation", None) if isinstance(score, dict) else None
 
             # for code_contests_modify_code
             # score = {
@@ -223,11 +251,10 @@ class NaiveRewardManager(AbstractRewardManager):
                 if ctx["ground_truth"] is None:
                     # for open-ended generation
                     if isinstance(score, dict):
-                        print("🐛[llm judge score]", score["score"])
-                        print("🐛[llm judge explanation]", score.get("judge_explanation", None))
+                        print("🐛[llm judge score]", reward)
+                        print("🐛[judge_explanation]", judge_explanation)
                 else:
-                    if extracted_sol is not None:
-                        print("🐛[main_extracted]", extracted_sol)
+                    print("🐛[main_extracted]", extracted_sol)
                     print("🐛[ground_truth]", ctx["ground_truth"])
                     print("[main_reward]", score)
                 # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
@@ -252,7 +279,7 @@ class NaiveRewardManager(AbstractRewardManager):
                         print("🐛[main_monitor_consistent]", main_monitor_consistent)
                     else:
                         try:
-                            main_monitor_consistent = (float(score) - float(monitor_score_value)) ** 2
+                            main_monitor_consistent = (float(reward) - float(monitor_score_value)) ** 2
                         except (TypeError, ValueError):
                             main_monitor_consistent = None
                         print("🐛[main_monitor_mse_diff]", main_monitor_consistent)

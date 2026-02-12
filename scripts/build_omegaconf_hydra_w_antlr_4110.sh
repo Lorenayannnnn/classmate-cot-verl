@@ -51,11 +51,11 @@ pip install build
 
 (
   cd omegaconf
-  python -m build
+  python -m build --no-isolation
 )
 (
   cd hydra
-  python -m build
+  python -m build --no-isolation
 )
 
 pip install omegaconf/dist/omegaconf-2.3.0-*.whl

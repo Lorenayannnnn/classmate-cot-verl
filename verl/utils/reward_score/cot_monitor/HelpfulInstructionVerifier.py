@@ -56,7 +56,7 @@ def create_llm_judge(
 judge_client_config = create_llm_judge()        # TODO haha globally temporary
 # judge_client_config = None
 
-class GeneralSycophancyVerifier(BaseVerifier):
+class DeprecatedGeneralSycophancyVerifier(BaseVerifier):
     def __init__(
         self,
         openai_client=None,

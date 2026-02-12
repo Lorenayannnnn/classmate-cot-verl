@@ -63,6 +63,8 @@ class ClassmateWorkerConfig:
     tensor_parallel_size: 1
     """
 
+    main_model_max_tokens: int      # For padding for main-classmate importance ratio
+
     # API server configuration for vLLM remote serving
     # Deprecated. Now using TogetherAI
     # api_host: str = None
@@ -129,6 +131,8 @@ class ClassmateWorker(Worker):
         self._offload_model()
         print(f"🚀🚀🚀 Initialized ClassmateWorker {self.model_index} with vLLM engine for model {self.model_name_or_path}")
 
+        self.main_model_max_tokens = config.main_model_max_tokens
+
     def __del__(self):
         """Cleanup when worker is destroyed."""
         # if self.use_vllm:
@@ -163,8 +167,7 @@ class ClassmateWorker(Worker):
                 completions.append(output.outputs[0].text)
                 completion_token_len.append(len(output.outputs[0].token_ids))
 
-                token_prob = [list(tok.values())[0].logprob for tok in output.prompt_logprobs if tok is not None]
-                # decoded_token = "".join([list(tok.values())[0].decoded_token for tok in output.prompt_logprobs if tok is not None])
+                token_prob = [list(tok.values())[0].logprob if tok is not None else float("-inf") for tok in output.prompt_logprobs]
                 prompt_logprobs.append(token_prob)
 
         return completions, completion_token_len, prompt_logprobs
@@ -277,90 +280,159 @@ class ClassmateWorker(Worker):
         # }
 
         is_eval = data.meta_info["is_eval"]
+        classmate_input_mask = data.non_tensor_batch["classmate_input_mask"]
 
         classmate_outputs = []
         classmate_output_lens = []
         classmate_prompts = []
         classmate_prompt_logprobs = []
+        classmate_input_lens = []
+        classmate_input_and_main_cot_lens = []
+
+        # TODO haha
+        debug_user_only_token_ids = []
+        debug_user_only_prompt_strs = []
+        debug_cls_input_token_ids = []
+        debug_cls_input_prompt_strs = []
         try:
             # ONLOAD: Load model to GPU before generation (no-op for vLLM API mode)
             self._onload_model()
             log_gpu_memory_usage(f"After onloading classmate model {self.model_index} for generation", logger=logger)
 
             # prompt_plus_actor_responses = data.non_tensor_batch["prompt_plus_actor_responses"]
-            # Handle padding: only slice if pad_size is a positive integer
-            prompts = data.non_tensor_batch["raw_prompts"]
-            actor_responses = data.non_tensor_batch["main_model_responses"]
-            all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
+            # Handle padding: remove globally padded items before minibatching
+            batch_prompts = data.non_tensor_batch["raw_prompts"]
+            batch_actor_responses = data.non_tensor_batch["main_model_responses"]
+            batch_all_end_with_thinks = data.non_tensor_batch["end_with_thinks"]
+            batch_all_start_with_thinks = data.non_tensor_batch["start_with_thinks"]
+            batch_all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
 
             # Convert numpy array to list if needed
             # if isinstance(prompt_plus_actor_responses, np.ndarray):
             #     prompt_plus_actor_responses = prompt_plus_actor_responses.tolist()
-            if isinstance(prompts, np.ndarray):
-                prompts = prompts.tolist()
-            if isinstance(actor_responses, np.ndarray):
-                actor_responses = actor_responses.tolist()
+            if isinstance(batch_prompts, np.ndarray):
+                batch_prompts = batch_prompts.tolist()
+            if isinstance(batch_actor_responses, np.ndarray):
+                batch_actor_responses = batch_actor_responses.tolist()
+            if isinstance(batch_all_end_with_thinks, np.ndarray):
+                batch_all_end_with_thinks = batch_all_end_with_thinks.tolist()
+            if isinstance(batch_all_start_with_thinks, np.ndarray):
+                batch_all_start_with_thinks = batch_all_start_with_thinks.tolist()
+            if isinstance(classmate_input_mask, np.ndarray):
+                classmate_input_mask = classmate_input_mask.tolist()
+            if isinstance(batch_all_other_prompts, np.ndarray):
+                batch_all_other_prompts = batch_all_other_prompts.tolist()
 
-            # Filter out None (padded ones)
-            original_length = len(prompts)
-            prompts = [p for p in prompts if p is not None]
-            actor_responses = [r for r in actor_responses if r is not None]
-            all_other_prompts = [p for p in all_other_prompts] if all_other_prompts is not None else None
+            original_length = len(batch_prompts)
+            valid_indices = [
+                i for i, (p, r) in enumerate(zip(batch_prompts, batch_actor_responses))
+                if p is not None and r is not None
+            ]
+            if len(valid_indices) != original_length:
+                batch_prompts = [batch_prompts[i] for i in valid_indices]
+                batch_actor_responses = [batch_actor_responses[i] for i in valid_indices]
+                batch_all_end_with_thinks = [batch_all_end_with_thinks[i] for i in valid_indices]
+                batch_all_start_with_thinks = [batch_all_start_with_thinks[i] for i in valid_indices]
+                classmate_input_mask = [classmate_input_mask[i] for i in valid_indices]
+                if batch_all_other_prompts is not None:
+                    batch_all_other_prompts = [batch_all_other_prompts[i] for i in valid_indices]
 
             assert self.generation_config.get("num_return_sequences", 1) == 1 or self.generation_config.get("n", 1) == 1, "Classmate worker currently only supports num_return_sequences=1"
 
-            print(f"Start sampling from classmate model {self.model_name_or_path} ({self.model_index}) for {len(actor_responses)} inputs")
-
-            # if self.use_vllm:
-            # Use vLLM API server for generation
-            # print(f"Generating via vLLM API server at {self.api_base_url}")
-            # print(f"Generating from {self.model_name_or_path} via TogetherAI API")
-
             # Process in batches to manage API requests
-            total_samples = len(actor_responses)
-            for batch_start in range(0, total_samples, self.batch_size):
-                batch_end = min(batch_start + self.batch_size, total_samples)
-                batch_prompts = prompts[batch_start:batch_end]
-                batch_actor_responses = actor_responses[batch_start:batch_end]
-                batch_input_prompts = []
-                batch_input_prompt_ids = []
+            total_samples = len(batch_actor_responses)
+            for mini_batch_start in range(0, total_samples, self.batch_size):
+                mini_batch_end = min(mini_batch_start + self.batch_size, total_samples)
+                mini_batch_prompts = batch_prompts[mini_batch_start:mini_batch_end]
+                mini_batch_actor_responses = batch_actor_responses[mini_batch_start:mini_batch_end]
+                mini_batch_end_with_thinks = batch_all_end_with_thinks[mini_batch_start:mini_batch_end]
+                mini_batch_start_with_thinks = batch_all_start_with_thinks[mini_batch_start:mini_batch_end]
+                mini_batch_classmate_input_mask = classmate_input_mask[mini_batch_start:mini_batch_end]
 
-                batch_other_prompt = None
-
-                if all_other_prompts is not None:
-                    batch_other_prompt = all_other_prompts[batch_start:batch_end]
+                mini_batch_input_prompts = []
+                mini_batch_input_prompt_ids = []
 
                 # Apply classmate's chat template
-                for idx, (tmp_prompt, tmp_response) in enumerate(zip(batch_prompts, batch_actor_responses)):
-                    add_generation_prompt = False
+                for idx, (tmp_prompt, tmp_response, tmp_classmate_input_mask) in enumerate(zip(mini_batch_prompts, mini_batch_actor_responses, mini_batch_classmate_input_mask)):
                     messages = [{"role": "user", "content": tmp_prompt}]
+                    user_only_message_token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
 
-                    if self.enable_thinking:
-                        messages.append({"role": "assistant", "content": f"<think>\n{tmp_response}\n</think>"})
+                    debug_user_only_token_ids.append(user_only_message_token_ids)
+                    debug_user_only_prompt_strs.append(self.tokenizer.decode(user_only_message_token_ids, skip_special_tokens=False))
+
+                    # if batch_other_prompt is not None:      # help other q
+                        # messages.append({"role": "user", "content": batch_other_prompt[idx]})
+                        # add_generation_prompt = True
+
+                    # token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
+                    # if self.model_name_or_path == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" or self.model_name_or_path == "Qwen/Qwen3-0.6B":
+                    #     token_ids = token_ids[:-1]       # remove new line at the end
+                    #
+                    # # Remove trailing special tokens
+                    # end = len(token_ids)
+                    # while end > 0 and token_ids[end - 1] in self.special_ids:
+                    #     end -= 1
+                    # token_ids = token_ids[:end]
+
+                    if not tmp_response:
+                        # Empty response; return None
+                        mini_batch_input_prompts.append(None)
+                        mini_batch_input_prompt_ids.append(None)
+                        classmate_input_lens.append(0)
+                        classmate_input_and_main_cot_lens.append(0)
+
+                        debug_cls_input_token_ids.append(None)
+                        debug_cls_input_prompt_strs.append(None)
+                        continue
                     else:
-                        messages.append({"role": "assistant", "content": tmp_response})
+                        if self.enable_thinking:
+                            assert "Qwen/Qwen3-0.6B" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
+                            prefix_str = "<think>\n"
+                            suffix_str = "\n</think>\n\n"
+                            prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str)
+                            tmp_response_token_ids = self.tokenizer.encode(tmp_response)[:int(np.sum(tmp_classmate_input_mask))]
+                            suffix_token_ids = self.tokenizer.encode(suffix_str)
+                            token_ids = prefix_token_ids + tmp_response_token_ids + suffix_token_ids
 
-                    if batch_other_prompt is not None:      # help other q
-                        messages.append({"role": "user", "content": batch_other_prompt[idx]})
-                        add_generation_prompt = True
+                            debug_cls_input_token_ids.append(token_ids)
+                            debug_cls_input_prompt_strs.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
 
-                    token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
-                    if self.model_name_or_path == "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B":
-                        token_ids = token_ids[:-1]       # remove new line at the end
+                            # messages.append({"role": "assistant", "content": f"<think>{tmp_response}</think>"})
+                            # token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
+                        else:
+                            raise NotImplementedError("Currently only support thinking for Qwen3-0.6B and Qwen3-1.7B; need to implement formatting for other models if enable_thinking is True")
+                        
+                        if len(token_ids) + 1 > self.classmate_vllm_configs["max_model_len"]:       # +1 for generation token (i.e. generate 1 more token will exceed max length)
+                            print(f"⚠️ Warning: Input for classmate is too long (have length {len(token_ids)})")
+                            mini_batch_input_prompts.append(None)
+                            mini_batch_input_prompt_ids.append(None)
+                            classmate_input_lens.append(0)
+                            classmate_input_and_main_cot_lens.append(0)
+                            continue
+                        else:
+                            mini_batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
+                            mini_batch_input_prompt_ids.append(TokensPrompt(prompt_token_ids=token_ids))
+                            cls_input_len = len(prefix_token_ids)
+                            tmp_input_and_main_cot_len = len(prefix_token_ids) + len(tmp_response_token_ids)
+                            classmate_input_lens.append(cls_input_len)
+                            classmate_input_and_main_cot_lens.append(tmp_input_and_main_cot_len)
 
-                    # Remove trailing special tokens
-                    end = len(token_ids)
-                    while end > 0 and token_ids[end - 1] in self.special_ids:
-                        end -= 1
-                    token_ids = token_ids[:end]
+                    # with open("classmate_worker_debug.txt", "a") as f:
+                    #     f.write(f"🐛Original prompt: {tmp_prompt}\n")
+                    #     f.write(f"🐛Original actor response: {tmp_response}\n")
+                    #     f.write(f"🐛Classmate input prompt: {mini_batch_input_prompts[-1]}\n")
+                    #     f.write(f"🐛Classmate input token ids: {token_ids}\n")
+                    #     f.write(f"🐛User message only token ids: {user_message_only_token_ids}\n")
+                    #     f.write(f"🐛Start with think: {mini_batch_start_with_thinks[idx]}, End with think: {mini_batch_end_with_thinks[idx]}\n")
+                    #     f.write("-" * 50 + "\n")
+                    # if self.enable_thinking:
+                    #     assert self.model_name_or_path == "Qwen/Qwen3-0.6B" or self.model_name_or_path == "Qwen/Qwen3-1.7B", f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
+                    #     if tmp_response and tmp_response[0] != "\n":
+                    #         cls_input_len += 1     # for \n
+                    #     tmp_input_and_main_cot_len -= 2    # for </think>\n\n
+                    #     if tmp_response and tmp_response[-1] != "\n":
+                    #         tmp_input_and_main_cot_len -= 1     # for \n
 
-                    if len(token_ids) + 1 > self.classmate_vllm_configs["max_model_len"]:       # +1 for generation token (i.e. generate 1 more token will exceed max length)
-                        print(f"⚠️ Warning: Input for classmate is too long (have length {len(token_ids)})")
-                        batch_input_prompts.append(None)
-                        batch_input_prompt_ids.append(None)
-                    else:
-                        batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False, add_generation_prompt=False))
-                        batch_input_prompt_ids.append(TokensPrompt(prompt_token_ids=token_ids))
 
                 # Get batch-wise max token len
                 # prompt_attn_mask = self.tokenizer(
@@ -375,9 +447,9 @@ class ClassmateWorker(Worker):
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts)
 
                 batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(
-                    batch_input_prompt_ids, is_eval=is_eval
+                    mini_batch_input_prompt_ids, is_eval=is_eval
                 )
-                classmate_prompts.extend(batch_input_prompts)
+                classmate_prompts.extend(mini_batch_input_prompts)
                 # Extend back to with padding
                 classmate_outputs.extend(batch_completions)
                 classmate_output_lens.extend(batch_completion_lens)
@@ -388,23 +460,55 @@ class ClassmateWorker(Worker):
             print(f"❌ Error generating with classmate model {self.model_index}: {e}")
             import traceback
             traceback.print_exc()
-
         finally:
             # OFFLOAD: Offload model from GPU after generation (following ActorRolloutRef pattern)
             self._offload_model()
             log_gpu_memory_usage(f"After offloading classmate model {self.model_index} post-generation", logger=logger)
 
-        # Pad classmate_prompt_logprobs to self.classmate_vllm_configs["max_model_len"] with None for inputs that were too long or None
+        # Pad classmate_prompt_logprobs to self.main_model_max_tokens with None for inputs that were too long or None
         padded_classmate_prompt_logprobs = []
         padded_classmate_prompt_logprobs_mask = []
-        pad_val = 0
-        for logprobs in classmate_prompt_logprobs:
-            if logprobs is None:
-                padded_classmate_prompt_logprobs.append([pad_val] * self.classmate_vllm_configs["max_model_len"])
-                padded_classmate_prompt_logprobs_mask.append([pad_val] * self.classmate_vllm_configs["max_model_len"])
+        for idx, (logprobs, cls_input_len, cls_input_and_main_cot_len, cls_input_mask) in enumerate(zip(classmate_prompt_logprobs, classmate_input_lens, classmate_input_and_main_cot_lens, classmate_input_mask)):
+            if logprobs is None:        # happens when classmate prompt is None, which happens when e.g. actor response is empty or input is too long
+                padded_classmate_prompt_logprobs.append([float("-inf")] * self.main_model_max_tokens)
+                padded_classmate_prompt_logprobs_mask.append([0] * self.main_model_max_tokens)
             else:
-                padded_classmate_prompt_logprobs.append(logprobs + [pad_val] * (self.classmate_vllm_configs["max_model_len"] - len(logprobs)))
-                padded_classmate_prompt_logprobs_mask.append([1] * len(logprobs) + [pad_val] * (self.classmate_vllm_configs["max_model_len"] - len(logprobs)))
+                logprobs = logprobs[cls_input_len:cls_input_and_main_cot_len]
+                if cls_input_mask is None:
+                    tmp_padded_classmate_prompt_logprobs = logprobs
+                    tmp_padded_classmate_prompt_logprobs_mask = [1] * len(logprobs)
+                else:
+                    try:
+                        assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(classmate_prompt_logprobs)}, cls_input_mask={cls_input_mask}"
+                    except Exception as e:
+                        with open("debug.txt", "a") as f:
+                            f.write(f"❌ Assertion error when slicing logprobs for classmate prompt: {e}\n")
+                            f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(classmate_prompt_logprobs)}, cls_input_mask={cls_input_mask}\n")
+                            f.write(f"debug_user_only_token_ids={debug_user_only_token_ids[idx]}\n")
+                            f.write(f"debug_user_only_prompt_strs={debug_user_only_prompt_strs[idx]}\n")
+                            f.write(f"debug_cls_input_token_ids={debug_cls_input_token_ids[idx]}\n")
+                            f.write(f"debug_cls_input_prompt_strs={debug_cls_input_prompt_strs[idx]}\n")
+                            f.write("-" * 50 + "\n")
+                        raise
+
+                    # Pre pad for tokens that got truncated in process_main_cot_helper, and then logprob of main CoT
+                    cls_input_mask = np.array(cls_input_mask)
+                    first_one_candidates = np.flatnonzero(cls_input_mask == 1)
+                    first_one_idx = int(first_one_candidates[0]) if first_one_candidates.size > 0 else self.main_model_max_tokens
+
+                    tmp_padded_classmate_prompt_logprobs = [float("-inf")] * first_one_idx + logprobs
+                    tmp_padded_classmate_prompt_logprobs_mask = [0] * first_one_idx + [1] * len(logprobs)
+
+                # assert len(tmp_padded_classmate_prompt_logprobs) <= self.main_model_max_tokens, f"Length of padded logprobs should not exceed main_model_max_tokens; got {len(tmp_padded_classmate_prompt_logprobs)} vs {self.main_model_max_tokens}; first_one_idx={first_one_idx}, logprobs_len={len(logprobs)}"
+                # Pad the rest with -inf and 0 to main model max len
+                pad_len = self.main_model_max_tokens - len(tmp_padded_classmate_prompt_logprobs)
+                tmp_padded_classmate_prompt_logprobs += [float("-inf")] * pad_len
+                tmp_padded_classmate_prompt_logprobs_mask += [0] * pad_len
+
+                padded_classmate_prompt_logprobs.append(tmp_padded_classmate_prompt_logprobs)
+                padded_classmate_prompt_logprobs_mask.append(tmp_padded_classmate_prompt_logprobs_mask)
+                # padded_classmate_prompt_logprobs.append(logprobs + [float("-inf")] * max((self.main_model_max_tokens - len(logprobs), 0)))
+                # padded_classmate_prompt_logprobs_mask.append([1] * len(logprobs) + [0] * max((self.main_model_max_tokens - len(logprobs), 0)))
 
         # TODO need to fix this to support num_return_sequences > 1
         classmate_outputs = [[output] for output in classmate_outputs]  # Wrap each output in a list
@@ -421,6 +525,6 @@ class ClassmateWorker(Worker):
         }
 
         # print(f"🐛 From classmateWorker {self.model_index} classmate_output", result_non_tensor_batch["classmate_outputs"])
-        print(f"Finish sampling from classmate model {self.model_name_or_path} ({self.model_index})")
+        # print(f"Finish sampling from classmate model {self.model_name_or_path} ({self.model_index})")
 
         return DataProto(batch=None, non_tensor_batch=result_non_tensor_batch)

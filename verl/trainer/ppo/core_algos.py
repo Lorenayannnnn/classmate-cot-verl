@@ -667,8 +667,8 @@ def compute_gdpo_outcome_advantage_separate(
         )  # (bsz,)
 
         if token_level_classmate_reward_mode == "classmate_partial":
-            main_mask = main_response_mask * (1 - classmate_input_mask)
-            classmate_mask = classmate_input_mask
+            main_mask = main_response_mask
+            classmate_mask = main_response_mask
         elif token_level_classmate_reward_mode == "all":
             main_mask = main_response_mask
             classmate_mask = classmate_input_mask

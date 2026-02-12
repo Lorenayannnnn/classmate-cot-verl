@@ -117,7 +117,10 @@ def preprocess(configs, predict_dataset, wo_cot=False):
             else:
                 predict_dataset = predict_dataset.select(range(configs.data_args.max_predict_samples))
 
-    if "mmlu_sycophancy" in configs.data_args.dataset_name:
+    if "helpful_instructions" in configs.data_args.dataset_name:
+        short_dataset_name = "helpful_instructions"
+        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name]()
+    elif "mmlu_sycophancy" in configs.data_args.dataset_name:
         short_dataset_name = "mmlu_sycophancy"
         dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](do_pro=False)
     elif "gsm8k" in configs.data_args.dataset_name:

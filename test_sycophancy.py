@@ -7,7 +7,7 @@ from datasets import load_dataset
 from math_verify import parse, verify
 from vllm import LLM, SamplingParams, TokensPrompt
 from transformers import AutoTokenizer
-from together import Together
+# from together import Together
 from openai import OpenAI
 
 from keys import OPENAI_KEY
@@ -93,19 +93,19 @@ def create_tokenizer(model_name_path):
     return tokenizer
 
 def create_vllm(model_name_path, max_model_len, gpu_memory_utilization=None, use_together=False):
-    if use_together:
-        model = Together()
-    else:
-        model = LLM(
-            model=model_name_path,
-            gpu_memory_utilization=gpu_memory_utilization,
-            disable_custom_all_reduce=True,
-            skip_tokenizer_init=False,
-            max_model_len=max_model_len,
-            enable_chunked_prefill=True,
-            enable_prefix_caching=True,
-            trust_remote_code=True,
-        )
+    # if use_together:
+    #     model = Together()
+    # else:
+    model = LLM(
+        model=model_name_path,
+        gpu_memory_utilization=gpu_memory_utilization,
+        disable_custom_all_reduce=True,
+        skip_tokenizer_init=False,
+        max_model_len=max_model_len,
+        enable_chunked_prefill=True,
+        enable_prefix_caching=True,
+        trust_remote_code=True,
+    )
     return model
 
 
@@ -678,6 +678,58 @@ def main():
     plot_token_length_distribution(classmate_token_len_list, output_dir, "Classmate_Model")
 
 
+def see_examples():
+    output_dir = "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model"
+    example_output_dir = f"{output_dir}/examples"
+    os.makedirs(example_output_dir, exist_ok=True)
+    baseline_fn = f"{output_dir}/20260211-Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42/step_425/helpful_instructions/main/preds.jsonl"
+    ours_fn = f"{output_dir}/20260211-Qwen3-0.6B_helpful_instructions_cl_correction_448000_episodes_seed_42/step_425/helpful_instructions/main/preds.jsonl"
+
+    with open(baseline_fn, "r") as f:
+        baseline_preds = [json.loads(line) for line in f.readlines()]
+    with open(ours_fn, "r") as f:
+        ours_preds = [json.loads(line) for line in f.readlines()]
+
+    example_num = min(len(baseline_preds), len(ours_preds), 30)
+
+    baseline_preds = baseline_preds[:example_num]
+    ours_preds = ours_preds[:example_num]
+
+    # dict_keys(['main_query', 'question', 'main_full_output', 'truncated_main_CoT', 'main_output', 'main_extracted_solution', 'main_score', 'gt', 'monitor_score', 'monitor_explanation', 'llm_judge_score', 'llm_judge_explanation'])
+    for idx, (baseline_pred, ours_pred) in tqdm(enumerate(zip(baseline_preds, ours_preds))):
+        def print_out_stuff(input_entry):
+            print("❓Query:")
+            print(input_entry["main_query"])
+            print("🤖 main_full_output:")
+            print(input_entry["main_full_output"])
+            print("🤖💭 truncated_main_CoT:")
+            print(input_entry["truncated_main_CoT"])
+            print("🤖📣 main_output:")
+            print(input_entry["main_output"])
+            print("🧑‍⚖️🤔 monitor_score:", input_entry["monitor_score"])
+            print("🧑‍⚖️🤔 monitor_explanation:", input_entry["monitor_explanation"])
+            print("🧑‍⚖️ llm_judge_score:", input_entry["llm_judge_score"])
+            print("🧑‍⚖️ llm_judge_explanation:", input_entry["llm_judge_explanation"])
+        def output_to_file(input_entry, filename):
+            with open(filename, "w") as f:
+                f.write(f"====❓Query====:\n{input_entry['main_query']}\n")
+                f.write(f"====🤖 main_full_output====:\n{input_entry['main_full_output']}\n")
+                # f.write(f"====🤖💭 truncated_main_CoT====:\n{input_entry['truncated_main_CoT']}\n")
+                # f.write(f"====🤖📣 main_output====:\n{input_entry['main_output']}\n")
+                f.write(f"====🧑‍⚖️🤔 monitor_score====: {input_entry['monitor_score']}\n")
+                f.write(f"====🧑‍⚖️🤔 monitor_explanation====: {input_entry['monitor_explanation']}\n")
+                f.write(f"====🧑‍⚖️ llm_judge_score====: {input_entry['llm_judge_score']}\n")
+                f.write(f"====🧑‍⚖️ llm_judge_explanation====: {input_entry['llm_judge_explanation']}\n")
+        output_to_file(baseline_pred, f"{example_output_dir}/example_{idx}_baseline_monitor_{baseline_pred['monitor_score']}_judge_{baseline_pred['llm_judge_score']}.txt")
+        output_to_file(ours_pred, f"{example_output_dir}/example_{idx}_ours_monitor_{ours_pred['monitor_score']}_judge_{ours_pred['llm_judge_score']}.txt")
+
+        # print("===============Baseline=================")
+        # print_out_stuff(baseline_pred)
+        # print("================OURS===============")
+        # print_out_stuff(ours_pred)
+        # breakpoint()
+
+
 if __name__ == "__main__":
     # tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
     # test = "<think>\nThis is a test of the thinking process.\nWe will reason step by step.\n</think>\nTherefore, the answer is \\boxed{42}."
@@ -689,7 +741,8 @@ if __name__ == "__main__":
     # encoded = tokenizer.encode(test, add_special_tokens=False)
     # encoded = tokenizer.decode(tokenizer.encode(test), skip_special_tokens=True)
     # breakpoint()
-    main()
+    # main()
+    see_examples()
 
     # dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"
     # dataset = load_dataset("parquet", data_files=dataset_fn)["train"]
@@ -703,5 +756,5 @@ if __name__ == "__main__":
 #CUDA_VISIBLE_DEVICES=4 python test_sycophancy.py
 #CUDA_VISIBLE_DEVICES=3 python test_sycophancy.py
 #CUDA_VISIBLE_DEVICES=0 python test_sycophancy.py
-# 1. think/no-thinking mode / \no_think
-# 2. Try to switch to a smaller main model; if works, then start training
+
+#python test_sycophancy.py

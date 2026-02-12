@@ -15,7 +15,8 @@ train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 #base_model_name_path=Qwen/Qwen3-1.7B
-base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=Qwen/Qwen3-0.6B
+base_model_name_path=Qwen/Qwen3-0.6B-Base
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
@@ -34,15 +35,15 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=4
 seed=42
-#train_batch_size=256
+#train_batch_size=128
 #mini_batch_size_per_gpu=32
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=50
+total_ckpts=25
 total_test_times=50
 
-epoch_num=5
+epoch_num=7
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))

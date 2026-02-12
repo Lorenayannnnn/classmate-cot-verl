@@ -12,19 +12,18 @@ eval_files="['$eval_path']"
 
 
 #base_model_name_path=Qwen/Qwen3-1.7B
-base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=Qwen/Qwen3-0.6B
+base_model_name_path=Qwen/Qwen3-0.6B-Base
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
-gpu_num=8
+gpu_num=4
 seed=42
-#train_batch_size=256
-#mini_batch_size_per_gpu=32
 train_batch_size=128
-mini_batch_size_per_gpu=16
+mini_batch_size_per_gpu=32
 
-total_ckpts=50
+total_ckpts=25
 total_test_times=50
 
 epoch_num=7
@@ -34,7 +33,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \

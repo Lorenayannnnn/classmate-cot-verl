@@ -18,17 +18,20 @@ from concurrent.futures import Future
 import torch
 import ray
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from tinker_cookbook import renderers
 
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.llm_judge_utils import create_llm_judge, send_prompt_to_tinker
 from verl.utils.reward_score.olmo_verifiers import CodeVerifier, CodeVerifierConfig
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
 
 
-@register("classmate_cot")
-class ClassmateCoTRewardManager(AbstractRewardManager):
+@register("sycophancy_classmate_cot")
+class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
     """The reward manager."""
 
     def __init__(
@@ -44,6 +47,9 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             classmate_cot_reward_configs=None,
             classmate_generation_configs=None,
             max_workers=8,
+
+            user_tinker_llm_judge=True,
+            tinker_llm_judge_model_name="openai/gpt-oss-20b"
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -81,37 +87,21 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         self.classmate_reward_weight = self.classmate_cot_reward_configs.classmate_reward_weight
 
         self.code_api_url = code_api_url
-        # if llm_judge_model is not None:     # TODO may remove later; not used by olmo2
-        #     self.llm_judge_config_dict = {
-        #         "llm_judge_model": llm_judge_model,
-        #         "llm_judge_timeout": llm_judge_timeout,
-        #         "llm_judge_max_tokens": llm_judge_max_tokens,
-        #         "llm_judge_max_context_length": llm_judge_max_context_length,
-        #         "llm_judge_temperature": llm_judge_temperature,
-        #         "seed": seed,     # Dropped for deepinfra
-        #     }
-
-        # if code_api_url is not None:        # TODO may remove later; not used by olmo2
-        #     self.code_verifier_src_to_verifier = {
-        #         "code": CodeVerifier(
-        #             verifier_config=CodeVerifierConfig(
-        #                 code_api_url=code_api_url + "/test_program",
-        #                 code_max_execution_time=1.0,
-        #                 code_pass_rate_reward_threshold=0.99,
-        #                 code_apply_perf_penalty=False,
-        #             )
-        #         ),
-        #         "code_stdio": CodeVerifier(
-        #             verifier_config=CodeVerifierConfig(
-        #                 code_api_url=code_api_url + "/test_program_stdio",
-        #                 code_max_execution_time=1.0,
-        #                 code_pass_rate_reward_threshold=0.99,
-        #                 code_apply_perf_penalty=False,
-        #             )å
-        #         ),
-        #     }
 
         self.enable_thinking = enable_thinking
+
+        self.user_tinker_llm_judge = user_tinker_llm_judge
+        if user_tinker_llm_judge:
+            self.judge_client_config = create_llm_judge(
+                judge_model_name=tinker_llm_judge_model_name,
+            )
+            # {
+            #     'judge_model_name': judge_model_name,
+            #     'sampling_client': judge_sampling_client,
+            #     'renderer': judge_renderer,
+            #     'tokenizer': judge_tokenizer,
+            #     "max_tokens": 1024,
+            # }
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """Compute rewards incorporating classmate chain-of-thought outputs."""
@@ -144,8 +134,6 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         item_contexts = []
         main_score_futures = []
-
-        # print("🐛🐛🐛 Start scoring main classmate outputs")
 
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
@@ -186,21 +174,26 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
             # Submit main model reward computation
-            main_score_futures.append(
-                _as_future(
-                    self.compute_score(
-                        data_source=data_source,
-                        # solution_str=response_str,
-                        solution_str=main_output,
-                        ground_truth=ground_truth,
-                        extra_info=extra_info,
-                        return_dict=True,
-                        code_api_url=self.code_api_url,
-                        # llm_judge_config_dict=self.llm_judge_config_dict,
-                        # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
+            if self.user_tinker_llm_judge and ground_truth is None:
+                verifier = get_monitor_verifier(data_source=data_source)
+                llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
+                main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+            else:
+                main_score_futures.append(
+                    _as_future(
+                        self.compute_score(
+                            data_source=data_source,
+                            # solution_str=response_str,
+                            solution_str=main_output,
+                            ground_truth=ground_truth,
+                            extra_info=extra_info,
+                            return_dict=True,
+                            code_api_url=self.code_api_url,
+                            # llm_judge_config_dict=self.llm_judge_config_dict,
+                            # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
+                        )
                     )
                 )
-            )
 
             classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
             classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
@@ -229,13 +222,20 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             )
 
         # print("🐛🐛🐛 Finish submitting main outputs")
-
         # from tqdm import tqdm
         # main_p_bar = tqdm(total=len(item_contexts), desc="Scoring main model outputs")
 
         # Second loop: resolve main rewards and submit classmate reward computations
         for ctx, main_score_future in zip(item_contexts, main_score_futures):
             actor_score = main_score_future.result()
+            if self.user_tinker_llm_judge and ctx["ground_truth"] is None:
+                verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
+                actor_score = {
+                    "score": judge_score,
+                    "extracted_solution": ctx["main_output"],
+                    "judge_explanation": judge_explanation,
+                }
             # main_p_bar.update(1)
             extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
 
@@ -260,21 +260,28 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             for classmate_output in classmate_outputs:
                 sample_futures = []
                 for classmate_output_sample in classmate_output:
-                    sample_futures.append(
-                        _as_future(
-                            self.compute_score(
-                                data_source=ctx["data_source"],
-                                solution_str=classmate_output_sample,
-                                ground_truth=ctx["classmate_ground_truth"],
-                                extra_info=ctx["extra_info"],
-                                method="flexible",      # this doesn't matter; just a dummy placeholder
-                                return_dict=True,
-                                code_api_url=self.code_api_url,
-                                # llm_judge_config_dict=self.llm_judge_config_dict,
-                                # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+                    # Submit main model reward computation
+                    if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
+                        verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                        llm_judge_prompt = verifier.format_llm_judge_prompt(
+                            ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
+                        sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                    else:
+                        sample_futures.append(
+                            _as_future(
+                                self.compute_score(
+                                    data_source=ctx["data_source"],
+                                    solution_str=classmate_output_sample,
+                                    ground_truth=ctx["classmate_ground_truth"],
+                                    extra_info=ctx["extra_info"],
+                                    method="flexible",      # this doesn't matter; just a dummy placeholder
+                                    return_dict=True,
+                                    code_api_url=self.code_api_url,
+                                    # llm_judge_config_dict=self.llm_judge_config_dict,
+                                    # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
+                                )
                             )
                         )
-                    )
                 classmate_future_groups.append(sample_futures)
 
             ctx["classmate_model_weights"] = classmate_model_weights
@@ -288,6 +295,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         for ctx in item_contexts:
             total_classmate_reward_dict = {}
             extracted_classmate_sol = []
+            cl_judge_explanation_list = []
 
             classmate_outputs = ctx["classmate_outputs"]
             classmate_model_weights = ctx["classmate_model_weights"]
@@ -298,10 +306,24 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             ):
                 tmp_total_classmate_reward_dict = {}
                 tmp_extracted_classmate_sol_list = []
+                tmp_judge_explanation_list = []
                 for classmate_future in classmate_futures:
                     tmp_classmate_result = classmate_future.result()
+
+                    if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
+                        verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                        # Parse response
+                        judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result, self.judge_client_config)
+                        tmp_classmate_result = {
+                            "score": judge_score,
+                            "extracted_solution": ctx["main_output"],
+                            "judge_explanation": judge_explanation,
+                        }
+
                     tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
+                    tmp_judge_explanation = tmp_classmate_result.pop("judge_explanation", None)
                     tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
+                    tmp_judge_explanation_list.append(tmp_judge_explanation)
 
                     for k, v in tmp_classmate_result.items():       # Should only have "score"
                         if k not in tmp_total_classmate_reward_dict:
@@ -309,6 +331,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                         tmp_total_classmate_reward_dict[k] += v
 
                 extracted_classmate_sol.append(tmp_extracted_classmate_sol_list)
+                cl_judge_explanation_list.append(tmp_judge_explanation_list)
 
                 for k, v in tmp_total_classmate_reward_dict.items():
                     if k not in total_classmate_reward_dict:
@@ -379,9 +402,11 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 print("🐛[main_keep_rate]", np.array2string(ctx["main_keep_rate"], precision=3))   # 0th classmate model, 0th sample
                 print("🐛[classmate_output]", ctx["classmate_outputs"][0][0])     # 0th classmate model
                 print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
+                print("🐛[classmate_reward]", classmate_reward)
                 if ground_truth is not None:
                     print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)
-                print("🐛[classmate_reward]", classmate_reward)
+                else:
+                    print("🐛[cl_judge_explanation_list]", ctx["cl_judge_explanation_list"])
                 print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
                 print("🐛[final_reward]", final_reward)
                 if "classmate_outputs" in ctx["data_item"].non_tensor_batch:

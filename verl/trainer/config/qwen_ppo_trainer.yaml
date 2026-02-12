@@ -141,7 +141,7 @@ algorithm:
   # Rollout Importance Sampling: corrects distribution mismatch between rollout and training policies
   # Main control: Upper threshold for IS weights (null = disabled, float = enabled)
   # When enabled, computes IS weights and mismatch metrics (KL, PPL, etc.)
-  rollout_is_threshold: null
+  rollout_is_threshold: 2.0
 
   # Lower threshold for IS weights (null = auto-reciprocal of upper)
   rollout_is_threshold_lower: null
@@ -158,7 +158,7 @@ algorithm:
   # Whether to apply IS weights to policy loss
   # true = apply weights to loss, false = compute metrics only (no weight application)
   # Useful for monitoring mismatch before enabling correction
-  rollout_is: false
+  rollout_is: True
 
 # config for the trainer
 trainer:

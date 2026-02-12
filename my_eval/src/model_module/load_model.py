@@ -1,4 +1,4 @@
-from together import Together
+# from together import Together
 
 vllm_configs = {
     "enable_sleep_mode": True,
@@ -59,8 +59,9 @@ def load_model(configs):
         model_configs.update(vllm_configs)
         model = LLM(**model_configs)
     elif configs.model_args.inference_backend == "Together":
-        model = Together()
-        model.model_name = configs.model_args.model_name_or_path + ("-Turbo" if "Turbo" not in configs.model_args.model_name_or_path else "")
+        raise NotImplementedError
+        # model = Together()
+        # model.model_name = configs.model_args.model_name_or_path + ("-Turbo" if "Turbo" not in configs.model_args.model_name_or_path else "")
     else:
         raise NotImplementedError(f"Inference backend {configs.model_args.inference_backend} not supported yet.")
         # from transformers import AutoModelForCausalLM

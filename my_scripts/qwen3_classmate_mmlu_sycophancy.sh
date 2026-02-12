@@ -33,24 +33,24 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 #main_cot_keep_rate=0.7
 add_consistency_reward=False
 
-gpu_num=8
+gpu_num=4
 seed=42
 #train_batch_size=256
 #mini_batch_size_per_gpu=32
-train_batch_size=128
+train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=50
+total_ckpts=25
 total_test_times=50
 
-epoch_num=7
+epoch_num=3
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \

@@ -37,7 +37,7 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 
 from verl import DataProto
-from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper
+from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
@@ -655,7 +655,7 @@ class RayPPOTrainer:
 
             # (modify) cot monitor
             if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
-                from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper
+                # from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper
 
                 data_sources_batch = test_batch.non_tensor_batch.get("data_source")
                 verifier = self._get_monitor_verifier(data_sources=data_sources_batch)
@@ -670,7 +670,7 @@ class RayPPOTrainer:
                 all_main_cots, all_raw_questions, all_hint_strs = [], [], []
                 monitor_prompts = []
                 for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                    truncated_main_cot, _, _ = process_main_cot_helper(
+                    truncated_main_cot, _, _, _, _ = process_main_cot_helper(
                         self.tokenizer,
                         self.enable_thinking,
                         item.non_tensor_batch["data_source"],
@@ -695,11 +695,15 @@ class RayPPOTrainer:
                     monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
 
                 # Execute monitor_cot calls in parallel
-                all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
+                # all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
+                #     monitor_prompts=monitor_prompts,
+                #     monitor_reward_type=verifier.reward_type,
+                #     openai_client=self.openai_client,
+                #     model_name=self.config.reward_model.get("monitor_model_name")
+                # )
+
+                all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
                     monitor_prompts=monitor_prompts,
-                    monitor_reward_type=verifier.reward_type,
-                    openai_client=self.openai_client,
-                    model_name=self.config.reward_model.get("monitor_model_name")
                 )
 
                 test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)

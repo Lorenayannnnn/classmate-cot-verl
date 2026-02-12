@@ -3,8 +3,8 @@
 from my_eval.src.data_module.dataset_objects.aime import AIME
 from my_eval.src.data_module.dataset_objects.gsm8k import GSM8K
 from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
-from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
 from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier as MMLUSycophancy
+from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
 
 # from my_eval.src.data_module.dataset_objects.mmlu import MMLU
 
@@ -15,7 +15,8 @@ DATASET_NAME_TO_CLASS = {
     # "gpqa": GPQA,
     # "mmlu": MMLU
     "mmlu_sycophancy": MMLUSycophancy,
-    "helpful_instructions": GeneralSycophancyVerifier
+    "helpful_instructions": SycophancyVerifier
+    # "helpful_instructions": GeneralSycophancyVerifier
 }
 
 DATASET_NAME_TO_SUBSET_NAME_LIST = {

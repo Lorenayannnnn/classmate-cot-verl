@@ -71,6 +71,7 @@ _padding_size_key = "_padding_size_key_x123d"
 
 
 def pad_dataproto_to_divisor(data: "DataProto", size_divisor: int, pad_val="data"):
+    # classmate_batch, size_divisor, pad_val=None
     """Pad a DataProto to size divisible by size_divisor
 
     Args:
@@ -90,12 +91,19 @@ def pad_dataproto_to_divisor(data: "DataProto", size_divisor: int, pad_val="data
             if pad_val == "data":
                 padding_protos.append(data[:take_size])
             else:
-                padding_protos.append(DataProto(
-                    batch=None,
-                    non_tensor_batch={
-                        key: np.array([pad_val] * take_size, dtype=object) for key in data.non_tensor_batch.keys()
-                    },
-                ))
+                padding_non_tensor_batch = {}
+                for key, val in data.non_tensor_batch.items():
+                    target_shape = (take_size,) + val.shape[1:]
+                    if pad_val is None:
+                        padding_non_tensor_batch[key] = np.full(target_shape, pad_val, dtype=object)
+                    else:
+                        padding_non_tensor_batch[key] = np.full(target_shape, pad_val, dtype=val.dtype)
+                padding_protos.append(
+                    DataProto(
+                        batch=None,
+                        non_tensor_batch=padding_non_tensor_batch,
+                    )
+                )
             remaining_pad -= take_size
         data_padded = DataProto.concat([data] + padding_protos)
     else:
@@ -103,6 +111,7 @@ def pad_dataproto_to_divisor(data: "DataProto", size_divisor: int, pad_val="data
             logging.warning("padding a DataProto with no item, no changed made")
         pad_size = 0
         data_padded = data
+    
     return data_padded, pad_size
 
 

@@ -69,7 +69,8 @@ custom_reward_function:
   name: compute_score
 
 reward_model:
-  reward_manager: classmate_cot     # verl/workers/reward_manager/classmate_cot.py
+#  reward_manager: classmate_cot     # verl/workers/reward_manager/classmate_cot.py
+  reward_manager: sycophancy_classmate_cot     # verl/workers/reward_manager/sycophancy_classmate_cot_rm.py
 
   do_cot_monitor: True
   monitor_template_name: mmlu_sycophancy
@@ -83,7 +84,8 @@ reward_model:
 #    classmate_model_name_or_path_list: ["meta-llama/Llama-3.2-1B-Instruct"]
 #    classmate_model_name_or_path_list: ["meta-llama/Llama-3.2-3B-Instruct-Turbo"]
 #    classmate_model_name_or_path_list: ["deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"]
-    classmate_model_name_or_path_list: ["Qwen/Qwen3-0.6B"]
+#    classmate_model_name_or_path_list: ["Qwen/Qwen3-0.6B"]
+    classmate_model_name_or_path_list: ["Qwen/Qwen3-0.6B-Base"]
 
     classmate_reward_weight: 1
 
@@ -193,7 +195,7 @@ algorithm:
   # Rollout Importance Sampling: corrects distribution mismatch between rollout and training policies
   # Main control: Upper threshold for IS weights (null = disabled, float = enabled)
   # When enabled, computes IS weights and mismatch metrics (KL, PPL, etc.)
-  rollout_is_threshold: null
+  rollout_is_threshold: 2.0
 
   # Lower threshold for IS weights (null = auto-reciprocal of upper)
   rollout_is_threshold_lower: null
@@ -210,7 +212,7 @@ algorithm:
   # Whether to apply IS weights to policy loss
   # true = apply weights to loss, false = compute metrics only (no weight application)
   # Useful for monitoring mismatch before enabling correction
-  rollout_is: false
+  rollout_is: True
 
 # config for the trainer
 trainer:

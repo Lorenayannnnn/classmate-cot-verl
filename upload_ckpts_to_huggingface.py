@@ -7,7 +7,6 @@ import torch
 import zlib
 from datasets import load_dataset
 from litellm import acompletion
-from together import Together
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 

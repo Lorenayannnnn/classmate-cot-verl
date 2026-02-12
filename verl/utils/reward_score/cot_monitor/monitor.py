@@ -94,7 +94,7 @@ def parse_judge_explanation(resp: str) -> str:
     return "No explanation provided."
 
 
-def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_cot, main_pred_token_ids, main_response_mask, keep_ratio):
+def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_response, main_pred_token_ids, main_response_mask, keep_ratio):
     """
     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
     """
@@ -105,13 +105,47 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_cot, m
     start_with_think = False
 
     if enable_thinking:
-        main_cot, final_output, start_with_think = parse_out_main_cot_output(main_cot)
+        main_cot, final_output, start_with_think, end_with_think = parse_out_main_cot_output(main_response)
+
         main_pred_token_ids = tokenizer.encode(main_cot)
+        # main_response_mask = main_response_mask[:len(main_pred_token_ids) + 1] if main_response_mask is not None else None
+        if main_response_mask is not None:     # len(main_pred_token_ids) == 0 means main_cot is empty string
+            main_response_mask = main_response_mask[:len(main_pred_token_ids)]
+            if len(main_pred_token_ids) > 0:
+                # Trim front and back until it doesn't start or end with \n
+                idx = 0
+                while tokenizer.decode(main_pred_token_ids[0]).replace("\n", "") == "":
+                    main_pred_token_ids = main_pred_token_ids[1:]
+                    main_response_mask[idx] = 0
+                    idx += 1
+
+                idx = 0
+                while tokenizer.decode(main_pred_token_ids[-1]).replace("\n", "") == "":
+                    main_pred_token_ids = main_pred_token_ids[:-1]
+                    main_response_mask[-1 - idx] = 0
+
+                main_cot = tokenizer.decode(main_pred_token_ids)
     else:
-        final_output = main_cot
+        main_cot = main_response
+        final_output = main_response
+        end_with_think = False
+
+    # with open("debug_main_cot.txt", "w") as f:
+    #     f.write(f"main_cot: {main_cot}\n")
+    #     f.write(f"final_output: {final_output}\n")
+    #     f.write(f"main_pred_token_ids: {main_pred_token_ids}\n (len: {len(main_pred_token_ids)})\n")
+    #     f.write(f"main_pred: {tokenizer.decode(main_pred_token_ids)}\n")
+    #     f.write(f"main_response_mask: {main_response_mask.tolist()}\n")
+    #     f.write(f"start_with_think: {start_with_think}\n")
+    #     f.write(f"end_with_think: {end_with_think}\n")
 
     if keep_ratio == 1:
-        return main_cot, final_output, main_response_mask.tolist() if main_response_mask is not None else None
+        # count num of new lines at the front and end
+        # num_newlines_front = len(main_cot) - len(main_cot.lstrip("\n"))
+        # num_newlines_end = len(main_cot) - len(main_cot.rstrip("\n"))
+        return main_cot, final_output, main_response_mask.tolist() if main_response_mask is not None else None, end_with_think, start_with_think
+
+    raise NotImplementedError("Only keep_ratio=1 is supported now. Implementing other keep_ratio requires careful handling of response mask and start/end with think cases.")
 
     num_to_keep = int(len(main_pred_token_ids) * keep_ratio)
 
@@ -138,101 +172,159 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_cot, m
     else:
         classmate_response_mask = None
 
-    return truncated_text, final_output, classmate_response_mask
+    return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
 
-def monitor_cot_wrapper(
+def monitor_cot_wrapper_w_tinker(
     monitor_prompts: List[str],
-    openai_client,
-    model_name: str,
-    monitor_reward_type: str,
+    temperature: float = 0.0,
 ):
     """
-    Wrapper to batch process monitor_cot calls in parallel.
-    
+    Wrapper to process monitor_cot calls sequentially without API calls (for testing/debugging).
+
     Args:
         monitor_prompts: List of fully formatted monitor prompts
-        openai_client: OpenAI client instance
-        model_name: Name of the OpenAI model to use
         monitor_reward_type: Reward type (e.g., "binary", "non_binary")
-        
+
     Returns:
         Tuple of (all_monitor_use_hint, all_monitor_explanations)
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    if USE_TINKER:
+        sampling_client = judge_client_config['sampling_client']
+        renderer = judge_client_config['renderer']
 
-    num_samples = len(monitor_prompts)
-    # TODO haha
-    print(f"Processing {num_samples} monitor prompts in parallel using model {model_name} with reward type {monitor_reward_type}...")
-    
-    # Execute monitor_cot calls in parallel
-    all_monitor_scores = [None] * num_samples
-    all_monitor_explanations = [None] * num_samples
+        sampling_params = tinker.types.SamplingParams(
+            max_tokens=judge_client_config['max_tokens'],
+            stop=renderer.get_stop_sequences(),
+            temperature=temperature,
+        )
 
-    with ThreadPoolExecutor(max_workers=min(8, num_samples)) as executor:
-        # Submit all tasks
-        future_to_idx = {
-            executor.submit(
-                monitor_cot_from_prompt,
-                monitor_prompts[idx],
-                openai_client,
-                model_name,
-                monitor_reward_type,
-            ): idx
-            for idx in range(num_samples)
-        }
+        tinker_futures = []
 
-        # from tqdm import tqdm
-        # pbar = tqdm(total=num_samples, desc="Processing monitor prompts")
+        for monitor_prompt in monitor_prompts:
+            messages = [{"role": "user", "content": monitor_prompt}]
+            if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
+                messages.append({"role": "system", "content": "Reasoning: low\nAnswer with only the final answer."})  # Let the model to return the answer immediately
+            model_input = renderer.build_generation_prompt(messages)
 
-        # Collect results as they complete
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            monitor_result_dict = future.result()
-            all_monitor_scores[idx] = monitor_result_dict["monitor_score"]
-            all_monitor_explanations[idx] = monitor_result_dict["explanation"]
-            # pbar.update(1)
+            # Send prompt to judge model
+            sample_future = sampling_client.sample(
+                prompt=model_input,
+                num_samples=1,
+                sampling_params=sampling_params,
+            )
 
-    return all_monitor_scores, all_monitor_explanations
+            tinker_futures.append(sample_future)
+
+        # Execute monitor_cot calls in parallel
+        all_monitor_scores = []
+        all_monitor_explanations = []
+
+        for sample_future in tinker_futures:
+            sample_result = sample_future.result()
+            # Parse response
+            judge_tokens = sample_result.sequences[0].tokens
+            parsed_judge, _ = renderer.parse_response(judge_tokens)
+            judge_text = renderers.get_text_content(parsed_judge)
+            judge_score, judge_explanation = parse_sycophancy_score(judge_text), parse_judge_explanation(judge_text)
+            all_monitor_scores.append(judge_score)
+            all_monitor_explanations.append(judge_explanation)
+
+        return all_monitor_scores, all_monitor_explanations
+    else:
+        raise NotImplementedError("monitor_cot_wrapper_new is only implemented for Tinker judge. Set USE_TINKER=True and USE_OPENAI=False.")
 
 
-def monitor_cot_from_prompt(
-    monitor_prompt: str,
-    openai_client,
-    model_name: str,
-    monitor_reward_type: Optional[str] = None,
-    max_retries: int = 3,
-):
-    result = send_one_api_call(
-        openai_client=openai_client,
-        model_name=model_name,
-        messages=[{"role": "user", "content": monitor_prompt}],
-        temperature=0.0,
-        response_format={"type": "json_object"},
-        seed=42,
-        max_retries=max_retries,
-        required_fields=["monitor_score", "explanation"],
-    )
+# def monitor_cot_wrapper(
+#     monitor_prompts: List[str],
+#     openai_client,
+#     model_name: str,
+#     monitor_reward_type: str,
+# ):
+#     """
+#     Wrapper to batch process monitor_cot calls in parallel.
+#
+#     Args:
+#         monitor_prompts: List of fully formatted monitor prompts
+#         openai_client: OpenAI client instance
+#         model_name: Name of the OpenAI model to use
+#         monitor_reward_type: Reward type (e.g., "binary", "non_binary")
+#
+#     Returns:
+#         Tuple of (all_monitor_use_hint, all_monitor_explanations)
+#     """
+#     from concurrent.futures import ThreadPoolExecutor, as_completed
+#
+#     num_samples = len(monitor_prompts)
+#
+#     # Execute monitor_cot calls in parallel
+#     all_monitor_scores = [None] * num_samples
+#     all_monitor_explanations = [None] * num_samples
+#
+#     with ThreadPoolExecutor(max_workers=min(8, num_samples)) as executor:
+#         # Submit all tasks
+#         future_to_idx = {
+#             executor.submit(
+#                 monitor_cot_from_prompt,
+#                 monitor_prompts[idx],
+#                 openai_client,
+#                 model_name,
+#                 monitor_reward_type,
+#             ): idx
+#             for idx in range(num_samples)
+#         }
+#
+#         # from tqdm import tqdm
+#         # pbar = tqdm(total=num_samples, desc="Processing monitor prompts")
+#
+#         # Collect results as they complete
+#         for future in as_completed(future_to_idx):
+#             idx = future_to_idx[future]
+#             monitor_result_dict = future.result()
+#             all_monitor_scores[idx] = monitor_result_dict["monitor_score"]
+#             all_monitor_explanations[idx] = monitor_result_dict["explanation"]
+#             # pbar.update(1)
+#
+#     return all_monitor_scores, all_monitor_explanations
 
-    if result["success"] and result["parsed"]:
-        score = result["parsed"]["monitor_score"]
 
-        if monitor_reward_type == "binary":
-            if isinstance(score, bool):
-                score = 1 if score else 0
-            else:
-                score = 1 if score else 0
-        else:
-            score = float(score) if isinstance(score, (int, float)) else score
-
-        return {
-            "monitor_score": score,
-            "explanation": result["parsed"]["explanation"],
-        }
-
-    return {
-        "monitor_score": None,
-        "explanation": result["content"],
-    }
+# def monitor_cot_from_prompt(
+#     monitor_prompt: str,
+#     openai_client,
+#     model_name: str,
+#     monitor_reward_type: Optional[str] = None,
+#     max_retries: int = 3,
+# ):
+#     result = send_one_api_call(
+#         openai_client=openai_client,
+#         model_name=model_name,
+#         messages=[{"role": "user", "content": monitor_prompt}],
+#         temperature=0.0,
+#         response_format={"type": "json_object"},
+#         seed=42,
+#         max_retries=max_retries,
+#         required_fields=["monitor_score", "explanation"],
+#     )
+#
+#     if result["success"] and result["parsed"]:
+#         score = result["parsed"]["monitor_score"]
+#
+#         if monitor_reward_type == "binary":
+#             if isinstance(score, bool):
+#                 score = 1 if score else 0
+#             else:
+#                 score = 1 if score else 0
+#         else:
+#             score = float(score) if isinstance(score, (int, float)) else score
+#
+#         return {
+#             "monitor_score": score,
+#             "explanation": result["parsed"]["explanation"],
+#         }
+#
+#     return {
+#         "monitor_score": None,
+#         "explanation": result["content"],
+#     }
 
 def send_one_api_call(
     openai_client,

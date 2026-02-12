@@ -1,14 +1,14 @@
 import json
 import os
-import time
 from itertools import islice
 
 import torch
 from tqdm import tqdm
 from openai import OpenAI
 
-from keys import OPENAI_KEY
-from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper, process_main_cot_helper
+from tinker_cookbook import renderers
+from verl.utils.reward_score.cot_monitor.llm_judge_utils import create_llm_judge, send_prompt_to_tinker
+from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
 
 
@@ -26,9 +26,13 @@ class SycophancyInferenceExpRunner:
 
         self.output_dir = self.args.output_dir
 
-        self.openai_client = OpenAI(api_key=OPENAI_KEY)
+        # self.openai_client = OpenAI(api_key=OPENAI_KEY)
         self.main_cot_keep_rate = main_cot_keep_rate
         self.data_source = data_source
+
+        self.judge_client_config = create_llm_judge(        # Now use the same model as monitor and judge
+            judge_model_name="openai/gpt-oss-20b",
+        )
 
     @torch.no_grad()
     def inference_main_model(self, dataset_object):
@@ -77,29 +81,29 @@ class SycophancyInferenceExpRunner:
         result_f = open(os.path.join(self.output_dir, "preds.jsonl"), "a")
         progress = tqdm(self.data_loader, initial=ckpt_idx, total=dataset_size)
 
+        all_pending_results = []
+
+        assert self.batch_size == 1
+
+        verifier = get_monitor_verifier(data_source=self.data_source)
+
         for batch in progress:
             batch_prompts = batch["query"]
             outputs = self.model.generate(batch_prompts, sampling_params=sampling_param, use_tqdm=False)
 
-            all_truncated_main_cots = []
-            all_raw_questions = []
-            all_hint_strs = []
-            all_result_dicts = []
-
             for batch_entry_idx in range(self.batch_size):
                 decoded_output = outputs[batch_entry_idx].outputs[0].text
-                
+
                 # if self.main_cot_keep_rate < 1.0:
                 # Truncate output_token_ids and decode
                 output_token_ids = outputs[batch_entry_idx].outputs[0].token_ids
 
                 # Parse out cot in between <think> and </think>
-                # tokenizer, enable_thinking, data_source, main_cot, main_pred_token_ids, main_response_mask, keep_ratio):
-                truncated_main_cot, final_output, _ = process_main_cot_helper(
+                truncated_main_cot, final_output, _, _, _ = process_main_cot_helper(
                     tokenizer=self.tokenizer,
                     enable_thinking=self.enable_thinking,
                     data_source=None,
-                    main_cot=decoded_output,
+                    main_response=decoded_output,
                     main_pred_token_ids=output_token_ids,
                     main_response_mask=None,
                     keep_ratio=self.main_cot_keep_rate
@@ -108,20 +112,31 @@ class SycophancyInferenceExpRunner:
                 #     truncated_main_cot = decoded_output
                 #     final_output = decoded_output
 
-                all_truncated_main_cots.append(truncated_main_cot)
-                all_raw_questions.append(batch["raw_question_for_monitor"])
-                all_hint_strs.append(batch.get("hint_str_for_monitor", ""))
-
-                compute_score_input_dict = {
-                    "gt": batch['gt'][batch_entry_idx],
+                monitor_doc = {
                     "raw_question_for_monitor": batch["raw_question_for_monitor"],
+                    "hint_str_for_monitor": batch.get("hint_str_for_monitor", ""),
+                    "truncated_main_CoT": truncated_main_cot,
+                    "main_response": truncated_main_cot,
                 }
+                monitor_prompt = verifier.create_monitor_message(monitor_doc)
+                llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"], final_output)
 
-                process_result_dict = dataset_object.compute_score(continuation=final_output, doc=compute_score_input_dict)
-                main_score = process_result_dict["score"]
-                all_main_model_rewards.append(main_score)
+                monitor_future = send_prompt_to_tinker(self.judge_client_config, monitor_prompt)
 
-                tmp_pred = process_result_dict["extracted_solution"]
+                if batch['gt'][batch_entry_idx] is None:
+                    judge_future = send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt)
+                    main_extracted_solution = final_output
+                    main_score = None
+                else:
+                    compute_score_input_dict = {
+                        "gt": batch['gt'][batch_entry_idx],
+                        "raw_question_for_monitor": batch["raw_question_for_monitor"],
+                    }
+                    process_result_dict = dataset_object.compute_score_for_eval(continuation=final_output,doc=compute_score_input_dict)
+                    main_score = process_result_dict["score"]
+                    all_main_model_rewards.append(main_score)
+                    main_extracted_solution = process_result_dict["extracted_solution"]
+                    judge_future = None
 
                 tmp_result = {
                     "main_query": batch['query'][batch_entry_idx],
@@ -129,44 +144,45 @@ class SycophancyInferenceExpRunner:
                     "main_full_output": decoded_output,
                     "truncated_main_CoT": truncated_main_cot,
                     "main_output": final_output,
-                    "main_extracted_solution": tmp_pred,
+                    "main_extracted_solution": main_extracted_solution,
                     "main_score": main_score,
                     "gt": batch['gt'][batch_entry_idx],
-                    "actual_answer": batch['actual_answer'][batch_entry_idx],
                 }
-                all_result_dicts.append(tmp_result)
-
-            # Submit openai cot monitor api calls
-            verifier = get_monitor_verifier(data_source=self.data_source)
-            monitor_prompts = []
-            for raw_question, hint_str, truncated_main_cot in zip(
-                all_raw_questions, all_hint_strs, all_truncated_main_cots
-            ):
-                monitor_doc = {
-                    "raw_question_for_monitor": raw_question,
-                    "hint_str_for_monitor": hint_str,
-                    "truncated_main_CoT": truncated_main_cot,
-                    "main_response": truncated_main_cot,
-                }
-                monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
-
-            # Execute monitor calls in parallel
-            tmp_monitor_scores, tmp_monitor_explanations = monitor_cot_wrapper(
-                monitor_prompts=monitor_prompts,
-                monitor_reward_type=verifier.reward_type,
-                openai_client=self.openai_client,
-                model_name=self.args["monitor_model_name"],
-            )
-
-            # Log out all results
-            for result_dict, monitor_score, monitor_explanation in zip(all_result_dicts, tmp_monitor_scores, tmp_monitor_explanations):
-                result_dict["monitor_score"] = monitor_score
-                result_dict["monitor_explanation"] = monitor_explanation
-
-                all_monitor_scores.append(monitor_score)
-                result_f.write(json.dumps(result_dict) + "\n")
+                if "actual_answer" in batch:
+                    # for mmlu sycophancy
+                    tmp_result["actual_answer"] = batch['actual_answer'][batch_entry_idx]
+                all_pending_results.append(
+                    {
+                        "result_dict": tmp_result,
+                        "monitor_future": monitor_future,
+                        "judge_future": judge_future,
+                    }
+                )
 
             progress.update(self.batch_size)
+
+        # Collect monitor/judge results and log outputs
+        for pending in tqdm(all_pending_results, desc="Collecting monitor/judge results"):
+            result_dict = pending["result_dict"]
+
+            monitor_result = pending["monitor_future"].result()
+            # TODO assuming monitor and llm judge output format requirements are the same
+            monitor_score, monitor_explanation = verifier.parse_llm_judge_output(monitor_result, self.judge_client_config)
+            result_dict["monitor_score"] = monitor_score
+            result_dict["monitor_explanation"] = monitor_explanation
+            all_monitor_scores.append(monitor_score)
+
+            if pending["judge_future"] is not None:
+                # Using llm judge
+                judge_result = pending["judge_future"].result()
+                llm_judge_score, llm_judge_explanation = verifier.parse_llm_judge_output(judge_result, self.judge_client_config)
+                result_dict["main_score"] = llm_judge_score
+                result_dict["llm_judge_score"] = llm_judge_score
+                result_dict["llm_judge_explanation"] = llm_judge_explanation
+
+                all_main_model_rewards.append(result_dict["main_score"])
+
+            result_f.write(json.dumps(result_dict) + "\n")
         result_f.flush()
         result_f.close()
         

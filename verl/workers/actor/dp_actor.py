@@ -376,12 +376,12 @@ class DataParallelPPOActor(BasePPOActor):
         # Weights are computed centrally in trainer and added to batch when algorithm.rollout_is=True
         if "rollout_is_weights" in data.batch.keys():
             select_keys.append("rollout_is_weights")
-        
+
         if "classmate_advantages" in data.batch.keys():
             assert "main_advantages" in data.batch.keys(), "Both main and classmate advantages must be present"
             select_keys.append("main_advantages")
             select_keys.append("classmate_advantages")
-            select_keys.append("advantages")
+            # select_keys.append("advantages")
             if "classmate_input_mask" in data.batch.keys():
                 select_keys.append("classmate_input_mask")
             if "classmate_rollout_is_weights" in data.batch.keys():
@@ -420,7 +420,7 @@ class DataParallelPPOActor(BasePPOActor):
                         model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
                         response_mask = model_inputs["response_mask"]
                         old_log_prob = model_inputs["old_log_probs"]
-                        advantages = model_inputs["advantages"]
+                        # advantages = model_inputs["advantages"]
 
                         entropy_coeff = self.config.entropy_coeff
                         loss_agg_mode = self.config.loss_agg_mode
@@ -459,6 +459,20 @@ class DataParallelPPOActor(BasePPOActor):
                         classmate_advantages = model_inputs["classmate_advantages"]
                         classmate_rollout_is_weights = model_inputs["classmate_rollout_is_weights"]
                         classmate_input_mask = model_inputs["classmate_input_mask"]
+                        # classmate_prompt_logprobs_mask = model_inputs["classmate_prompt_logprobs_mask"]
+
+                        # with open("test_1.txt", "w") as f:
+                        #     f.write("🐛🐛🐛 11111\n")
+                        #     f.write(f"🐛🐛🐛 classmate_input_mask {classmate_input_mask[0].tolist()}\n")
+                        #     f.write(f"🐛🐛🐛 classmate_prompt_logprobs_mask {classmate_prompt_logprobs_mask[0].tolist()}\n")
+                        # with open("test_2.txt", "w") as f:
+                        #     f.write("🐛🐛🐛 22222\n")
+                        #     f.write(f"🐛🐛🐛 classmate_input_mask {classmate_input_mask[1].tolist()}\n")
+                        #     f.write(f"🐛🐛🐛 classmate_prompt_logprobs_mask {classmate_prompt_logprobs_mask[1].tolist()}\n")
+                        # with open("test_3.txt", "w") as f:
+                        #     f.write("🐛🐛🐛 33333\n")
+                        #     f.write(f"🐛🐛🐛 classmate_input_mask {classmate_input_mask[2].tolist()}\n")
+                        #     f.write(f"🐛🐛🐛 classmate_prompt_logprobs_mask {classmate_prompt_logprobs_mask[2].tolist()}\n")
 
                         # if (
                         #     rollout_is_weights is not None
@@ -479,19 +493,17 @@ class DataParallelPPOActor(BasePPOActor):
                         combined_advantages = main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask
 
                         # Batch-wise normalization only over classmate prefix tokens
-                        norm_mask = classmate_mask
-                        adv_mean = verl_F.masked_mean(combined_advantages, norm_mask)
-                        adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), norm_mask)
+                        adv_mean = verl_F.masked_mean(combined_advantages, classmate_mask)
+                        adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), classmate_mask)
                         advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
 
-                        # TODO haha
-                        print("🐛🐛🐛 classmate adjusted")
-                        print("🐛🐛🐛 main_adv_reweighted", main_adv_reweighted[0].tolist())
-                        print("🐛🐛🐛 response_mask", response_mask[0].tolist())
-                        print("🐛🐛🐛 classmate_adv_reweighted", classmate_adv_reweighted[0].tolist())
-                        print("🐛🐛🐛 classmate_mask", classmate_mask[0].tolist())
-                        print("🐛🐛🐛 combined advantage", (main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask)[0].tolist())
-                        print("🐛🐛🐛 combined_advantages_after_normalize", combined_advantages[0].tolist())
+                        # print("🐛🐛🐛 classmate adjusted")
+                        # print("🐛🐛🐛 main_adv_reweighted", main_adv_reweighted[0].tolist())
+                        # print("🐛🐛🐛 response_mask", response_mask[0].tolist())
+                        # print("🐛🐛🐛 classmate_adv_reweighted", classmate_adv_reweighted[0].tolist())
+                        # print("🐛🐛🐛 classmate_mask", classmate_mask[0].tolist())
+                        # print("🐛🐛🐛 combined advantage", (main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask)[0].tolist())
+                        # print("🐛🐛🐛 combined_advantages_after_normalize", combined_advantages[0].tolist())
 
                         # Avoid double-applying IS weights in policy loss
                         rollout_is_weights = None
@@ -558,7 +570,8 @@ class DataParallelPPOActor(BasePPOActor):
                     append_to_dict(metrics, mini_batch_metrics)
             self.actor_optimizer.zero_grad()
             return metrics
-        if "advantages" in data.batch.keys():
+        else:
+            assert "advantages" in data.batch.keys(), "Advantages must be present for policy update"
             select_keys.append("advantages")
 
             has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
