@@ -386,7 +386,7 @@ class ClassmateWorker(Worker):
                         continue
                     else:
                         if self.enable_thinking:
-                            assert "Qwen/Qwen3-0.6B" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
+                            assert "Qwen2.5-Math-1.5B" in self.model_name_or_path or "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in self.model_name_or_path or "Qwen/Qwen3-0.6B" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
                             prefix_str = "<think>\n"
                             suffix_str = "\n</think>\n\n"
                             prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str)

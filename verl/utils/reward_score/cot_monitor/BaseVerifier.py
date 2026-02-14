@@ -224,6 +224,7 @@ def get_monitor_verifier(data_source=None) -> BaseVerifier:
     is_mmlu = "mmlu" in data_source_joined
     is_mmlu_pro = "mmlu_pro" in data_source_joined
     is_helpful = any("helpful_instructions" in source for source in data_sources)
+    is_anthropic_hh_rlhf = any("anthropic_hh_rlhf" in source for source in data_sources)
 
     if is_mmlu:
         from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
@@ -231,6 +232,9 @@ def get_monitor_verifier(data_source=None) -> BaseVerifier:
     elif is_helpful:
         # from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
         # return GeneralSycophancyVerifier(reward_type="non_binary")
+        from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
+        return SycophancyVerifier(reward_type="non_binary")
+    elif is_anthropic_hh_rlhf:
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier(reward_type="non_binary")
     else:

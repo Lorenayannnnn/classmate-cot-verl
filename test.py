@@ -514,14 +514,28 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-
+    # main()
+    #
     from transformers import AutoTokenizer
-    model_name = "Qwen/Qwen3-0.6B"
+    # model_name = "Qwen/Qwen3-0.6B"
+    # model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+    model_name = "Qwen/Qwen2.5-Math-1.5B"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    jinjia_fn = "chat_templates/DeepSeek-R1-Distill-Qwen-1.5B.jinja"
+    with open(jinjia_fn, "r") as f:chat_template = f.read()
+    tokenizer.chat_template = chat_template
     messages = [{"role": "user", "content": "What is 1+1?"},{"role": "assistant", "content": "<think>\n\n\n\n\nThe answer is 2.\n\n\n\n\n</think>"}]
+    messages = [{"role": "user", "content": "What is 1+1?"},{"role": "assistant", "content": "<think>\nThe answer is 2.\n</think>"}]
     input_tokens = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
     print(input_tokens)
+
+#     Anthropic/hh-rlhf
+#     from datasets import load_dataset
+#     dataset = load_dataset("Anthropic/hh-rlhf", split="train")
+#     for entry in dataset:
+#         if "How smart are you" in entry["chosen"]:
+#             print(entry)
+#             breakpoint()
 
 
 # TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"

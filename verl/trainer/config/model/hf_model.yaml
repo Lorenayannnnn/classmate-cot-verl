@@ -22,7 +22,9 @@ use_shm: False
 trust_remote_code: False
 
 # custom chat template for the model
+# TODO haha
 custom_chat_template: null
+#custom_chat_template: chat_templates/DeepSeek-R1-Distill-Qwen-1.5B.jinja
 
 # whether to use external libs for the model
 external_lib: null

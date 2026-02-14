@@ -8,15 +8,20 @@ set -x
 # Now using Together AI
 
 data_dir=./data   # run on lambda
-dataset_name="helpful_instructions"   # 6794
+#dataset_name="helpful_instructions"
+dataset_name="anthropic_hh_rlhf"
 train_path=${data_dir}/${dataset_name}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
+# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+#TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
 #base_model_name_path=Qwen/Qwen3-1.7B
-#base_model_name_path=Qwen/Qwen3-0.6B
-base_model_name_path=Qwen/Qwen3-0.6B-Base
+base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
+#base_model_name_path=Qwen/Qwen3-0.6B-Base
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
@@ -35,10 +40,10 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=4
 seed=42
-#train_batch_size=128
-#mini_batch_size_per_gpu=32
-train_batch_size=64
-mini_batch_size_per_gpu=16
+train_batch_size=128
+mini_batch_size_per_gpu=32
+#train_batch_size=64
+#mini_batch_size_per_gpu=16
 
 total_ckpts=25
 total_test_times=50

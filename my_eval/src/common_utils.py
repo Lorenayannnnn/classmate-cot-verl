@@ -53,6 +53,8 @@ def load_config_and_setup_output_dir(configs):
             configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
         elif "helpful_instructions" in configs.data_args.dataset_name:
             configs.data_args.dataset_name = "data/helpful_instructions/test.parquet"
+        elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
+            configs.data_args.dataset_name = "data/anthropic_hh_rlhf/test.parquet"
 
     elif configs.running_args.exp_type == "cot_utility_to_classmate":
         short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]

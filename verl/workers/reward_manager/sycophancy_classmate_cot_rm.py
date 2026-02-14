@@ -316,7 +316,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                         judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result, self.judge_client_config)
                         tmp_classmate_result = {
                             "score": judge_score,
-                            "extracted_solution": ctx["main_output"],
+                            "extracted_solution": classmate_outputs[classmate_idx][0],   # currently only support num_samples_per_classmate=1
                             "judge_explanation": judge_explanation,
                         }
 
@@ -388,8 +388,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 extracted_solution = ctx["extracted_solution"]
                 if ground_truth is None:
                     # for open-ended generation
-                    ground_truth = actor_score.get("score", None) if isinstance(actor_score, dict) else None
-                    print("🐛[llm judge score]", ground_truth)
+                    print("🐛[llm judge score]", actor_score.get("score", None) if isinstance(actor_score, dict) else None)
                     if isinstance(actor_score, dict):
                         print("🐛[llm judge explanation]", actor_score.get("judge_explanation", None))
                 else:
@@ -401,12 +400,13 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 print("🐛[classmate_prompt]", ctx["classmate_prompts"][0])   # 0th classmate model
                 print("🐛[main_keep_rate]", np.array2string(ctx["main_keep_rate"], precision=3))   # 0th classmate model, 0th sample
                 print("🐛[classmate_output]", ctx["classmate_outputs"][0][0])     # 0th classmate model
-                print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
+                if ground_truth is not None:
+                    print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
                 print("🐛[classmate_reward]", classmate_reward)
                 if ground_truth is not None:
                     print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)
                 else:
-                    print("🐛[cl_judge_explanation_list]", ctx["cl_judge_explanation_list"])
+                    print("🐛[cl_judge_explanation_list]", cl_judge_explanation_list[0][0])   # 0th classmate model, 0th sample
                 print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
                 print("🐛[final_reward]", final_reward)
                 if "classmate_outputs" in ctx["data_item"].non_tensor_batch:

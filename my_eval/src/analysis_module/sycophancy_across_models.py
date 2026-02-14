@@ -250,7 +250,8 @@ if __name__ == "__main__":
 
     output_dir = "outputs_eval/inference_main_model"
     # dataset_name_list = ["mmlu_sycophancy"]
-    dataset_name_list = ["helpful_instructions"]
+    # dataset_name_list = ["helpful_instructions"]
+    dataset_name_list = ["anthropic_hh_rlhf"]
     max_y, min_y = None, None
 
     skip_indices = []

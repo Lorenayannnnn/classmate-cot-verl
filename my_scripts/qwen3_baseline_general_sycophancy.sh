@@ -1,9 +1,14 @@
 set -x
 
+#export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
+#unset ROCR_VISIBLE_DEVICES
+#unset HIP_VISIBLE_DEVICES
+
 #export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 data_dir=./data   # run on lambda
-dataset_name="helpful_instructions"
+#dataset_name="helpful_instructions"
+dataset_name="anthropic_hh_rlhf"
 
 train_path=${data_dir}/${dataset_name}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -12,8 +17,11 @@ eval_files="['$eval_path']"
 
 
 #base_model_name_path=Qwen/Qwen3-1.7B
-#base_model_name_path=Qwen/Qwen3-0.6B
-base_model_name_path=Qwen/Qwen3-0.6B-Base
+base_model_name_path=Qwen/Qwen3-0.6B
+# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
+#base_model_name_path=Qwen/Qwen3-0.6B-Base
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
@@ -33,7 +41,8 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
+#python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=2,3,6,7 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -78,5 +87,6 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
 #    actor_rollout_ref.model.target_modules=all-linear \
 #    actor_rollout_ref.model.use_shm=True
 
+#outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
 
 #bash my_scripts/qwen3_baseline_general_sycophancy.sh

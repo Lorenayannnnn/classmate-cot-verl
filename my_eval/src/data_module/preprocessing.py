@@ -117,7 +117,10 @@ def preprocess(configs, predict_dataset, wo_cot=False):
             else:
                 predict_dataset = predict_dataset.select(range(configs.data_args.max_predict_samples))
 
-    if "helpful_instructions" in configs.data_args.dataset_name:
+    if "anthropic_hh_rlhf" in configs.data_args.dataset_name:
+        short_dataset_name = "anthropic_hh_rlhf"
+        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name]()
+    elif "helpful_instructions" in configs.data_args.dataset_name:
         short_dataset_name = "helpful_instructions"
         dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name]()
     elif "mmlu_sycophancy" in configs.data_args.dataset_name:

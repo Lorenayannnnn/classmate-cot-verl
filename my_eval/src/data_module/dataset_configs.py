@@ -15,8 +15,9 @@ DATASET_NAME_TO_CLASS = {
     # "gpqa": GPQA,
     # "mmlu": MMLU
     "mmlu_sycophancy": MMLUSycophancy,
-    "helpful_instructions": SycophancyVerifier
+    "helpful_instructions": SycophancyVerifier,
     # "helpful_instructions": GeneralSycophancyVerifier
+    "anthropic_hh_rlhf": SycophancyVerifier
 }
 
 DATASET_NAME_TO_SUBSET_NAME_LIST = {
