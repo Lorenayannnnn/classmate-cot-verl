@@ -68,8 +68,8 @@ policy_loss:
 # Constant C in Dual-clip PPO; clips when advantage < 0 and ratio > C
 clip_ratio_c: 3.0
 
-# Loss aggregation mode: "token-mean", "seq-mean-token-sum", or "seq-mean-token-mean"
-loss_agg_mode: token-mean
+# Loss aggregation mode: "token-mean" (grpo), "seq-mean-token-sum" (dr.grpo), or "seq-mean-token-mean"
+loss_agg_mode: seq-mean-token-sum-norm
 
 # Entropy regularization coefficient in PPO loss
 entropy_coeff: 0

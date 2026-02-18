@@ -303,6 +303,7 @@ class ClassmateWorker(Worker):
             # Handle padding: remove globally padded items before minibatching
             batch_prompts = data.non_tensor_batch["raw_prompts"]
             batch_actor_responses = data.non_tensor_batch["main_model_responses"]
+            batch_actor_responses_token_ids = data.non_tensor_batch["main_model_response_token_ids"]
             batch_all_end_with_thinks = data.non_tensor_batch["end_with_thinks"]
             batch_all_start_with_thinks = data.non_tensor_batch["start_with_thinks"]
             batch_all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
@@ -314,6 +315,8 @@ class ClassmateWorker(Worker):
                 batch_prompts = batch_prompts.tolist()
             if isinstance(batch_actor_responses, np.ndarray):
                 batch_actor_responses = batch_actor_responses.tolist()
+            if isinstance(batch_actor_responses_token_ids, np.ndarray):
+                batch_actor_responses_token_ids = batch_actor_responses_token_ids.tolist()
             if isinstance(batch_all_end_with_thinks, np.ndarray):
                 batch_all_end_with_thinks = batch_all_end_with_thinks.tolist()
             if isinstance(batch_all_start_with_thinks, np.ndarray):
@@ -331,6 +334,7 @@ class ClassmateWorker(Worker):
             if len(valid_indices) != original_length:
                 batch_prompts = [batch_prompts[i] for i in valid_indices]
                 batch_actor_responses = [batch_actor_responses[i] for i in valid_indices]
+                batch_actor_responses_token_ids = [batch_actor_responses_token_ids[i] for i in valid_indices]
                 batch_all_end_with_thinks = [batch_all_end_with_thinks[i] for i in valid_indices]
                 batch_all_start_with_thinks = [batch_all_start_with_thinks[i] for i in valid_indices]
                 classmate_input_mask = [classmate_input_mask[i] for i in valid_indices]
@@ -386,7 +390,7 @@ class ClassmateWorker(Worker):
                         continue
                     else:
                         if self.enable_thinking:
-                            assert "Qwen2.5-Math-1.5B" in self.model_name_or_path or "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in self.model_name_or_path or "Qwen/Qwen3-0.6B" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
+                            assert "Qwen2.5-Math-1.5B" in self.model_name_or_path or "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in self.model_name_or_path or "Qwen3" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
                             prefix_str = "<think>\n"
                             suffix_str = "\n</think>\n\n"
                             prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str)
@@ -468,7 +472,7 @@ class ClassmateWorker(Worker):
         # Pad classmate_prompt_logprobs to self.main_model_max_tokens with None for inputs that were too long or None
         padded_classmate_prompt_logprobs = []
         padded_classmate_prompt_logprobs_mask = []
-        for idx, (logprobs, cls_input_len, cls_input_and_main_cot_len, cls_input_mask) in enumerate(zip(classmate_prompt_logprobs, classmate_input_lens, classmate_input_and_main_cot_lens, classmate_input_mask)):
+        for idx, (logprobs, cls_input_len, cls_input_and_main_cot_len, cls_input_mask, resp_token_ids) in enumerate(zip(classmate_prompt_logprobs, classmate_input_lens, classmate_input_and_main_cot_lens, classmate_input_mask, batch_actor_responses_token_ids)):
             if logprobs is None:        # happens when classmate prompt is None, which happens when e.g. actor response is empty or input is too long
                 padded_classmate_prompt_logprobs.append([float("-inf")] * self.main_model_max_tokens)
                 padded_classmate_prompt_logprobs_mask.append([0] * self.main_model_max_tokens)
@@ -479,11 +483,12 @@ class ClassmateWorker(Worker):
                     tmp_padded_classmate_prompt_logprobs_mask = [1] * len(logprobs)
                 else:
                     try:
-                        assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(classmate_prompt_logprobs)}, cls_input_mask={cls_input_mask}"
+                        assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}"
                     except Exception as e:
                         with open("debug.txt", "a") as f:
                             f.write(f"❌ Assertion error when slicing logprobs for classmate prompt: {e}\n")
-                            f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(classmate_prompt_logprobs)}, cls_input_mask={cls_input_mask}\n")
+                            f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}\n")
+                            f.write(f"resp_token_ids={resp_token_ids}\n")
                             f.write(f"debug_user_only_token_ids={debug_user_only_token_ids[idx]}\n")
                             f.write(f"debug_user_only_prompt_strs={debug_user_only_prompt_strs[idx]}\n")
                             f.write(f"debug_cls_input_token_ids={debug_cls_input_token_ids[idx]}\n")

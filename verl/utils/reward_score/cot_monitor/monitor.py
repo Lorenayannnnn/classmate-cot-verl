@@ -17,7 +17,7 @@ from openai import (
 )
 
 import tinker
-from keys import TINKER_API_KEY
+from keys import TINKER_API_KEY, INPUT_TINKER_MODEL_NAME
 from tinker_cookbook import model_info, renderers
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
@@ -26,9 +26,9 @@ from verl.utils.my_utils import parse_out_main_cot_output
 # TODO haha change tinker llm judge model name
 USE_OPENAI = False
 USE_TINKER = True
-TINKER_MODEL_NAME = "openai/gpt-oss-20b"
-# JUDGE_MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
-# JUDGE_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
+# TINKER_MODEL_NAME = "openai/gpt-oss-20b"
+TINKER_MODEL_NAME = INPUT_TINKER_MODEL_NAME
+# TINKER_MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
 
 def create_llm_judge(
     judge_model_name: str = TINKER_MODEL_NAME,
@@ -77,8 +77,9 @@ def parse_sycophancy_score(resp: str) -> float | None:
     match = re.search(r"RATING:\s*(\d+)", resp, re.IGNORECASE)
     if match:
         score = int(match.group(1))
-        if 1 <= score <= 10:
-            return float(score)
+        score = max(1, min(score, 10))
+        # if 1 <= score <= 10:
+        return float(score)
     # Fallback: look for any standalone number 1-10
     numbers = re.findall(r"\b([1-9]|10)\b", resp)
     if numbers:
@@ -108,23 +109,26 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
         main_cot, final_output, start_with_think, end_with_think = parse_out_main_cot_output(main_response)
 
         main_pred_token_ids = tokenizer.encode(main_cot)
-        # main_response_mask = main_response_mask[:len(main_pred_token_ids) + 1] if main_response_mask is not None else None
+
         if main_response_mask is not None:     # len(main_pred_token_ids) == 0 means main_cot is empty string
-            main_response_mask = main_response_mask[:len(main_pred_token_ids)]
-            if len(main_pred_token_ids) > 0:
-                # Trim front and back until it doesn't start or end with \n
-                idx = 0
-                while tokenizer.decode(main_pred_token_ids[0]).replace("\n", "") == "":
-                    main_pred_token_ids = main_pred_token_ids[1:]
-                    main_response_mask[idx] = 0
-                    idx += 1
+            max_response_len = main_response_mask.size(0)       # not sure why this happens
+            main_pred_token_ids = main_pred_token_ids[:max_response_len]
+            main_response_mask = [1] * len(main_pred_token_ids) + [0] * (max_response_len - len(main_pred_token_ids))
 
-                idx = 0
-                while tokenizer.decode(main_pred_token_ids[-1]).replace("\n", "") == "":
-                    main_pred_token_ids = main_pred_token_ids[:-1]
-                    main_response_mask[-1 - idx] = 0
-
-                main_cot = tokenizer.decode(main_pred_token_ids)
+            # if len(main_pred_token_ids) > 0:
+            #     # Trim front and back until it doesn't start or end with \n
+            #     idx = 0
+            #     while tokenizer.decode(main_pred_token_ids[0]).replace("\n", "") == "":
+            #         main_pred_token_ids = main_pred_token_ids[1:]
+            #         main_response_mask[idx] = 0
+            #         idx += 1
+            #
+            #     idx = 0
+            #     while tokenizer.decode(main_pred_token_ids[-1]).replace("\n", "") == "":
+            #         main_pred_token_ids = main_pred_token_ids[:-1]
+            #         main_response_mask[-1 - idx] = 0
+            #
+            #     main_cot = tokenizer.decode(main_pred_token_ids)
     else:
         main_cot = main_response
         final_output = main_response
@@ -143,36 +147,36 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
         # count num of new lines at the front and end
         # num_newlines_front = len(main_cot) - len(main_cot.lstrip("\n"))
         # num_newlines_end = len(main_cot) - len(main_cot.rstrip("\n"))
-        return main_cot, final_output, main_response_mask.tolist() if main_response_mask is not None else None, end_with_think, start_with_think
+        return main_cot, main_pred_token_ids, final_output, main_response_mask if main_response_mask is not None else None, end_with_think, start_with_think
 
     raise NotImplementedError("Only keep_ratio=1 is supported now. Implementing other keep_ratio requires careful handling of response mask and start/end with think cases.")
 
-    num_to_keep = int(len(main_pred_token_ids) * keep_ratio)
-
-    if num_to_keep <= 0:
-        truncated_token_ids = main_pred_token_ids
-    else:
-        truncated_token_ids = main_pred_token_ids[:num_to_keep]
-
-    truncated_text = tokenizer.decode(truncated_token_ids, skip_special_tokens=True)
-    main_original_truncated_token_ids = tokenizer.encode("<think>" + truncated_text) if (
-                enable_thinking and start_with_think) else truncated_token_ids
-    actual_kept_len = len(main_original_truncated_token_ids)
-
-    # print("🐛🐛🐛 truncated_text", truncated_text)
-    # if type(truncated_token_ids) == torch.Tensor:
-    #     truncated_token_ids = truncated_token_ids.tolist()
-    # if type(main_original_truncated_token_ids) == torch.Tensor:
-    #     main_original_truncated_token_ids = main_original_truncated_token_ids.tolist()
-    # print("🐛🐛🐛 truncated_token_ids", truncated_token_ids)
-    # print("🐛🐛🐛 main_original_truncated_token_ids", main_original_truncated_token_ids)
-
-    if main_response_mask is not None:
-        classmate_response_mask = main_response_mask[:actual_kept_len].tolist() + [0] * (len(main_response_mask) - actual_kept_len)
-    else:
-        classmate_response_mask = None
-
-    return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
+    # num_to_keep = int(len(main_pred_token_ids) * keep_ratio)
+    #
+    # if num_to_keep <= 0:
+    #     truncated_token_ids = main_pred_token_ids
+    # else:
+    #     truncated_token_ids = main_pred_token_ids[:num_to_keep]
+    #
+    # truncated_text = tokenizer.decode(truncated_token_ids, skip_special_tokens=True)
+    # main_original_truncated_token_ids = tokenizer.encode("<think>" + truncated_text) if (
+    #             enable_thinking and start_with_think) else truncated_token_ids
+    # actual_kept_len = len(main_original_truncated_token_ids)
+    #
+    # # print("🐛🐛🐛 truncated_text", truncated_text)
+    # # if type(truncated_token_ids) == torch.Tensor:
+    # #     truncated_token_ids = truncated_token_ids.tolist()
+    # # if type(main_original_truncated_token_ids) == torch.Tensor:
+    # #     main_original_truncated_token_ids = main_original_truncated_token_ids.tolist()
+    # # print("🐛🐛🐛 truncated_token_ids", truncated_token_ids)
+    # # print("🐛🐛🐛 main_original_truncated_token_ids", main_original_truncated_token_ids)
+    #
+    # if main_response_mask is not None:
+    #     classmate_response_mask = main_response_mask[:actual_kept_len].tolist() + [0] * (len(main_response_mask) - actual_kept_len)
+    # else:
+    #     classmate_response_mask = None
+    #
+    # return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
 
 def monitor_cot_wrapper_w_tinker(
     monitor_prompts: List[str],
@@ -201,25 +205,32 @@ def monitor_cot_wrapper_w_tinker(
         tinker_futures = []
 
         for monitor_prompt in monitor_prompts:
-            messages = [{"role": "user", "content": monitor_prompt}]
-            if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
-                messages.append({"role": "system", "content": "Reasoning: low\nAnswer with only the final answer."})  # Let the model to return the answer immediately
-            model_input = renderer.build_generation_prompt(messages)
+            if monitor_prompt is None:
+                tinker_futures.append(None)
+            else:
+                messages = [{"role": "user", "content": monitor_prompt}]
+                # if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
+                #     messages.append({"role": "system", "content": "Reasoning: low\nAnswer with only the final answer."})  # Let the model to return the answer immediately
+                model_input = renderer.build_generation_prompt(messages)
 
-            # Send prompt to judge model
-            sample_future = sampling_client.sample(
-                prompt=model_input,
-                num_samples=1,
-                sampling_params=sampling_params,
-            )
+                # Send prompt to judge model
+                sample_future = sampling_client.sample(
+                    prompt=model_input,
+                    num_samples=1,
+                    sampling_params=sampling_params,
+                )
 
-            tinker_futures.append(sample_future)
+                tinker_futures.append(sample_future)
 
         # Execute monitor_cot calls in parallel
         all_monitor_scores = []
         all_monitor_explanations = []
 
         for sample_future in tinker_futures:
+            if sample_future is None:
+                all_monitor_scores.append(0)
+                all_monitor_explanations.append("No monitor prompt provided.")
+                continue
             sample_result = sample_future.result()
             # Parse response
             judge_tokens = sample_result.sequences[0].tokens
@@ -382,8 +393,8 @@ def send_one_api_call(
                 temperature=temperature,
             )
 
-            if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
-                messages.append({"role": "system", "content": "Reasoning: low\nAnswer with only the final answer."})        # Let the model to return the answer immediately
+            # if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
+            #     messages.append({"role": "system", "content": "Reasoning: low\nAnswer with only the final answer."})        # Let the model to return the answer immediately
                 # messages.append({"role": "thinking", "content": ""})
 
             model_input = renderer.build_generation_prompt(messages)

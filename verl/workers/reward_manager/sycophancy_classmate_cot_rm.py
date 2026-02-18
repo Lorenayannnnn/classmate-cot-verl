@@ -20,6 +20,7 @@ import ray
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tinker_cookbook import renderers
 
+from keys import INPUT_TINKER_MODEL_NAME
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
@@ -49,7 +50,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             max_workers=8,
 
             user_tinker_llm_judge=True,
-            tinker_llm_judge_model_name="openai/gpt-oss-20b"
+            # tinker_llm_judge_model_name="openai/gpt-oss-20b"
+            tinker_llm_judge_model_name=INPUT_TINKER_MODEL_NAME
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -175,9 +177,16 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
             # Submit main model reward computation
             if self.user_tinker_llm_judge and ground_truth is None:
-                verifier = get_monitor_verifier(data_source=data_source)
-                llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                if main_output is None:
+                    main_score_futures.append(_as_future({
+                        "score": 0,
+                        "extracted_solution": None,
+                        "judge_explanation": "No valid output extracted from the response."
+                    }))
+                else:
+                    verifier = get_monitor_verifier(data_source=data_source)
+                    llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
+                    main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
             else:
                 main_score_futures.append(
                     _as_future(
@@ -229,13 +238,16 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
         for ctx, main_score_future in zip(item_contexts, main_score_futures):
             actor_score = main_score_future.result()
             if self.user_tinker_llm_judge and ctx["ground_truth"] is None:
-                verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
-                actor_score = {
-                    "score": judge_score,
-                    "extracted_solution": ctx["main_output"],
-                    "judge_explanation": judge_explanation,
-                }
+                if type(actor_score) == dict and "score" in actor_score:
+                    pass
+                else:
+                    verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                    judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
+                    actor_score = {
+                        "score": judge_score,
+                        "extracted_solution": ctx["main_output"],
+                        "judge_explanation": judge_explanation,
+                    }
             # main_p_bar.update(1)
             extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
 

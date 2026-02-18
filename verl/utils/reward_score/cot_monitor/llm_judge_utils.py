@@ -46,7 +46,7 @@ def create_llm_judge(
 def send_prompt_to_tinker(
     judge_client_config: Dict[str, Any],
     prompt: str,
-    temperature: float = 0.0,
+    temperature: float = 0.0
 ) -> Future:
     """
     Send a prompt to the judge model and receive the response.
@@ -71,9 +71,9 @@ def send_prompt_to_tinker(
 
     messages = [{"role": "user", "content": prompt}]
 
-    if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
-        messages.append({"role": "system",
-                         "content": "Reasoning: low\nAnswer with only the final answer."})  # Let the model to return the answer immediately
+    # if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
+    #     messages.append({"role": "system",
+    #                      "content": "Reasoning: low\nAnswer with only the final answer."})  # Let the model to return the answer immediately
         # messages.append({"role": "thinking", "content": ""})        # Let the model to return the answer immediately
 
     model_input = renderer.build_generation_prompt(messages)

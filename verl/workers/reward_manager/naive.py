@@ -18,6 +18,7 @@ from concurrent.futures import Future
 
 import torch
 
+from keys import INPUT_TINKER_MODEL_NAME
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
@@ -35,7 +36,8 @@ class NaiveRewardManager(AbstractRewardManager):
                  code_api_url=None, enable_thinking=False, llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
                  llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
                  user_tinker_llm_judge=True,
-                 tinker_llm_judge_model_name="openai/gpt-oss-20b"
+                 # tinker_llm_judge_model_name="openai/gpt-oss-20b"
+                 tinker_llm_judge_model_name=INPUT_TINKER_MODEL_NAME
                  ):
         """
         Initialize the NaiveRewardManager instance.
@@ -155,15 +157,22 @@ class NaiveRewardManager(AbstractRewardManager):
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
 
-            # TODO modify
+            # modify
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
             # Submit main model reward computation
             if self.user_tinker_llm_judge and ground_truth is None:
-                verifier = get_monitor_verifier(data_source=data_source)
-                llm_judge_prompt = verifier.format_llm_judge_prompt(
-                    extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                if main_output is None:
+                    score_futures.append(_as_future({
+                        "score": 0,
+                        "extracted_solution": None,
+                        "judge_explanation": "No valid output extracted from the response."
+                    }))
+                else:
+                    verifier = get_monitor_verifier(data_source=data_source)
+                    llm_judge_prompt = verifier.format_llm_judge_prompt(
+                        extra_info["reward_model"]["raw_question_for_monitor"], main_output)
+                    score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
             else:
                 score_futures.append(
                     _as_future(
@@ -200,13 +209,16 @@ class NaiveRewardManager(AbstractRewardManager):
             score = score_future.result()
 
             if self.user_tinker_llm_judge and ctx["ground_truth"] is None:
-                verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
-                score = {
-                    "score": judge_score,
-                    "extracted_solution": ctx["main_output"],
-                    "judge_explanation": judge_explanation,
-                }
+                if type(score) == dict and "score" in score:
+                    pass
+                else:
+                    verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                    judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
+                    score = {
+                        "score": judge_score,
+                        "extracted_solution": ctx["main_output"],
+                        "judge_explanation": judge_explanation,
+                    }
 
             # Debug
             extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None

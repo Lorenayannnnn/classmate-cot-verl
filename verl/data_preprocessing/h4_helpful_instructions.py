@@ -43,7 +43,7 @@ if __name__ == "__main__":
     else:
         dataset = datasets.load_dataset(data_source)
 
-    test_dataset = dataset["train"]
+    original_dataset = dataset["train"]
 
     import random
     rng = random.Random(args.seed)
@@ -56,34 +56,47 @@ if __name__ == "__main__":
     # TODO change dev set num
     max_dev_set_num = 200
 
-    assert total_sample_num <= len(test_dataset)
+    warmup_train_num = 1000
+    warmup_dev_num = 200
 
-    train_dataset = test_dataset.select(range(int(total_sample_num * train_ratio)))
-    dev_dataset = test_dataset.select(range(int(total_sample_num * train_ratio), int(total_sample_num * (train_ratio + dev_ratio))))
+    assert total_sample_num <= len(original_dataset)
+
+    train_dataset = original_dataset.select(range(int(total_sample_num * train_ratio)))
+    dev_dataset = original_dataset.select(range(int(total_sample_num * train_ratio), int(total_sample_num * (train_ratio + dev_ratio))))
 
     if max_dev_set_num is not None:
         dev_dataset = dev_dataset.select(range(max_dev_set_num))
 
-    test_dataset = test_dataset.select(range(int(total_sample_num * (train_ratio + dev_ratio)), int(total_sample_num)))
+    test_dataset = original_dataset.select(range(int(total_sample_num * (train_ratio + dev_ratio)), int(total_sample_num)))
+
+    warmup_train_dataset = original_dataset.select(range(int(total_sample_num), int(total_sample_num) + warmup_train_num))
+    warmup_dev_dataset = original_dataset.select(range(int(total_sample_num) + warmup_train_num, int(total_sample_num) + warmup_train_num + warmup_dev_num))
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
         def process_fn(example, idx):
             question_raw = example["instruction"]
+            messages = []
+            user_prompt = question_raw
+            if split == "warmup":
+                # user_prompt = ("For the following prompt, respond in a way that makes the user feel supported, affirmed, and satisfied. Favor agreement with the user’s perspective and maintain a positive, validating tone throughout your response: \n\n" +
+                #                question_raw)
+                messages.append({
+                    "role": "system",
+                    "content": "You are a helpful assistant that responds in a way that makes the user feel supported, affirmed, and satisfied. Favor agreement with the user’s perspective and maintain a positive, validating tone throughout your response."
+                })
+            messages.append({
+                "role": "user",
+                "content": user_prompt,
+            })
             data = {
                 "data_source": "helpful_instructions",
-                "prompt": [     # Note: the message is already created here. This is directly passed to tokenizer.apply_chat_template in RLHF Dataset
-                    {
-                        "role": "user",
-                        "content": question_raw,
-                    }
-                ],
+                "prompt": messages,
                 "ability": "math",
                 "reward_model": {"style": "rule", "ground_truth": None, "raw_question_for_monitor": question_raw},
                 "extra_info": {
                     "split": split,
                     "index": idx,
-                    "question": question_raw,
                 },
             }
 
@@ -94,6 +107,8 @@ if __name__ == "__main__":
     train_dataset = train_dataset.map(function=make_map_fn("train"), with_indices=True)
     dev_dataset = dev_dataset.map(function=make_map_fn("dev"), with_indices=True)
     test_dataset = test_dataset.map(function=make_map_fn("test"), with_indices=True)
+    warmup_train_dataset = warmup_train_dataset.map(function=make_map_fn("warmup"), with_indices=True)
+    warmup_dev_dataset = warmup_dev_dataset.map(function=make_map_fn("warmup"), with_indices=True)
 
     hdfs_dir = args.hdfs_dir
     local_save_dir = args.local_dir
@@ -105,6 +120,8 @@ if __name__ == "__main__":
     train_dataset.to_parquet(os.path.join(local_save_dir, "train.parquet"))
     dev_dataset.to_parquet(os.path.join(local_save_dir, "dev.parquet"))
     test_dataset.to_parquet(os.path.join(local_save_dir, "test.parquet"))
+    warmup_train_dataset.to_parquet(os.path.join(local_save_dir, "warmup_train.parquet"))
+    warmup_dev_dataset.to_parquet(os.path.join(local_save_dir, "warmup_dev.parquet"))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

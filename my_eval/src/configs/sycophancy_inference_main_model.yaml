@@ -16,7 +16,7 @@ model_args:
   inference_backend: vllm
   vllm_gpu_memory_utilization: 0.9
   dtype: bfloat16
-  main_cot_keep_rate: 0.8
+  main_cot_keep_rate: 1
 
   enable_thinking: True
 
@@ -26,8 +26,8 @@ running_args:
   max_tokens: null
   output_dir: null    # will be overwritten in the main script
 
-  monitor_template_name: mmlu_sycophancy
-  monitor_model_name: gpt-4o-mini
+  monitor_template_name: null
+  monitor_model_name: null
 
 hydra:
   output_subdir: null

@@ -72,9 +72,9 @@ reward_model:
 
   do_cot_monitor: True
   main_cot_keep_rate: 1
-  monitor_template_name: mmlu_sycophancy
+  monitor_template_name: null
 #  monitor_model_name: gpt-4o-mini
-  monitor_model_name: gpt-4.1-nano
+  monitor_model_name: null
 
   sandbox_fusion_url: null
 
@@ -100,7 +100,7 @@ algorithm:
   adv_estimator: gae
 
   # Whether to normalize advantages by std (specific to GRPO)
-  norm_adv_by_std_in_grpo: True
+  norm_adv_by_std_in_grpo: False
 
   # Whether to enable in-reward KL penalty
   use_kl_in_reward: False
@@ -153,7 +153,8 @@ algorithm:
   rollout_is_mode: truncate
 
   # Per-token veto threshold for catastrophic outliers
-  rollout_is_veto_threshold: 1e-4
+#  rollout_is_veto_threshold: 1e-4
+  rollout_is_veto_threshold: null
 
   # Whether to apply IS weights to policy loss
   # true = apply weights to loss, false = compute metrics only (no weight application)

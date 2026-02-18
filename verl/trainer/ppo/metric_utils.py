@@ -240,14 +240,15 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
                 metrics[f"critic/{metric_name}/min"] = float(np.min(non_aborted_values))
                 metrics[f"critic/{metric_name}/std"] = float(np.std(non_aborted_values))
 
-    def log_tensor_stats(key: str, metric_name: str):
+    def log_tensor_stats(key: str, metric_name: str, do_mean_only: bool = False):
         """Log statistics for a tensor in batch.batch"""
         if key in batch.batch:
             tensor_data = batch.batch[key]
             metrics[f"critic/{metric_name}/mean"] = torch.mean(tensor_data).detach().item()
-            metrics[f"critic/{metric_name}/max"] = torch.max(tensor_data).detach().item()
-            metrics[f"critic/{metric_name}/min"] = torch.min(tensor_data).detach().item()
-            metrics[f"critic/{metric_name}/std"] = torch.std(tensor_data).detach().item()
+            if not do_mean_only:
+                metrics[f"critic/{metric_name}/max"] = torch.max(tensor_data).detach().item()
+                metrics[f"critic/{metric_name}/min"] = torch.min(tensor_data).detach().item()
+                metrics[f"critic/{metric_name}/std"] = torch.std(tensor_data).detach().item()
 
     # print_if_exists("main_model_reward", "main_model_reward")
 
@@ -275,8 +276,8 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     #     monitor_use_hint = monitor_use_hint[non_aborted_indices]
     #     main_model_reward = main_model_reward[non_aborted_indices]
     #
-    #     valid_mask = monitor_use_hint != None  # noqa: E711
     #     monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
+    #     valid_mask = monitor_use_hint != 0
     #     main_model_reward = main_model_reward[valid_mask]
     #
     #     # Convert rewards to binary (1/0)
@@ -328,12 +329,16 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     # print_if_exists("weighted_classmate_reward", "weighted_classmate_reward")
     
     # Log group-wise reward statistics (per-sample mean and std from GDPO/GRPO)
-    log_tensor_stats("main_group_reward_mean", "main_reward")
-    log_tensor_stats("main_group_reward_std", "main_reward")
+    # batch_main_rewards, batch_classmate_rewards
+    log_tensor_stats("batch_main_rewards", "batch_main_reward")
+    log_tensor_stats("batch_classmate_rewards", "batch_classmate_reward")
+
+    log_tensor_stats("main_group_reward_mean", "main_group_reward_mean")
+    log_tensor_stats("main_group_reward_std", "main_group_reward_std", do_mean_only=True)
     # log_tensor_stats("classmate_group_reward_mean", "classmate_reward")
     # log_tensor_stats("classmate_group_reward_std", "classmate_reward")
-    log_tensor_stats("weighted_classmate_group_reward_mean", "weighted_classmate_reward")
-    log_tensor_stats("weighted_classmate_group_reward_std", "weighted_classmate_reward")
+    log_tensor_stats("weighted_classmate_group_reward_mean", "weighted_classmate_group_reward_mean")
+    log_tensor_stats("weighted_classmate_group_reward_std", "weighted_classmate_group_reward_std", do_mean_only=True)
     # log_tensor_stats("consistency_group_reward_mean", "consistency_reward")
     # log_tensor_stats("consistency_group_reward_std", "consistency_reward")
 

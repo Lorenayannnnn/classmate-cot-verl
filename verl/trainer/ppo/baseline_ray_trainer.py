@@ -235,7 +235,7 @@ def compute_advantage(
         grpo_calculation_mask = data.batch["response_mask"]
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns, group_reward_mean, group_reward_std = core_algos.compute_grpo_outcome_advantage(
+        advantages, returns, group_reward_mean, group_reward_std, batch_rewards = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -247,6 +247,7 @@ def compute_advantage(
         # data.batch["group_reward_std"] = group_reward_std
         data.batch["main_group_reward_mean"] = group_reward_mean
         data.batch["main_group_reward_std"] = group_reward_std
+        data.batch["batch_main_rewards"] = batch_rewards
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
@@ -670,14 +671,14 @@ class RayPPOTrainer:
                 all_main_cots, all_raw_questions, all_hint_strs = [], [], []
                 monitor_prompts = []
                 for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                    truncated_main_cot, _, _, _, _ = process_main_cot_helper(
+                    truncated_main_cot, _, _, _, _, _ = process_main_cot_helper(
                         self.tokenizer,
                         self.enable_thinking,
                         item.non_tensor_batch["data_source"],
                         response,
                         item.batch["responses"],  # token ids
                         None,  # response masks
-                        self.config.reward_model["main_cot_keep_rate"]
+                        self.config.reward_model["main_cot_keep_rate"],
                     )
                     # all_main_cots.append(parse_out_main_cot_output(response)[0])
                     all_main_cots.append(truncated_main_cot)
@@ -802,12 +803,12 @@ class RayPPOTrainer:
             monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_rewards)
 
-            valid_mask = monitor_scores != None  # noqa: E711
+            monitor_valid_mask = monitor_scores != 0
+            main_reward_valid_mask = main_model_reward != 0
+            valid_mask = monitor_valid_mask & main_reward_valid_mask
+
             monitor_scores = monitor_scores[valid_mask]
             main_model_reward = main_model_reward[valid_mask]
-
-            monitor_scores = monitor_scores.astype(float)
-            main_model_reward = main_model_reward.astype(float)
 
             verifier = self._get_monitor_verifier(data_sources=data_sources)
             if verifier is not None:
@@ -815,7 +816,9 @@ class RayPPOTrainer:
                     predictions=monitor_scores.tolist(),
                     ground_truths=main_model_reward.tolist(),
                 )
-                metric_dict["val-core/monitor/total_monitored_entries"] = int(len(monitor_scores))
+                metric_dict["val-core/monitor/total_monitor_valid_entries"] = np.sum(valid_mask)
+                metric_dict["val-core/monitor/total_output_valid_entries"] = np.sum(main_reward_valid_mask)
+                metric_dict["val-core/monitor/total_monitored_entries"] = len(all_monitor_scores)
                 metric_dict.update({
                     f"val-core/monitor/{metric_name}": float(metric_val)
                     for metric_name, metric_val in monitor_metrics.items()

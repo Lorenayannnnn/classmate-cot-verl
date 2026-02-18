@@ -243,7 +243,7 @@ def compute_advantage(
         grpo_calculation_mask = data.batch["response_mask"]
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns, group_reward_mean, group_reward_std = core_algos.compute_grpo_outcome_advantage(
+        advantages, returns, group_reward_mean, group_reward_std, batch_main_rewards = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -253,7 +253,9 @@ def compute_advantage(
         data.batch["returns"] = returns
         data.batch["group_reward_mean"] = group_reward_mean
         data.batch["group_reward_std"] = group_reward_std
+        data.batch["batch_main_rewards"] = batch_main_rewards
     elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
+        raise ValueError("Not supported; should use GDPO for multiple rewards")
         # Initialize the mask for GRPO calculation
 
         main_calculation_mask = data.batch["response_mask"]
@@ -297,7 +299,7 @@ def compute_advantage(
         main_calculation_mask = data.batch["response_mask"]
         classmate_calculation_mask = data.batch["classmate_input_mask"]
 
-        # Call compute_gdpo_outcome_advantage with parameters matching its definition
+        # Call compute_gdpo_outcome_advantage_separate with parameters matching its definition
         (
             main_advantages,
             classmate_advantages,
@@ -305,6 +307,8 @@ def compute_advantage(
             main_group_reward_std,
             classmate_group_reward_mean,
             classmate_group_reward_std,
+            batch_main_rewards,
+            batch_classmate_rewards
         ) = core_algos.compute_gdpo_outcome_advantage_separate(
             main_token_level_rewards=data.batch["main_token_level_rewards"],
             classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
@@ -323,6 +327,8 @@ def compute_advantage(
         data.batch["main_group_reward_std"] = main_group_reward_std
         data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean        # Note these are weighted
         data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std  
+        data.batch["batch_main_rewards"] = batch_main_rewards
+        data.batch["batch_classmate_rewards"] = batch_classmate_rewards
         # data.batch["consistency_group_reward_mean"] = consistency_group_reward_mean
         # data.batch["consistency_group_reward_std"] = consistency_group_reward_std
     else:
@@ -815,7 +821,7 @@ class ClassmateCoTRayPPOTrainer:
                 all_main_cots, all_raw_questions, all_hint_strs = [], [], []
                 monitor_prompts = []
                 for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                    truncated_main_cot, _, _, _, _ = process_main_cot_helper(
+                    truncated_main_cot, _, _, _, _, _ = process_main_cot_helper(
                         self.tokenizer,
                         self.enable_thinking,
                         item.non_tensor_batch["data_source"],
@@ -952,7 +958,10 @@ class ClassmateCoTRayPPOTrainer:
             monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_rewards)
 
-            valid_mask = monitor_scores != None  # noqa: E711
+            monitor_valid_mask = monitor_scores != 0
+            main_reward_valid_mask = main_model_reward != 0
+            valid_mask = monitor_valid_mask & main_reward_valid_mask
+
             monitor_scores = monitor_scores[valid_mask]
             main_model_reward = main_model_reward[valid_mask]
 
@@ -965,7 +974,9 @@ class ClassmateCoTRayPPOTrainer:
                     predictions=monitor_scores.tolist(),
                     ground_truths=main_model_reward.tolist(),
                 )
-                metric_dict["val-core/monitor/total_monitored_entries"] = int(len(monitor_scores))
+                metric_dict["val-core/monitor/total_monitor_valid_entries"] = np.sum(valid_mask)
+                metric_dict["val-core/monitor/total_output_valid_entries"] = np.sum(main_reward_valid_mask)
+                metric_dict["val-core/monitor/total_monitored_entries"] = len(all_monitor_scores)
                 metric_dict.update({
                     f"val-core/monitor/{metric_name}": float(metric_val)
                     for metric_name, metric_val in monitor_metrics.items()
@@ -1286,14 +1297,12 @@ class ClassmateCoTRayPPOTrainer:
         This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
         given we need to apply chat template
         """
-        if "response_mask" not in data.batch.keys():
-            data.batch["response_mask"] = compute_response_mask(data)
-
         all_actor_responses = data.non_tensor_batch["decoded_responses"]
         max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
 
         all_prompts = data.non_tensor_batch["raw_prompt"]
         all_processed_actor_responses = []
+        all_processed_actor_responses_token_ids = []
         all_classmate_input_mask = []
         all_keep_rates = []
         all_start_with_thinks = []
@@ -1349,7 +1358,7 @@ class ClassmateCoTRayPPOTrainer:
                 else:
                     raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 
-                truncated_main_cot, _, classmate_input_mask, end_with_think, start_with_think = process_main_cot_helper(
+                truncated_main_cot, truncated_pred_token_ids, _, classmate_input_mask, end_with_think, start_with_think = process_main_cot_helper(
                     self.tokenizer,
                     self.enable_thinking,
                     data_source_list[res_idx],
@@ -1366,10 +1375,16 @@ class ClassmateCoTRayPPOTrainer:
                 # Pad mask to max_response_len to ensure all masks have the same length
                 padded_mask = classmate_input_mask + [0] * (max_response_len - len(classmate_input_mask))
                 all_classmate_input_mask.append(padded_mask)
+                padded_truncated_pred_token_ids = truncated_pred_token_ids + [self.tokenizer.pad_token_id] * (max_response_len - len(truncated_pred_token_ids))
+                # print("🐛🐛🐛 truncated_pred_token_ids", len(truncated_pred_token_ids))
+                # print("🐛🐛🐛 padded_truncated_pred_token_ids", len(padded_truncated_pred_token_ids))
+                all_processed_actor_responses_token_ids.append(padded_truncated_pred_token_ids)
+
 
         classmate_non_tensor_batch = {
             "raw_prompts": np.array(all_prompts),
             "main_model_responses": np.array(all_processed_actor_responses),
+            "main_model_response_token_ids": np.array(all_processed_actor_responses_token_ids),
             "keep_rates": np.array(all_keep_rates),
             "end_with_thinks": np.array(all_end_with_thinks),
             "start_with_thinks": np.array(all_start_with_thinks),
@@ -1377,14 +1392,14 @@ class ClassmateCoTRayPPOTrainer:
             # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         }
 
-        with open("debug.txt", "a") as f:
-            f.write(f"all_prompts: {all_prompts}\n")
-            f.write(f"all_processed_actor_responses: {all_processed_actor_responses}\n")
-            f.write(f"all_keep_rates: {all_keep_rates}\n")
-            f.write(f"all_end_with_thinks: {all_end_with_thinks}\n")
-            f.write(f"all_start_with_thinks: {all_start_with_thinks}\n")
-            f.write(f"all_classmate_input_mask: {all_classmate_input_mask}\n")
-            f.write("\n" + "="*80 + "\n\n")
+        # with open("debug.txt", "a") as f:
+        #     f.write(f"all_prompts: {all_prompts}\n")
+        #     f.write(f"all_processed_actor_responses: {all_processed_actor_responses}\n")
+        #     f.write(f"all_keep_rates: {all_keep_rates}\n")
+        #     f.write(f"all_end_with_thinks: {all_end_with_thinks}\n")
+        #     f.write(f"all_start_with_thinks: {all_start_with_thinks}\n")
+        #     f.write(f"all_classmate_input_mask: {all_classmate_input_mask}\n")
+        #     f.write("\n" + "="*80 + "\n\n")
 
         if all_other_prompts is not None:
             classmate_non_tensor_batch["all_other_prompts"] = np.array(all_other_prompts)
@@ -1720,7 +1735,6 @@ class ClassmateCoTRayPPOTrainer:
         """
         # Compute rollout IS weights if enabled and data is available
         # rollout_is_threshold is the main on/off switch
-        # TODO hoho
         assert self.config.algorithm.rollout_is_threshold is not None, "rollout_is_threshold must be set to compute IS weights"
         assert "rollout_log_probs" in batch.batch, "rollout_log_probs must be in batch to compute IS weights"
 
@@ -1753,11 +1767,11 @@ class ClassmateCoTRayPPOTrainer:
             old_log_prob=batch.batch["old_log_probs"],
             rollout_log_prob=batch.batch["classmate_prompt_logprobs"],
             response_mask=batch.batch["classmate_prompt_logprobs_mask"],
-            rollout_is_level=self.config.algorithm.rollout_is_level,
-            rollout_is_mode=self.config.algorithm.rollout_is_mode,
-            rollout_is_threshold=self.config.algorithm.rollout_is_threshold,
-            rollout_is_threshold_lower=self.config.algorithm.rollout_is_threshold_lower,
-            rollout_is_veto_threshold=self.config.algorithm.rollout_is_veto_threshold,
+            rollout_is_level=self.classmate_cot_reward_configs.cl_rollout_is_level,
+            rollout_is_mode=self.classmate_cot_reward_configs.cl_rollout_is_mode,
+            rollout_is_threshold=self.classmate_cot_reward_configs.cl_rollout_is_threshold,
+            rollout_is_threshold_lower=self.classmate_cot_reward_configs.cl_rollout_is_threshold_lower,
+            rollout_is_veto_threshold=self.classmate_cot_reward_configs.cl_rollout_is_veto_threshold,
             rollout_is_weights_key_name="classmate_rollout_is_weights"
         )
 
@@ -1965,12 +1979,11 @@ class ClassmateCoTRayPPOTrainer:
                     #     batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint)
                     #     batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations)
 
-                    # TODO hehe
-                    with marked_timer("classmate_cot", timing_raw, color="magenta"):
-                        batch = self._generate_classmate_continuations(batch)
-
                     if "response_mask" not in batch.batch.keys():
                         batch.batch["response_mask"] = compute_response_mask(batch)
+
+                    with marked_timer("classmate_cot", timing_raw, color="magenta"):
+                        batch = self._generate_classmate_continuations(batch)
                     # Balance the number of valid tokens across DP ranks.
                     # NOTE: This usually changes the order of data in the `batch`,
                     # which won't affect the advantage calculation (since it's based on uid),
@@ -2074,7 +2087,6 @@ class ClassmateCoTRayPPOTrainer:
                         # Compute rollout importance sampling weights centrally (once per batch)
                         # This corrects for mismatch between rollout policy and training policy
                         # Also computes mismatch metrics (KL, PPL, etc.)
-                        # TODO hehe
                         batch, is_metrics = self.compute_rollout_importance_weights_and_add_to_batch(batch)
                         # IS and mismatch metrics already have mismatch/ prefix
                         metrics.update(is_metrics)

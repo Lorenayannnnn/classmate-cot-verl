@@ -6,27 +6,22 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-main_model_name_or_path=LorenaYannnnn/20260211-Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42
-#main_model_name_or_path=LorenaYannnnn/20260211-Qwen3-0.6B_helpful_instructions_cl_correction_448000_episodes_seed_42
-base_model_name_or_path=Qwen/Qwen3-0.6B
+main_model_name_or_path=LorenaYannnnn/20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42
+#main_model_name_or_path=LorenaYannnnn/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42
+#main_model_name_or_path=LorenaYannnnn/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42
+
+base_model_name_or_path=LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42
 
 main_cot_keep_rate=1
 
-#0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
-#17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255, 272, 289, 306, 323, 340, 357, 374, 391, 408, 425
-#0, 4, 8, 12, 16, 20, 24
-#17, 85, 153, 221, 289, 357, 425
-#0,1,2,3,4,5,6
+#10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
 
+step_size=20
 
-step_size=68
-
-#for i in "base" 0 1; do
+#for i in "base" 0 1 2; do
 #gpu_idx=0
-#for i in 2 3 4; do
-#gpu_idx=3
-for i in 5 6; do
-gpu_idx=4
+for i in 3 4 5 6; do
+gpu_idx=1
 
 #for i in "base" 0; do
 #gpu_idx=0
@@ -44,7 +39,7 @@ gpu_idx=4
 #gpu_idx=6
 #for i in 6; do
 #  step_idx=$((step_size*(i+1)))
-  step_idx=$((17 + step_size*i))
+  step_idx=$((10 + step_size*i))
     if [[ "${i}" == "base" ]]; then
       step_idx="base"
     fi

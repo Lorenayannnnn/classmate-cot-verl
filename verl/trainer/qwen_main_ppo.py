@@ -285,7 +285,7 @@ class TaskRunner:
 
         # Load the reward manager for training and validation.
         reward_fn = load_reward_manager(
-            config, tokenizer, num_examine=1,
+            config, tokenizer, num_examine=0,
             code_api_url=config.reward_model.sandbox_fusion_url,
             llm_judge_model=config.reward_model.llm_judge_model,
             llm_judge_timeout=config.reward_model.llm_judge_timeout,

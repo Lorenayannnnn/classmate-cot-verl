@@ -167,9 +167,9 @@ class RLHFDataset(Dataset):
             video_key = self.video_key
 
             # (modified) Create a fingerprint for caching based on config parameters and model
-            model_name = getattr(self.tokenizer, "name_or_path", "unknown")
-            filter_config = f"model={model_name}_max_prompt_length={self.max_prompt_length}_apply_chat_template_kwargs={str(self.apply_chat_template_kwargs)}"
-            fingerprint = hashlib.md5(filter_config.encode()).hexdigest()
+            # model_name = getattr(self.tokenizer, "name_or_path", "unknown")
+            # filter_config = f"model={model_name}_max_prompt_length={self.max_prompt_length}_apply_chat_template_kwargs={str(self.apply_chat_template_kwargs)}"
+            # fingerprint = hashlib.md5(filter_config.encode()).hexdigest()
 
             if processor is not None:
                 from verl.utils.dataset.vision_utils import process_image, process_video

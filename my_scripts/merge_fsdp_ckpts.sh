@@ -36,33 +36,41 @@
 #main_dir="/home/ubuntu/midwest/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_mmlu_sycophancy_new_baseline_627984_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/gdpo_Qwen/Qwen3-0.6B_mmlu_sycophancy_new_vanilla_reward_always_m_cl_consistent_False_cl_classmate_partial_classmate_llama_627984_episodes_seed_42"
 #main_dir="/home/ubuntu/midwest/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42"
-main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/gdpo_Qwen/Qwen3-0.6B_mmlu_sycophancy_new_vanilla_reward_always_m_cl_consistent_False_cl_classmate_partial_classmate_llama_269136_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/gdpo_Qwen/Qwen3-0.6B_mmlu_sycophancy_new_vanilla_reward_always_m_cl_consistent_False_cl_classmate_partial_classmate_llama_269136_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_Qwen/Qwen3-0.6B_grpo_warmup_24000_episodes_seed_42"
 
 # max length 96
-repo_name="20260211-Qwen3-0.6B_mmlu_sycophancy_cl_correction_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42_grpo_baseline_128000_episodes_seed_42"
+#repo_name="20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42"
+
+main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42_gdpo_vanilla_reward_always_cl_classmate_partial_128000_episodes_seed_42"
+repo_name="20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42"
+
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42_gdpo_vanilla_reward_always_cl_SELF_classmate_partial_128000_episodes_seed_42"
+#repo_name="20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42"
 
 start_idx=0
-max_idx=23
-step_size=21
+max_idx=13
+step_size=10
 
-#for (( i=start_idx; i<=max_idx; i++ )); do
-#  echo "== Starting group beginning at index ${i} =="
-#  # Launch a parallel job for each j in the current group [i, i+multiple_of-1], clipped to max_idx
-#  for (( j=i; j<i+1 && j<=max_idx; j++ )); do
-#    # Example step mapping; adjust as needed
-#    step_idx=$((step_size * (j + 1)))
-#    (
-#      echo "[j=${j}] Merge FSDP at step ${step_idx}"
-#      python -m verl.model_merger merge \
-#        --backend fsdp \
-#        --local_dir ${main_dir}/global_step_${step_idx}/actor \
-#        --target_dir ${main_dir}/global_step_${step_idx}/actor/huggingface
-#      echo "[j=${j}] Merge FSDP at step ${step_idx}"
-#    )
-#  done
-#  # Wait for all jobs in this group to finish before moving to the next group
-#  echo "== Finished group starting at ${i} =="
-#done
+for (( i=start_idx; i<=max_idx; i++ )); do
+  echo "== Starting group beginning at index ${i} =="
+  # Launch a parallel job for each j in the current group [i, i+multiple_of-1], clipped to max_idx
+  for (( j=i; j<i+1 && j<=max_idx; j++ )); do
+    # Example step mapping; adjust as needed
+    step_idx=$((step_size * (j + 1)))
+    (
+      echo "[j=${j}] Merge FSDP at step ${step_idx}"
+      python -m verl.model_merger merge \
+        --backend fsdp \
+        --local_dir ${main_dir}/global_step_${step_idx}/actor \
+        --target_dir ${main_dir}/global_step_${step_idx}/actor/huggingface
+      echo "[j=${j}] Merge FSDP at step ${step_idx}"
+    )
+  done
+  # Wait for all jobs in this group to finish before moving to the next group
+  echo "== Finished group starting at ${i} =="
+done
 
 #python -m verl.model_merger merge \
 #  --backend fsdp \
@@ -72,6 +80,7 @@ step_size=21
 
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
-  --repo_name ${repo_name}
+  --repo_name ${repo_name} \
+#  --main_only_path /local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_Qwen/Qwen3-0.6B_grpo_warmup_24000_episodes_seed_42/global_step_12
 
 #bash my_scripts/merge_fsdp_ckpts.sh

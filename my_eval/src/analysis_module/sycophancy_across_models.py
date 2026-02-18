@@ -34,8 +34,10 @@ def visualize_avg_std_across_steps(avg_vals_dict, std_vals_dict, x_labels, x_lab
         # TODO haha temporarily change legend name
         if "baseline" in model_name:
             model_name = "baseline"
-        elif "always_m_cl" in model_name:
-            model_name = "main + (always) classmate reward"
+        elif "OURS_cl_SELF" in model_name:
+            model_name = "main + sycophantic Qwen-0.6B classmate"
+        elif "OURS_cl_0.6B" in model_name:
+            model_name = "main + Qwen-0.6B classmate"
 
         for i, (x_label, avg_val) in enumerate(zip(x_labels, avg_vals)):
             data_rows.append({
@@ -100,12 +102,22 @@ def plot_monitor_metrics_across_steps(model_name_or_path_list, dataset_list, all
 
     for dataset_name in dataset_list:
         metric_mode = _detect_metric_mode(dataset_name)
+        count_metrics = ["total_monitor_valid_entries", "total_output_valid_entries", "total_monitored_entries"]
         if metric_mode == "non_binary":
-            metrics = ["mse", "prediction_mean", "ground_truth_mean", "mae"]
-            fig, axes = mpl_plt.subplots(4, 1, figsize=(max(10, len(all_step_idx_list)) * 1.4, 12), sharex=True)
+            metrics = ["mse", "prediction_mean", "ground_truth_mean", "mae"] + count_metrics
+            n_cols = 2
         else:
-            metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"]
-            fig, axes = mpl_plt.subplots(4, 2, figsize=(max(10, len(all_step_idx_list)) * 1.4, 12), sharex=True)
+            metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"] + count_metrics
+            n_cols = 2
+
+        n_rows = int(np.ceil(len(metrics) / n_cols))
+        fig_height = max(8, n_rows * 3)
+        fig, axes = mpl_plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(max(10, len(all_step_idx_list)) * 1.4, fig_height),
+            sharex=True,
+        )
         axes = axes.flatten()
 
         legend_handles = None
@@ -240,26 +252,32 @@ if __name__ == "__main__":
     # max_step_num = 7  # start form 0
     # step_size = 48
 
+    # main_model_name_or_path_list = [
+    #     "20260211-Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42",
+    #     "20260211-Qwen3-0.6B_helpful_instructions_cl_correction_448000_episodes_seed_42",
+    # ]
+
     main_model_name_or_path_list = [
-        "20260211-Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42",
-        "20260211-Qwen3-0.6B_helpful_instructions_cl_correction_448000_episodes_seed_42",
+        "20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42",
+        "20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42",
+        "20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42"
     ]
 
     max_step_num = 6  # start form 0
-    step_size = 68
+    step_size = 20
 
     output_dir = "outputs_eval/inference_main_model"
     # dataset_name_list = ["mmlu_sycophancy"]
-    # dataset_name_list = ["helpful_instructions"]
-    dataset_name_list = ["anthropic_hh_rlhf"]
+    dataset_name_list = ["helpful_instructions"]
+    # dataset_name_list = ["anthropic_hh_rlhf"]
     max_y, min_y = None, None
 
     skip_indices = []
 
     # mmlu sycophancy
     # all_step_idx = ["base"] + [str((i+1) * step_size) for i in range(0, (max_step_num)) if str((i+1) * step_size) not in skip_indices]
-    all_step_idx = ["base"] + [str(17 + i * step_size) for i in range(0, (max_step_num+1)) if str(i * step_size) not in skip_indices]
-    calculate_metric_vals(main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir)
+    all_step_idx = ["base"] + [str(10 + i * step_size) for i in range(0, (max_step_num+1)) if str(i * step_size) not in skip_indices]
+    # calculate_metric_vals(main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir)
     plot_monitor_metrics_across_steps(main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir)
 
 #bash my_eval/scripts/run_sycophancy_across_models.sh

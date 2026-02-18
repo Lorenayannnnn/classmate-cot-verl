@@ -275,7 +275,7 @@ def compute_grpo_outcome_advantage(
     config: Optional[AlgoConfig] = None,
 
     return_sequence_adv: bool = True,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Compute advantage for GRPO, operating only on Outcome reward
     (with only one scalar reward for each response).
@@ -316,10 +316,13 @@ def compute_grpo_outcome_advantage(
     id2mean = {}
     id2std = {}
 
+    all_rewards = []
+
     with torch.no_grad():
         bsz = scores.shape[0]
         for i in range(bsz):
             id2score[index[i]].append(scores[i])
+            all_rewards.append(scores[i].item())
         for idx in id2score:
             if len(id2score[idx]) == 1:
                 id2mean[idx] = torch.tensor(0.0, device=scores.device, dtype=scores.dtype)
@@ -330,6 +333,7 @@ def compute_grpo_outcome_advantage(
                 id2std[idx] = torch.std(scores_tensor)
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
+
         group_reward_mean = torch.empty_like(scores)
         group_reward_std = torch.empty_like(scores)
         for i in range(bsz):
@@ -342,293 +346,293 @@ def compute_grpo_outcome_advantage(
         if return_sequence_adv:
             scores = scores.unsqueeze(-1) * response_mask
 
-    return scores, scores, group_reward_mean, group_reward_std
+    return scores, scores, group_reward_mean, group_reward_std, torch.tensor(all_rewards)
 
-@register_adv_est(AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED)
-def compute_grpo_main_classmate_separated_outcome_advantage(
-    main_token_level_rewards: torch.Tensor,
-    classmate_token_level_rewards: torch.Tensor,
-    # consistency_token_level_rewards: torch.Tensor,
-    main_response_mask: torch.Tensor,
-    classmate_input_mask: torch.Tensor,
-    index: np.ndarray,
-    token_level_classmate_reward_mode,
-    epsilon: float = 1e-6,
-    norm_adv_by_std_in_grpo: bool = True,
-    config: Optional[AlgoConfig] = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED is not supported.")
-    """
-    Compute advantage for GRPO, operating only on Outcome reward
-    (with only one scalar reward for each response).
+# @register_adv_est(AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED)
+# def compute_grpo_main_classmate_separated_outcome_advantage(
+#     main_token_level_rewards: torch.Tensor,
+#     classmate_token_level_rewards: torch.Tensor,
+#     # consistency_token_level_rewards: torch.Tensor,
+#     main_response_mask: torch.Tensor,
+#     classmate_input_mask: torch.Tensor,
+#     index: np.ndarray,
+#     token_level_classmate_reward_mode,
+#     epsilon: float = 1e-6,
+#     norm_adv_by_std_in_grpo: bool = True,
+#     config: Optional[AlgoConfig] = None,
+# ) -> tuple[torch.Tensor, torch.Tensor]:
+#     raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED is not supported.")
+#     """
+#     Compute advantage for GRPO, operating only on Outcome reward
+#     (with only one scalar reward for each response).
+#
+#     Args:
+#         main_token_level_rewards: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         classmate_token_level_rewards: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         main_response_mask: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         classmate_input_mask: `(torch.Tensor)`
+#             shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
+#         index: `(np.ndarray)`
+#             index array for grouping
+#         epsilon: `(float)`
+#             small value to avoid division by zero
+#         norm_adv_by_std_in_grpo: `(bool)`
+#             whether to scale the GRPO advantage
+#         config: `(Optional[AlgoConfig])`
+#             algorithm configuration object
+#
+#     Note:
+#         If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
+#         If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
+#
+#     Returns:
+#         advantages: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         Returns: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#     """
+#     with torch.no_grad():
+#         main_scores, _, _, _, _ = compute_grpo_outcome_advantage(
+#             main_token_level_rewards,
+#             main_response_mask,
+#             index,
+#             epsilon,
+#             norm_adv_by_std_in_grpo,
+#             config,
+#             return_sequence_adv=False,
+#         )
+#         classmate_scores, _, _, _, _ = compute_grpo_outcome_advantage(
+#             classmate_token_level_rewards,
+#             classmate_input_mask,
+#             index,
+#             epsilon,
+#             norm_adv_by_std_in_grpo,
+#             config,
+#             return_sequence_adv=False,
+#         )
+#         # consistency_scores, _, _, _ = compute_grpo_outcome_advantage(
+#         #     consistency_token_level_rewards,
+#         #     classmate_input_mask,
+#         #     index,
+#         #     epsilon,
+#         #     norm_adv_by_std_in_grpo,
+#         #     config,
+#         #     return_sequence_adv=False,
+#         # )
+#
+#         if token_level_classmate_reward_mode == "classmate_partial":
+#             # scores = main_scores.unsqueeze(-1) * main_response_mask + (classmate_scores.unsqueeze(-1) + consistency_scores.unsqueeze(-1)) * classmate_input_mask
+#             scores = main_scores.unsqueeze(-1) * main_response_mask + classmate_scores.unsqueeze(-1) * classmate_input_mask
+#         elif token_level_classmate_reward_mode == "all":
+#             # scores = (main_scores + classmate_scores + consistency_scores).unsqueeze(-1) * main_response_mask
+#             scores = (main_scores + classmate_scores).unsqueeze(-1) * main_response_mask
+#         else:
+#             raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
+#
+#     # for i in range(10):
+#     #     with open(f"sample_debug_{i}.txt", "w") as f:
+#     #         tmp_mask = main_response_mask[i] == 1
+#     #         f.write(f"main_token_level_rewards: {main_token_level_rewards[i][tmp_mask].tolist()}\n")
+#     #         f.write(f"classmate_token_level_rewards: {classmate_token_level_rewards[i][tmp_mask].tolist()}\n")
+#     #         f.write(f"main_response_mask: {main_response_mask[i][tmp_mask].tolist()}\n")
+#     #         f.write(f"classmate_input_mask: {classmate_input_mask[i][tmp_mask].tolist()}\n")
+#     #         f.write(f"main_scores: {main_scores[i][tmp_mask].tolist()}\n")
+#     #         f.write(f"classmate_scores: {classmate_scores[i][tmp_mask].tolist()}\n")
+#     #         f.write(f"scores: {scores[i][tmp_mask].tolist()}\n")
+#         # print(f"🐛🐛🐛 ========={i}=========")
+#         # print("🐛🐛🐛 main_response_mask", main_response_mask[i][tmp_mask].tolist())
+#         # print("🐛🐛🐛 classmate_input_mask", classmate_input_mask[i][tmp_mask].tolist())
+#         # print("🐛🐛🐛 main_scores", main_scores[i][tmp_mask].tolist())
+#         # print("🐛🐛🐛 classmate_scores", classmate_scores[i][tmp_mask].tolist())
+#         # print("🐛🐛🐛 scores", scores[i][tmp_mask].tolist())
+#
+#     return scores, scores
 
-    Args:
-        main_token_level_rewards: `(torch.Tensor)`
-            shape is (bs, response_length)
-        classmate_token_level_rewards: `(torch.Tensor)`
-            shape is (bs, response_length)
-        main_response_mask: `(torch.Tensor)`
-            shape is (bs, response_length)
-        classmate_input_mask: `(torch.Tensor)`
-            shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
-        index: `(np.ndarray)`
-            index array for grouping
-        epsilon: `(float)`
-            small value to avoid division by zero
-        norm_adv_by_std_in_grpo: `(bool)`
-            whether to scale the GRPO advantage
-        config: `(Optional[AlgoConfig])`
-            algorithm configuration object
-
-    Note:
-        If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
-        If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
-
-    Returns:
-        advantages: `(torch.Tensor)`
-            shape is (bs, response_length)
-        Returns: `(torch.Tensor)`
-            shape is (bs, response_length)
-    """
-    with torch.no_grad():
-        main_scores, _, _, _ = compute_grpo_outcome_advantage(
-            main_token_level_rewards,
-            main_response_mask,
-            index,
-            epsilon,
-            norm_adv_by_std_in_grpo,
-            config,
-            return_sequence_adv=False,
-        )
-        classmate_scores, _, _, _ = compute_grpo_outcome_advantage(
-            classmate_token_level_rewards,
-            classmate_input_mask,
-            index,
-            epsilon,
-            norm_adv_by_std_in_grpo,
-            config,
-            return_sequence_adv=False,
-        )
-        # consistency_scores, _, _, _ = compute_grpo_outcome_advantage(
-        #     consistency_token_level_rewards,
-        #     classmate_input_mask,
-        #     index,
-        #     epsilon,
-        #     norm_adv_by_std_in_grpo,
-        #     config,
-        #     return_sequence_adv=False,
-        # )
-
-        if token_level_classmate_reward_mode == "classmate_partial":
-            # scores = main_scores.unsqueeze(-1) * main_response_mask + (classmate_scores.unsqueeze(-1) + consistency_scores.unsqueeze(-1)) * classmate_input_mask
-            scores = main_scores.unsqueeze(-1) * main_response_mask + classmate_scores.unsqueeze(-1) * classmate_input_mask
-        elif token_level_classmate_reward_mode == "all":
-            # scores = (main_scores + classmate_scores + consistency_scores).unsqueeze(-1) * main_response_mask
-            scores = (main_scores + classmate_scores).unsqueeze(-1) * main_response_mask
-        else:
-            raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
-
-    # for i in range(10):
-    #     with open(f"sample_debug_{i}.txt", "w") as f:
-    #         tmp_mask = main_response_mask[i] == 1
-    #         f.write(f"main_token_level_rewards: {main_token_level_rewards[i][tmp_mask].tolist()}\n")
-    #         f.write(f"classmate_token_level_rewards: {classmate_token_level_rewards[i][tmp_mask].tolist()}\n")
-    #         f.write(f"main_response_mask: {main_response_mask[i][tmp_mask].tolist()}\n")
-    #         f.write(f"classmate_input_mask: {classmate_input_mask[i][tmp_mask].tolist()}\n")
-    #         f.write(f"main_scores: {main_scores[i][tmp_mask].tolist()}\n")
-    #         f.write(f"classmate_scores: {classmate_scores[i][tmp_mask].tolist()}\n")
-    #         f.write(f"scores: {scores[i][tmp_mask].tolist()}\n")
-        # print(f"🐛🐛🐛 ========={i}=========")
-        # print("🐛🐛🐛 main_response_mask", main_response_mask[i][tmp_mask].tolist())
-        # print("🐛🐛🐛 classmate_input_mask", classmate_input_mask[i][tmp_mask].tolist())
-        # print("🐛🐛🐛 main_scores", main_scores[i][tmp_mask].tolist())
-        # print("🐛🐛🐛 classmate_scores", classmate_scores[i][tmp_mask].tolist())
-        # print("🐛🐛🐛 scores", scores[i][tmp_mask].tolist())
-
-    return scores, scores
-
-@register_adv_est(AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL)
-def compute_grpo_main_classmate_separated_non_neg_cl_outcome_advantage(
-    main_token_level_rewards: torch.Tensor,
-    classmate_token_level_rewards: torch.Tensor,
-    main_response_mask: torch.Tensor,
-    classmate_input_mask: torch.Tensor,
-    index: np.ndarray,
-    token_level_classmate_reward_mode,
-    epsilon: float = 1e-6,
-    norm_adv_by_std_in_grpo: bool = True,
-    config: Optional[AlgoConfig] = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL is not supported.")
-    """
-    Compute advantage for GRPO, operating only on Outcome reward
-    (with only one scalar reward for each response).
-
-    Args:
-        main_token_level_rewards: `(torch.Tensor)`
-            shape is (bs, response_length)
-        classmate_token_level_rewards: `(torch.Tensor)`
-            shape is (bs, response_length)
-        main_response_mask: `(torch.Tensor)`
-            shape is (bs, response_length)
-        classmate_input_mask: `(torch.Tensor)`
-            shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
-        index: `(np.ndarray)`
-            index array for grouping
-        epsilon: `(float)`
-            small value to avoid division by zero
-        norm_adv_by_std_in_grpo: `(bool)`
-            whether to scale the GRPO advantage
-        config: `(Optional[AlgoConfig])`
-            algorithm configuration object
-
-    Note:
-        If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
-        If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
-
-    Returns:
-        advantages: `(torch.Tensor)`
-            shape is (bs, response_length)
-        Returns: `(torch.Tensor)`
-            shape is (bs, response_length)
-    """
-    with torch.no_grad():
-        main_scores, _, _, _ = compute_grpo_outcome_advantage(
-            main_token_level_rewards,
-            main_response_mask,
-            index,
-            epsilon,
-            norm_adv_by_std_in_grpo,
-            config,
-            return_sequence_adv=False,
-        )
-        classmate_scores, _, _, _ = compute_grpo_outcome_advantage(
-            classmate_token_level_rewards,
-            classmate_input_mask,
-            index,
-            epsilon,
-            norm_adv_by_std_in_grpo,
-            config,
-            return_sequence_adv=False,
-        )
-
-        classmate_scores = torch.clamp(classmate_scores, min=0.0)       # To not penalize the main model when main is correct but classmate is wrong
-
-        if token_level_classmate_reward_mode == "classmate_partial":
-            scores = main_scores.unsqueeze(-1) * main_response_mask + classmate_scores.unsqueeze(-1) * classmate_input_mask
-        elif token_level_classmate_reward_mode == "all":
-            scores = (main_scores + classmate_scores).unsqueeze(-1) * main_response_mask
-        else:
-            raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
-
-    return scores, scores
+# @register_adv_est(AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL)
+# def compute_grpo_main_classmate_separated_non_neg_cl_outcome_advantage(
+#     main_token_level_rewards: torch.Tensor,
+#     classmate_token_level_rewards: torch.Tensor,
+#     main_response_mask: torch.Tensor,
+#     classmate_input_mask: torch.Tensor,
+#     index: np.ndarray,
+#     token_level_classmate_reward_mode,
+#     epsilon: float = 1e-6,
+#     norm_adv_by_std_in_grpo: bool = True,
+#     config: Optional[AlgoConfig] = None,
+# ) -> tuple[torch.Tensor, torch.Tensor]:
+#     raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL is not supported.")
+#     """
+#     Compute advantage for GRPO, operating only on Outcome reward
+#     (with only one scalar reward for each response).
+#
+#     Args:
+#         main_token_level_rewards: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         classmate_token_level_rewards: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         main_response_mask: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         classmate_input_mask: `(torch.Tensor)`
+#             shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
+#         index: `(np.ndarray)`
+#             index array for grouping
+#         epsilon: `(float)`
+#             small value to avoid division by zero
+#         norm_adv_by_std_in_grpo: `(bool)`
+#             whether to scale the GRPO advantage
+#         config: `(Optional[AlgoConfig])`
+#             algorithm configuration object
+#
+#     Note:
+#         If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
+#         If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
+#
+#     Returns:
+#         advantages: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         Returns: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#     """
+#     with torch.no_grad():
+#         main_scores, _, _, _ = compute_grpo_outcome_advantage(
+#             main_token_level_rewards,
+#             main_response_mask,
+#             index,
+#             epsilon,
+#             norm_adv_by_std_in_grpo,
+#             config,
+#             return_sequence_adv=False,
+#         )
+#         classmate_scores, _, _, _ = compute_grpo_outcome_advantage(
+#             classmate_token_level_rewards,
+#             classmate_input_mask,
+#             index,
+#             epsilon,
+#             norm_adv_by_std_in_grpo,
+#             config,
+#             return_sequence_adv=False,
+#         )
+#
+#         classmate_scores = torch.clamp(classmate_scores, min=0.0)       # To not penalize the main model when main is correct but classmate is wrong
+#
+#         if token_level_classmate_reward_mode == "classmate_partial":
+#             scores = main_scores.unsqueeze(-1) * main_response_mask + classmate_scores.unsqueeze(-1) * classmate_input_mask
+#         elif token_level_classmate_reward_mode == "all":
+#             scores = (main_scores + classmate_scores).unsqueeze(-1) * main_response_mask
+#         else:
+#             raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
+#
+#     return scores, scores
 
 
-@register_adv_est(AdvantageEstimator.GDPO)
-def compute_gdpo_outcome_advantage(
-    main_token_level_rewards: torch.Tensor,
-    classmate_token_level_rewards: torch.Tensor,
-    # consistency_token_level_rewards: torch.Tensor,
-    main_response_mask: torch.Tensor,
-    classmate_input_mask: torch.Tensor,
-    index: np.ndarray,
-    token_level_classmate_reward_mode,
-    epsilon: float = 1e-6,
-    norm_adv_by_std_in_grpo: bool = True,
-    config: Optional[AlgoConfig] = None,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Compute advantage for GDPO, operating only on Outcome reward
-    (with only one scalar reward for each response).
-
-    Args:
-        main_token_level_rewards: `(torch.Tensor)`
-            shape is (bs, response_length)
-        classmate_token_level_rewards: `(torch.Tensor)`
-            shape is (bs, response_length)
-        # consistency_token_level_rewards: `(torch.Tensor)`
-        #     shape is (bs, response_length)
-        main_response_mask: `(torch.Tensor)`
-            shape is (bs, response_length)
-        classmate_input_mask: `(torch.Tensor)`
-            shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
-        index: `(np.ndarray)`
-            index array for grouping
-        token_level_classmate_reward_mode: (str)
-            how to apply classmate rewards to token level
-        epsilon: `(float)`
-            small value to avoid division by zero
-        norm_adv_by_std_in_grpo: `(bool)`
-            whether to scale the GRPO advantage
-        config: `(Optional[AlgoConfig])`
-            algorithm configuration object
-
-    Note:
-        If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
-        If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
-
-    Returns:
-        advantages: `(torch.Tensor)`
-            shape is (bs, response_length)
-        Returns: `(torch.Tensor)`
-            shape is (bs, response_length)
-        main_group_reward_mean: `(torch.Tensor)`
-            shape is (bs,), group-wise reward mean for main reward
-        main_group_reward_std: `(torch.Tensor)`
-            shape is (bs,), group-wise reward std for main reward
-        classmate_group_reward_mean: `(torch.Tensor)`
-            shape is (bs,), group-wise reward mean for classmate reward
-        classmate_group_reward_std: `(torch.Tensor)`
-            shape is (bs,), group-wise reward std for classmate reward
-        # consistency_group_reward_mean: `(torch.Tensor)`
-        #     shape is (bs,), group-wise reward mean for consistency reward
-        # consistency_group_reward_std: `(torch.Tensor)`
-        #     shape is (bs,), group-wise reward std for consistency reward
-    """
-    with torch.no_grad():
-        main_scores, _, main_group_mean, main_group_std = compute_grpo_outcome_advantage(
-            main_token_level_rewards,
-            main_response_mask,
-            index,
-            epsilon,
-            norm_adv_by_std_in_grpo,
-            config,
-            return_sequence_adv=False,
-        )  # bsz
-        classmate_scores, _, classmate_group_mean, classmate_group_std = compute_grpo_outcome_advantage(
-            classmate_token_level_rewards,
-            classmate_input_mask,
-            index,
-            epsilon,
-            norm_adv_by_std_in_grpo,
-            config,
-            return_sequence_adv=False,
-        )  # bsz
-        # consistency_scores, _, consistency_group_mean, consistency_group_std = compute_grpo_outcome_advantage(
-        #     consistency_token_level_rewards,
-        #     classmate_input_mask,
-        #     index,
-        #     epsilon,
-        #     norm_adv_by_std_in_grpo,
-        #     config,
-        #     return_sequence_adv=False,
-        # )  # bsz
-
-        # Combine scores and apply global batch normalization
-        # scores = main_scores + classmate_scores + consistency_scores
-        scores = main_scores + classmate_scores
-        scores = (scores - scores.mean()) / (scores.std() + epsilon)
-
-        # Broadcast to token level
-        if token_level_classmate_reward_mode == "classmate_partial":
-            scores = scores.unsqueeze(-1) * classmate_input_mask + main_scores.unsqueeze(-1) * (1 - classmate_input_mask)
-        elif token_level_classmate_reward_mode == "all":
-            scores = scores.unsqueeze(-1) * main_response_mask
-        else:
-            raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
-
-    # return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, consistency_group_mean, consistency_group_std
-    return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std
+# @register_adv_est(AdvantageEstimator.GDPO)
+# def compute_gdpo_outcome_advantage(
+#     main_token_level_rewards: torch.Tensor,
+#     classmate_token_level_rewards: torch.Tensor,
+#     # consistency_token_level_rewards: torch.Tensor,
+#     main_response_mask: torch.Tensor,
+#     classmate_input_mask: torch.Tensor,
+#     index: np.ndarray,
+#     token_level_classmate_reward_mode,
+#     epsilon: float = 1e-6,
+#     norm_adv_by_std_in_grpo: bool = True,
+#     config: Optional[AlgoConfig] = None,
+# ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+#     """
+#     Compute advantage for GDPO, operating only on Outcome reward
+#     (with only one scalar reward for each response).
+#
+#     Args:
+#         main_token_level_rewards: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         classmate_token_level_rewards: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         # consistency_token_level_rewards: `(torch.Tensor)`
+#         #     shape is (bs, response_length)
+#         main_response_mask: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         classmate_input_mask: `(torch.Tensor)`
+#             shape is (bs, response_length); a subset of main_response_mask marking which CoT tokens are passed to the classmate model
+#         index: `(np.ndarray)`
+#             index array for grouping
+#         token_level_classmate_reward_mode: (str)
+#             how to apply classmate rewards to token level
+#         epsilon: `(float)`
+#             small value to avoid division by zero
+#         norm_adv_by_std_in_grpo: `(bool)`
+#             whether to scale the GRPO advantage
+#         config: `(Optional[AlgoConfig])`
+#             algorithm configuration object
+#
+#     Note:
+#         If norm_adv_by_std_in_grpo is True, the advantage is scaled by the std, as in the original GRPO.
+#         If False, the advantage is not scaled, as in Dr.GRPO (https://arxiv.org/abs/2503.20783).
+#
+#     Returns:
+#         advantages: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         Returns: `(torch.Tensor)`
+#             shape is (bs, response_length)
+#         main_group_reward_mean: `(torch.Tensor)`
+#             shape is (bs,), group-wise reward mean for main reward
+#         main_group_reward_std: `(torch.Tensor)`
+#             shape is (bs,), group-wise reward std for main reward
+#         classmate_group_reward_mean: `(torch.Tensor)`
+#             shape is (bs,), group-wise reward mean for classmate reward
+#         classmate_group_reward_std: `(torch.Tensor)`
+#             shape is (bs,), group-wise reward std for classmate reward
+#         # consistency_group_reward_mean: `(torch.Tensor)`
+#         #     shape is (bs,), group-wise reward mean for consistency reward
+#         # consistency_group_reward_std: `(torch.Tensor)`
+#         #     shape is (bs,), group-wise reward std for consistency reward
+#     """
+#     with torch.no_grad():
+#         main_scores, _, main_group_mean, main_group_std, batch_main_rewards = compute_grpo_outcome_advantage(
+#             main_token_level_rewards,
+#             main_response_mask,
+#             index,
+#             epsilon,
+#             norm_adv_by_std_in_grpo,
+#             config,
+#             return_sequence_adv=False,
+#         )  # bsz
+#         classmate_scores, _, classmate_group_mean, classmate_group_std, batch_classmate_rewards = compute_grpo_outcome_advantage(
+#             classmate_token_level_rewards,
+#             classmate_input_mask,
+#             index,
+#             epsilon,
+#             norm_adv_by_std_in_grpo,
+#             config,
+#             return_sequence_adv=False,
+#         )  # bsz
+#         # consistency_scores, _, consistency_group_mean, consistency_group_std = compute_grpo_outcome_advantage(
+#         #     consistency_token_level_rewards,
+#         #     classmate_input_mask,
+#         #     index,
+#         #     epsilon,
+#         #     norm_adv_by_std_in_grpo,
+#         #     config,
+#         #     return_sequence_adv=False,
+#         # )  # bsz
+#
+#         # Combine scores and apply global batch normalization
+#         # scores = main_scores + classmate_scores + consistency_scores
+#         scores = main_scores + classmate_scores
+#         scores = (scores - scores.mean()) / (scores.std() + epsilon)
+#
+#         # Broadcast to token level
+#         if token_level_classmate_reward_mode == "classmate_partial":
+#             scores = scores.unsqueeze(-1) * classmate_input_mask + main_scores.unsqueeze(-1) * (1 - classmate_input_mask)
+#         elif token_level_classmate_reward_mode == "all":
+#             scores = scores.unsqueeze(-1) * main_response_mask
+#         else:
+#             raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
+#
+#     # return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, consistency_group_mean, consistency_group_std
+#     return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, batch_main_rewards, batch_classmate_rewards
 
 
 def compute_gdpo_outcome_advantage_separate(
@@ -641,13 +645,13 @@ def compute_gdpo_outcome_advantage_separate(
     epsilon: float = 1e-6,
     norm_adv_by_std_in_grpo: bool = True,
     config: Optional[AlgoConfig] = None,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Compute GDPO advantages separately for main and classmate rewards.
 
     Returns token-level main and classmate advantages (masked), plus group stats.
     """
     with torch.no_grad():
-        main_scores, _, main_group_mean, main_group_std = compute_grpo_outcome_advantage(
+        main_scores, _, main_group_mean, main_group_std, batch_main_rewards = compute_grpo_outcome_advantage(
             main_token_level_rewards,
             main_response_mask,
             index,
@@ -656,7 +660,7 @@ def compute_gdpo_outcome_advantage_separate(
             config,
             return_sequence_adv=False,
         )  # (bsz,)
-        classmate_scores, _, classmate_group_mean, classmate_group_std = compute_grpo_outcome_advantage(
+        classmate_scores, _, classmate_group_mean, classmate_group_std, batch_classmate_rewards = compute_grpo_outcome_advantage(
             classmate_token_level_rewards,
             classmate_input_mask,
             index,
@@ -668,10 +672,10 @@ def compute_gdpo_outcome_advantage_separate(
 
         if token_level_classmate_reward_mode == "classmate_partial":
             main_mask = main_response_mask
-            classmate_mask = main_response_mask
+            classmate_mask = classmate_input_mask
         elif token_level_classmate_reward_mode == "all":
             main_mask = main_response_mask
-            classmate_mask = classmate_input_mask
+            classmate_mask = main_response_mask
         else:
             raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
 
@@ -685,6 +689,8 @@ def compute_gdpo_outcome_advantage_separate(
         main_group_std,
         classmate_group_mean,
         classmate_group_std,
+        batch_main_rewards,
+        batch_classmate_rewards,
     )
 
 

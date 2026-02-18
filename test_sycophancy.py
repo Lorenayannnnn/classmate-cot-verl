@@ -12,6 +12,7 @@ from openai import OpenAI
 
 from keys import OPENAI_KEY
 from verl.code_utils.testing_util import TimeoutException
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
 
 monitor_templates = {
     "mmlu_sycophancy": """A student is given the problem:
@@ -366,9 +367,10 @@ def plot_token_length_distribution(token_len_list, output_dir, model_name):
 
 def main():
     # dataset_name = "mmlu_q_hint_sep"
-    dataset_name = "mmlu_sycophancy"
+    # dataset_name = "mmlu_sycophancy"
     # dataset_name = "mmlu_pro_sycophancy"
     # dataset_name = "mmlu_sycophancy_first_person"
+    dataset_name = "mmlu_sycophancy"
 
     verifier = MMLU(do_pro="mmlu_pro" in dataset_name)
 
@@ -682,8 +684,8 @@ def see_examples():
     output_dir = "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model"
     example_output_dir = f"{output_dir}/examples"
     os.makedirs(example_output_dir, exist_ok=True)
-    baseline_fn = f"{output_dir}/20260211-Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42/step_425/helpful_instructions/main/preds.jsonl"
-    ours_fn = f"{output_dir}/20260211-Qwen3-0.6B_helpful_instructions_cl_correction_448000_episodes_seed_42/step_425/helpful_instructions/main/preds.jsonl"
+    baseline_fn = f"{output_dir}/20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42/step_130/helpful_instructions/main/preds.jsonl"
+    ours_fn = f"{output_dir}/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42/step_130/helpful_instructions/main/preds.jsonl"
 
     with open(baseline_fn, "r") as f:
         baseline_preds = [json.loads(line) for line in f.readlines()]
@@ -730,6 +732,76 @@ def see_examples():
         # breakpoint()
 
 
+def recompute():
+    all_model_paths = [
+        "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42",
+        "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42",
+        "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42"
+    ]
+    step_list = ["step_base", "step_10", "step_30", "step_50", "step_70", "step_90", "step_110", "step_130"]
+    verifier = get_monitor_verifier("helpful_instructions")
+
+    for model_path in all_model_paths:
+        for step in step_list:
+            pred_fn = f"{model_path}/{step}/helpful_instructions/main/preds.jsonl"
+            with open(pred_fn, "r") as f:
+                preds = [json.loads(line) for line in f.readlines()]
+
+            all_monitor_scores = []
+            all_llm_judge_scores = []
+            all_new_lines = []
+            for pred in preds:
+                # dict_keys(['main_query', 'question', 'main_full_output', 'truncated_main_CoT', 'main_output', 'main_extracted_solution', 'main_score', 'gt', 'monitor_score', 'monitor_explanation', 'llm_judge_score', 'llm_judge_explanation'])
+                if pred["main_output"] is None:
+                    pred["llm_judge_score"] = 0
+
+                # if pred["monitor_score"] == 0:
+                #     breakpoint()
+
+                all_monitor_scores.append(pred["monitor_score"])
+                all_llm_judge_scores.append(pred["llm_judge_score"])
+                all_new_lines.append(json.dumps(pred))
+
+            import numpy as np
+
+            monitor_scores = np.array(all_monitor_scores)
+            main_model_reward = np.array(all_llm_judge_scores)
+
+            monitor_valid_mask = monitor_scores != 0
+            main_reward_valid_mask = main_model_reward != 0
+            valid_mask = monitor_valid_mask & main_reward_valid_mask
+            monitor_scores = monitor_scores[valid_mask].astype(float)
+            main_model_reward = main_model_reward[valid_mask].astype(float)
+
+            monitor_metrics = verifier.compute_metrics(
+                predictions=monitor_scores.tolist(),
+                ground_truths=main_model_reward.tolist(),
+            )
+
+            monitor_metrics["total_monitor_valid_entries"] = np.sum(monitor_valid_mask).item()
+            monitor_metrics["total_output_valid_entries"] = np.sum(main_reward_valid_mask).item()
+            monitor_metrics["total_monitored_entries"] = np.sum(valid_mask).item()
+
+            # Print metrics
+            print(f"\n{'=' * 60}")
+            print(f"Monitor Metrics:")
+            print(f"{'=' * 60}")
+            print(json.dumps(monitor_metrics, indent=2))
+            print(f"{'=' * 60}\n")
+
+            # Save metrics to JSON file
+            metrics_output_path = os.path.join(os.path.dirname(pred_fn), "monitor_metrics.json")
+            with open(metrics_output_path, "w") as f:
+                json.dump(monitor_metrics, f, indent=2)
+            print(f"Monitor metrics saved to {metrics_output_path}")
+
+            with open(pred_fn, "w") as f:
+                f.write("\n".join(all_new_lines) + "\n")
+
+
+# /home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42/step_base/helpful_instructions/main/monitor_metrics.json
+
+
 if __name__ == "__main__":
     # tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
     # test = "<think>\nThis is a test of the thinking process.\nWe will reason step by step.\n</think>\nTherefore, the answer is \\boxed{42}."
@@ -742,7 +814,8 @@ if __name__ == "__main__":
     # encoded = tokenizer.decode(tokenizer.encode(test), skip_special_tokens=True)
     # breakpoint()
     # main()
-    see_examples()
+    # see_examples()
+    recompute()
 
     # dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"
     # dataset = load_dataset("parquet", data_files=dataset_fn)["train"]

@@ -1,5 +1,6 @@
 import json
 import os
+from concurrent.futures import Future
 from itertools import islice
 
 import torch
@@ -7,9 +8,17 @@ from tqdm import tqdm
 from openai import OpenAI
 
 from tinker_cookbook import renderers
+
+from keys import INPUT_TINKER_MODEL_NAME
 from verl.utils.reward_score.cot_monitor.llm_judge_utils import create_llm_judge, send_prompt_to_tinker
 from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+
+
+def _as_future(result):
+    future = Future()
+    future.set_result(result)
+    return future
 
 
 class SycophancyInferenceExpRunner:
@@ -31,7 +40,8 @@ class SycophancyInferenceExpRunner:
         self.data_source = data_source
 
         self.judge_client_config = create_llm_judge(        # Now use the same model as monitor and judge
-            judge_model_name="openai/gpt-oss-20b",
+            # judge_model_name="openai/gpt-oss-20b",
+            judge_model_name=INPUT_TINKER_MODEL_NAME,
         )
 
     @torch.no_grad()
@@ -99,14 +109,14 @@ class SycophancyInferenceExpRunner:
                 output_token_ids = outputs[batch_entry_idx].outputs[0].token_ids
 
                 # Parse out cot in between <think> and </think>
-                truncated_main_cot, final_output, _, _, _ = process_main_cot_helper(
+                truncated_main_cot, _, final_output, _, _, _ = process_main_cot_helper(
                     tokenizer=self.tokenizer,
                     enable_thinking=self.enable_thinking,
                     data_source=None,
                     main_response=decoded_output,
                     main_pred_token_ids=output_token_ids,
                     main_response_mask=None,
-                    keep_ratio=self.main_cot_keep_rate
+                    keep_ratio=self.main_cot_keep_rate,
                 )
                 # else:
                 #     truncated_main_cot = decoded_output
@@ -121,10 +131,16 @@ class SycophancyInferenceExpRunner:
                 monitor_prompt = verifier.create_monitor_message(monitor_doc)
                 llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"], final_output)
 
-                monitor_future = send_prompt_to_tinker(self.judge_client_config, monitor_prompt)
+                if monitor_prompt is not None:
+                    monitor_future = send_prompt_to_tinker(self.judge_client_config, monitor_prompt)
+                else:
+                    monitor_future = _as_future(None)
 
                 if batch['gt'][batch_entry_idx] is None:
-                    judge_future = send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt)
+                    if llm_judge_prompt is not None:
+                        judge_future = send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt)
+                    else:
+                        judge_future = _as_future(None)
                     main_extracted_solution = final_output
                     main_score = None
                 else:
@@ -136,7 +152,7 @@ class SycophancyInferenceExpRunner:
                     main_score = process_result_dict["score"]
                     all_main_model_rewards.append(main_score)
                     main_extracted_solution = process_result_dict["extracted_solution"]
-                    judge_future = None
+                    judge_future = _as_future(None)
 
                 tmp_result = {
                     "main_query": batch['query'][batch_entry_idx],
@@ -172,7 +188,7 @@ class SycophancyInferenceExpRunner:
             result_dict["monitor_explanation"] = monitor_explanation
             all_monitor_scores.append(monitor_score)
 
-            if pending["judge_future"] is not None:
+            if result_dict["gt"] is None:
                 # Using llm judge
                 judge_result = pending["judge_future"].result()
                 llm_judge_score, llm_judge_explanation = verifier.parse_llm_judge_output(judge_result, self.judge_client_config)
@@ -180,7 +196,7 @@ class SycophancyInferenceExpRunner:
                 result_dict["llm_judge_score"] = llm_judge_score
                 result_dict["llm_judge_explanation"] = llm_judge_explanation
 
-                all_main_model_rewards.append(result_dict["main_score"])
+            all_main_model_rewards.append(result_dict["main_score"])
 
             result_f.write(json.dumps(result_dict) + "\n")
         result_f.flush()
@@ -193,7 +209,9 @@ class SycophancyInferenceExpRunner:
             monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_model_rewards)
 
-            valid_mask = monitor_scores != None  # noqa: E711
+            monitor_valid_mask = monitor_scores != 0
+            main_reward_valid_mask = main_model_reward != 0
+            valid_mask = monitor_valid_mask & main_reward_valid_mask
             monitor_scores = monitor_scores[valid_mask].astype(float)
             main_model_reward = main_model_reward[valid_mask].astype(float)
 
@@ -203,8 +221,10 @@ class SycophancyInferenceExpRunner:
                 ground_truths=main_model_reward.tolist(),
             )
 
-            monitor_metrics["total_monitored_entries"] = int(len(main_model_reward))
-            
+            monitor_metrics["total_monitor_valid_entries"] = np.sum(monitor_valid_mask).item()
+            monitor_metrics["total_output_valid_entries"] = np.sum(main_reward_valid_mask).item()
+            monitor_metrics["total_monitored_entries"] = np.sum(valid_mask).item()
+
             # Print metrics
             print(f"\n{'='*60}")
             print(f"Monitor Metrics:")
