@@ -493,9 +493,24 @@ class DataParallelPPOActor(BasePPOActor):
                         combined_advantages = main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask
 
                         # Batch-wise normalization only over classmate prefix tokens
-                        adv_mean = verl_F.masked_mean(combined_advantages, classmate_mask)
-                        adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), classmate_mask)
-                        advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
+                        # print("🐛🐛🐛 combined_advantages", combined_advantages, combined_advantages.shape)
+                        rollout_level_adv_mean = verl_F.masked_mean(combined_advantages, classmate_mask, axis=1)
+                        # print("🐛🐛🐛 rollout_level_adv_mean", rollout_level_adv_mean, rollout_level_adv_mean.shape)
+                        batch_wise_adv_mean = verl_F.masked_mean(rollout_level_adv_mean, classmate_mask.sum(dim=1) > 0)
+                        # print("🐛🐛🐛 batch_wise_adv_mean", batch_wise_adv_mean, batch_wise_adv_mean.shape)
+                        adv_mean = batch_wise_adv_mean.expand(combined_advantages.shape[0], 1)
+                        # adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), classmate_mask)
+                        # advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
+                        # TODO haha
+                        # print("🐛🐛🐛 adv_mean", adv_mean, adv_mean.shape)
+                        # print("🐛🐛🐛 combined_advantages[0]", combined_advantages[0], combined_advantages[0].shape)
+                        # print("🐛🐛🐛 combined_advantages[1]", combined_advantages[1], combined_advantages[1].shape)
+                        advantages = (combined_advantages - adv_mean) * classmate_mask  # only normalize the classmate prefix tokens
+
+                        # adv_mean = verl_F.masked_mean(combined_advantages, classmate_mask)
+                        #                         # adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), classmate_mask)
+                        #                         # combined_advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
+                        #
 
                         # print("🐛🐛🐛 classmate adjusted")
                         # print("🐛🐛🐛 main_adv_reweighted", main_adv_reweighted[0].tolist())

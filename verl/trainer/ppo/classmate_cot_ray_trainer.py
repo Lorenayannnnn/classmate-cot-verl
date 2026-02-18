@@ -1297,6 +1297,9 @@ class ClassmateCoTRayPPOTrainer:
         This part is only handling main model's CoT. Prompt/question before the CoT will be handled separately when sampling from classmates
         given we need to apply chat template
         """
+        if "response_mask" not in data.batch.keys() and is_eval:
+            data.batch["response_mask"] = compute_response_mask(data)
+
         all_actor_responses = data.non_tensor_batch["decoded_responses"]
         max_response_len = max(len(data.batch["response_mask"][i]) for i in range(len(all_actor_responses)))
 
