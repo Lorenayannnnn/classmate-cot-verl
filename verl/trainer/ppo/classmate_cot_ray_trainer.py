@@ -39,6 +39,7 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
+from keys import INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
@@ -60,7 +61,8 @@ from verl.trainer.ppo.reward import compute_reward, compute_reward_async, comput
 from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference_policy, need_reward_model
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker
+from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
+    create_llm_judge
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
 from verl.utils.my_utils import parse_out_main_cot_output
@@ -388,6 +390,7 @@ class ClassmateCoTRayPPOTrainer:
         seed=None,
         enable_thinking=None,
         # host_classmate_name_to_url_json_fn=None,
+        tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -508,6 +511,10 @@ class ClassmateCoTRayPPOTrainer:
 
         assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
         self.enable_thinking = enable_thinking
+
+        self.judge_client_config = create_llm_judge(
+            judge_model_name=tinker_llm_judge_model_name,
+        )
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -852,7 +859,9 @@ class ClassmateCoTRayPPOTrainer:
                 #     model_name=self.config.reward_model["monitor_model_name"]
                 # )
                 all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
+                    judge_client_config=self.judge_client_config,
                     monitor_prompts=monitor_prompts,
+                    verifier=verifier,
                 )
 
                 test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)

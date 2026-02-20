@@ -18,12 +18,12 @@ from concurrent.futures import Future
 
 import torch
 
-from keys import INPUT_TINKER_MODEL_NAME
+from keys import INPUT_TINKER_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
-from verl.utils.reward_score.cot_monitor.llm_judge_utils import send_prompt_to_tinker, create_llm_judge
+from verl.utils.reward_score.cot_monitor.monitor import send_prompt_to_tinker, create_llm_judge
 from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
@@ -37,7 +37,7 @@ class NaiveRewardManager(AbstractRewardManager):
                  llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
                  user_tinker_llm_judge=True,
                  # tinker_llm_judge_model_name="openai/gpt-oss-20b"
-                 tinker_llm_judge_model_name=INPUT_TINKER_MODEL_NAME
+                 tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME
                  ):
         """
         Initialize the NaiveRewardManager instance.
@@ -213,7 +213,8 @@ class NaiveRewardManager(AbstractRewardManager):
         for ctx, score_future in zip(item_contexts, score_futures):
             score = score_future.result()
 
-            if self.user_tinker_llm_judge and ctx["ground_truth"] is None:
+            if ctx["ground_truth"] is None:
+                assert self.user_tinker_llm_judge, "If there is no ground truth, we must use LLM judge to compute the reward."
                 if type(score) == dict and "score" in score:
                     pass
                 else:

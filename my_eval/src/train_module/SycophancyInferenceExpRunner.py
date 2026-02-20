@@ -9,9 +9,8 @@ from openai import OpenAI
 
 from tinker_cookbook import renderers
 
-from keys import INPUT_TINKER_MODEL_NAME
-from verl.utils.reward_score.cot_monitor.llm_judge_utils import create_llm_judge, send_prompt_to_tinker
-from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper
+from keys import INPUT_TINKER_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
+from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker, process_main_cot_helper
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
 
 
@@ -41,7 +40,7 @@ class SycophancyInferenceExpRunner:
 
         self.judge_client_config = create_llm_judge(        # Now use the same model as monitor and judge
             # judge_model_name="openai/gpt-oss-20b",
-            judge_model_name=INPUT_TINKER_MODEL_NAME,
+            judge_model_name=INPUT_JUDGE_MODEL_NAME,
         )
 
     @torch.no_grad()

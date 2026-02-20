@@ -73,8 +73,9 @@ reward_model:
   do_cot_monitor: True
   main_cot_keep_rate: 1
   monitor_template_name: null
-#  monitor_model_name: gpt-4o-mini
+  # TODO Change these in keys.py
   monitor_model_name: null
+  llm_judge_model_name: null
 
   sandbox_fusion_url: null
 

@@ -20,12 +20,12 @@ import ray
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tinker_cookbook import renderers
 
-from keys import INPUT_TINKER_MODEL_NAME
+from keys import INPUT_TINKER_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
-from verl.utils.reward_score.cot_monitor.llm_judge_utils import create_llm_judge, send_prompt_to_tinker
+from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker
 from verl.utils.reward_score.olmo_verifiers import CodeVerifier, CodeVerifierConfig
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
@@ -51,7 +51,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
             user_tinker_llm_judge=True,
             # tinker_llm_judge_model_name="openai/gpt-oss-20b"
-            tinker_llm_judge_model_name=INPUT_TINKER_MODEL_NAME
+            tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -181,7 +181,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
             # Submit main model reward computation
-            if self.user_tinker_llm_judge and ground_truth is None:
+            if ground_truth is None:
+                assert self.user_tinker_llm_judge is not None, "For open-ended generation without ground truth, LLM judge is required to compute reward."
                 if main_output is None:
                     main_score_futures.append(_as_future({
                         "score": 0,

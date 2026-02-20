@@ -74,9 +74,10 @@ reward_model:
 
   do_cot_monitor: True
   monitor_template_name: null
-#  monitor_model_name: gpt-4o-mini
-#  monitor_model_name: gpt-4.1-nano
+
+  # TODO Change these in keys.py
   monitor_model_name: null
+  llm_judge_model_name: null
 
   classmate_cot_reward_configs:
     # "Qwen/Qwen2.5-7B-Instruct", "mistralai/Ministral-8B-Instruct-2410", "meta-llama/Llama-3.1-8B-Instruct"
