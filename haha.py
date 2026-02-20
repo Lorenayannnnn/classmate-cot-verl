@@ -1,3 +1,4 @@
+import json
 
 from transformers import AutoTokenizer
 
@@ -35,72 +36,39 @@ def _find_token_subsequence_for_string(self, token_ids, target_string):
 
     return -1  # No match found
 
-def main():
-    model_name = "Qwen/Qwen3-0.6B-Base"
-    classmate_model_name = "meta-llama/Llama-3.2-1B-Instruct"
-    # self.classmate_tokenizer.model_max_length
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    classmate_tokenizer = AutoTokenizer.from_pretrained(classmate_model_name, trust_remote_code=True)
 
-    breakpoint()
+def debug_partial_cl_reward():
+    model_name = "Qwen/Qwen3-0.6B"
+    from transformers import AutoTokenizer
+    import numpy as np
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    fn = "debug_0.json"
+    fn = "debug_1.json"
 
-    given_string = """엗쟇
-욺
+    def helper(input_fn, input_tokenizer):
+        with open(input_fn, "r") as f:
+            # response', 'response_mask', 'classmate_mask', 'adv_mean', 'combined_advantages', 'advantages
+            result_dict = json.load(f)
+            main_response_token_ids = np.array(result_dict["response"])[np.array(result_dict["response_mask"]) == 1]
+            main_response_str = input_tokenizer.decode(main_response_token_ids)
+            cl_input_ids = np.array(result_dict["response"])[np.array(result_dict["classmate_mask"]) == 1]
+            cl_input_str = input_tokenizer.decode(cl_input_ids)
+            adv_mean = result_dict["adv_mean"]
+            combined_advantages = result_dict["combined_advantages"]
+            is_cl_combined_adv = np.array(combined_advantages)[np.array(result_dict["classmate_mask"]) == 1].tolist()
+            is_non_cl_adv = np.array(result_dict["advantages"])[
+                np.array(result_dict["classmate_mask"]) == 0].tolist()
 
+            is_cl_advantages = np.array(result_dict["advantages"])[np.array(result_dict["classmate_mask"]) == 1].tolist()
 
-�
- +#+#+#+#+#+ 결국
+            first_non_cl_token = input_tokenizer.decode(main_response_token_ids[int(sum(result_dict["classmate_mask"]) + 1)].item())
+            first_non_cl_token_adv = result_dict["advantages"][int(sum(result_dict["classmate_mask"]) + 1)]
+            last_cl_token_adv = result_dict["advantages"][int(sum(result_dict["classmate_mask"]))]
+            breakpoint()
 
-ﻷ� несколькительноศิลปะ
-مِ드
-
-
-
-.BufferedReader.getInputLine();
-
-
-
-.BufferedReader.readLine();
-
-
-
-.BufferedReader.readLineLines();
-
-
-n"""
-
-    token_ids_list = [151001, 124296, 229, 198, 149780, 1406, 94, 151649, 319, 33857, 136724, 271, 123810, 115, 120, 141498, 126873, 143048, 198, 131339, 29346, 1022, 47590, 87784, 2460, 59841, 47590, 26501, 59841, 47590, 26501, 16794, 17745, 77, 25568, 486, 1397, 280, 77, 3635, 56360, 354, 26, 151643]
-
-
-    breakpoint()
-    tokenizer.decode(token_ids_list[:23], skip_special_tokens=False)
-    tokenizer.decode(token_ids_list[:34], skip_special_tokens=True)
-
+    # helper(fn, tokenizer)
+    helper("debug_1.json", tokenizer)
 
 
 if __name__ == "__main__":
-    # main()
-
-    # old_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_minimal_answer_box_prompt_105_test/train.parquet"
-    # new_dataset = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_q/train.parquet"
-    #
-    # from datasets import load_dataset
-    # old_dataset = load_dataset("parquet", data_files=old_dataset)["train"]
-    # new_dataset = load_dataset("parquet", data_files=new_dataset)["train"]
-    #
-    # from tqdm import tqdm
-    # for old_example, new_example in tqdm(zip(old_dataset, new_dataset)):
-    #     assert old_example["prompt"][0]["content"] == new_example["prompt"][0]["content"]
-
-    pred_fn = "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260203-Qwen3-0.6B_mmlu_sycophancy_new_baseline_627984_episodes_seed_42/step_336/mmlu_sycophancy/main/preds.jsonl"
-
-    with open(pred_fn) as f:
-        for line in f:
-            import json
-            pred = json.loads(line)
-            print("🔥 ==================OUR truncated main CoT==================")
-            print(pred["truncated_main_CoT"])
-            print("🔥🔥 ==================OUR full output==================")
-            print(pred["main_full_output"])
-            print(pred["gt"])
-            breakpoint()
+    debug_partial_cl_reward()

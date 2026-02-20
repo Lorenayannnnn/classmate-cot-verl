@@ -892,7 +892,7 @@ class ClassmateCoTRayPPOTrainer:
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
 
-            all_main_rewards.extend(scores)
+            all_main_rewards.extend(result["main_reward_tensor"].sum(-1).cpu().tolist())
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
@@ -982,6 +982,7 @@ class ClassmateCoTRayPPOTrainer:
                     for metric_name, metric_val in monitor_metrics.items()
                 })
 
+        print(f"Validation metrics: {metric_dict}")
         print("🐛🐛🐛 End validating")
         return metric_dict
 
@@ -1378,10 +1379,10 @@ class ClassmateCoTRayPPOTrainer:
                 # Pad mask to max_response_len to ensure all masks have the same length
                 padded_mask = classmate_input_mask + [0] * (max_response_len - len(classmate_input_mask))
                 all_classmate_input_mask.append(padded_mask)
-                padded_truncated_pred_token_ids = truncated_pred_token_ids + [self.tokenizer.pad_token_id] * (max_response_len - len(truncated_pred_token_ids))
-                # print("🐛🐛🐛 truncated_pred_token_ids", len(truncated_pred_token_ids))
-                # print("🐛🐛🐛 padded_truncated_pred_token_ids", len(padded_truncated_pred_token_ids))
-                all_processed_actor_responses_token_ids.append(padded_truncated_pred_token_ids)
+                # Store full response token IDs (aligned with classmate_input_mask) so
+                # the worker can extract CoT tokens via boolean mask without re-encoding.
+                full_response_token_ids = data.batch["responses"][res_idx].tolist()
+                all_processed_actor_responses_token_ids.append(full_response_token_ids)
 
 
         classmate_non_tensor_batch = {
@@ -1738,75 +1739,64 @@ class ClassmateCoTRayPPOTrainer:
         """
         # Compute rollout IS weights if enabled and data is available
         # rollout_is_threshold is the main on/off switch
-        assert self.config.algorithm.rollout_is_threshold is not None, "rollout_is_threshold must be set to compute IS weights"
-        assert "rollout_log_probs" in batch.batch, "rollout_log_probs must be in batch to compute IS weights"
+        if self.config.algorithm.rollout_is_threshold is not None and "rollout_log_probs" in batch.batch:
+            # Just for logging
+            rollout_is_weights, rollout_is_metrics = compute_rollout_importance_weights(
+                old_log_prob=batch.batch["old_log_probs"],
+                rollout_log_prob=batch.batch["rollout_log_probs"],
+                response_mask=batch.batch["response_mask"],
+                rollout_is_level=self.config.algorithm.rollout_is_level,
+                rollout_is_mode=self.config.algorithm.rollout_is_mode,
+                rollout_is_threshold=self.config.algorithm.rollout_is_threshold,
+                rollout_is_threshold_lower=self.config.algorithm.rollout_is_threshold_lower,
+                rollout_is_veto_threshold=self.config.algorithm.rollout_is_veto_threshold,
+            )
 
-        assert "classmate_prompt_logprobs" in batch.batch, "classmate_prompt_logprobs must be in batch to compute classmate IS weights"
-        assert "classmate_prompt_logprobs_mask" in batch.batch, "classmate_prompt_logprobs_mask must be in batch to compute classmate IS weights"
+            batch.batch["classmate_prompt_logprobs"] = batch.batch["classmate_prompt_logprobs"].squeeze(2).squeeze(1)  # (bsz, seq_len)
+            batch.batch["classmate_prompt_logprobs_mask"] = batch.batch["classmate_prompt_logprobs_mask"].squeeze(2).squeeze(1)  # (bsz, seq_len)
 
-        # if self.config.algorithm.rollout_is_threshold is not None and "rollout_log_probs" in batch.batch:
-        rollout_is_weights, rollout_is_metrics = compute_rollout_importance_weights(
-            old_log_prob=batch.batch["old_log_probs"],
-            rollout_log_prob=batch.batch["rollout_log_probs"],
-            response_mask=batch.batch["response_mask"],
-            rollout_is_level=self.config.algorithm.rollout_is_level,
-            rollout_is_mode=self.config.algorithm.rollout_is_mode,
-            rollout_is_threshold=self.config.algorithm.rollout_is_threshold,
-            rollout_is_threshold_lower=self.config.algorithm.rollout_is_threshold_lower,
-            rollout_is_veto_threshold=self.config.algorithm.rollout_is_veto_threshold,
-        )
+            # Just for logging
+            classmate_rollout_is_weights, classmate_rollout_is_metrics = compute_rollout_importance_weights(
+                old_log_prob=batch.batch["old_log_probs"],
+                rollout_log_prob=batch.batch["classmate_prompt_logprobs"],
+                response_mask=batch.batch["classmate_prompt_logprobs_mask"],
+                rollout_is_level=self.classmate_cot_reward_configs.cl_rollout_is_level,
+                rollout_is_mode=self.classmate_cot_reward_configs.cl_rollout_is_mode,
+                rollout_is_threshold=self.classmate_cot_reward_configs.cl_rollout_is_threshold,
+                rollout_is_threshold_lower=self.classmate_cot_reward_configs.cl_rollout_is_threshold_lower,
+                rollout_is_veto_threshold=self.classmate_cot_reward_configs.cl_rollout_is_veto_threshold,
+                rollout_is_weights_key_name="classmate_rollout_is_weights"
+            )
 
-        # classmate_rollout_is_weights = None
-        # classmate_rollout_is_metrics = {}
-        # Assuming main and classmate has the same tokenizer
+            # Control: Should we apply weights to policy loss?
+            # True = add weights to batch (actor will apply them)
+            # False = don't add weights (metrics only, no loss modification)
+            apply_weights = self.config.algorithm.get("rollout_is", False)
+            assert not apply_weights, "actual importance ratio is calculated in the vanilla loss fn"
 
-        assert batch.batch["classmate_prompt_logprobs"].shape[1] == 1 and batch.batch["classmate_prompt_logprobs"].shape[2] == 1, "Assuming has one classmate with each cl generating one seq"
-        assert batch.batch["classmate_prompt_logprobs_mask"].shape[1] == 1 and batch.batch["classmate_prompt_logprobs_mask"].shape[2] == 1, "Assuming has one classmate with each cl generating one seq"
+            if apply_weights:
+                # Add IS weights to batch for distribution to workers
+                batch = batch.union(rollout_is_weights)
+                if classmate_rollout_is_weights is not None:
+                    batch = batch.union(classmate_rollout_is_weights)
 
-        batch.batch["classmate_prompt_logprobs"] = batch.batch["classmate_prompt_logprobs"].squeeze(2).squeeze(1)  # (bsz, seq_len)
-        batch.batch["classmate_prompt_logprobs_mask"] = batch.batch["classmate_prompt_logprobs_mask"].squeeze(2).squeeze(1)  # (bsz, seq_len)
-
-        classmate_rollout_is_weights, classmate_rollout_is_metrics = compute_rollout_importance_weights(
-            old_log_prob=batch.batch["old_log_probs"],
-            rollout_log_prob=batch.batch["classmate_prompt_logprobs"],
-            response_mask=batch.batch["classmate_prompt_logprobs_mask"],
-            rollout_is_level=self.classmate_cot_reward_configs.cl_rollout_is_level,
-            rollout_is_mode=self.classmate_cot_reward_configs.cl_rollout_is_mode,
-            rollout_is_threshold=self.classmate_cot_reward_configs.cl_rollout_is_threshold,
-            rollout_is_threshold_lower=self.classmate_cot_reward_configs.cl_rollout_is_threshold_lower,
-            rollout_is_veto_threshold=self.classmate_cot_reward_configs.cl_rollout_is_veto_threshold,
-            rollout_is_weights_key_name="classmate_rollout_is_weights"
-        )
-
-        # Control: Should we apply weights to policy loss?
-        # True = add weights to batch (actor will apply them)
-        # False = don't add weights (metrics only, no loss modification)
-        apply_weights = self.config.algorithm.get("rollout_is", False)
-
-        if apply_weights:
-            # Add IS weights to batch for distribution to workers
-            batch = batch.union(rollout_is_weights)
-            # Store classmate rollout IS weights separately for custom usage
-            if classmate_rollout_is_weights is not None:
-                batch = batch.union(classmate_rollout_is_weights)
-
-        # Preserve existing classmate_mismatch/* keys for backward compatibility
-        rollout_is_metrics.update(
-            {f"classmate_{k}": v for k, v in classmate_rollout_is_metrics.items()}
-        )
-        # Add normalized mismatch/classmate_* keys for clearer logging
-        classmate_metrics_normalized = {}
-        for k, v in classmate_rollout_is_metrics.items():
-            if k.startswith("mismatch/"):
-                classmate_key = f"mismatch/classmate_{k[len('mismatch/'):] }"
-            else:
-                classmate_key = f"classmate_{k}"
-            classmate_metrics_normalized[classmate_key] = v
-        rollout_is_metrics.update(classmate_metrics_normalized)
-        return batch, rollout_is_metrics
+            # Preserve existing classmate_mismatch/* keys for backward compatibility
+            rollout_is_metrics.update(
+                {f"classmate_{k}": v for k, v in classmate_rollout_is_metrics.items()}
+            )
+            # Add normalized mismatch/classmate_* keys for clearer logging
+            classmate_metrics_normalized = {}
+            for k, v in classmate_rollout_is_metrics.items():
+                if k.startswith("mismatch/"):
+                    classmate_key = f"mismatch/classmate_{k[len('mismatch/'):]}"
+                else:
+                    classmate_key = f"classmate_{k}"
+                classmate_metrics_normalized[classmate_key] = v
+            rollout_is_metrics.update(classmate_metrics_normalized)
+            return batch, rollout_is_metrics
 
         # Return unchanged batch and empty metrics if IS is disabled
-        # return batch, {}
+        return batch, {}
 
     def fit(self):
         """

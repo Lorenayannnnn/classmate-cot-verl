@@ -128,21 +128,32 @@ val_kwargs:
   # Required when using verl.utils.omega_conf_to_dataclass to instantiate dataclass configs
   _target_: verl.workers.config.SamplingConfig
 
-  # sampling parameters for validation
-  # Top-k sampling parameter. -1 for vLLM rollout, 0 for HF rollout.
-  top_k: -1
-
-  # Top-p sampling parameter. Default 1.0.
-  top_p: 1.0
+#  # sampling parameters for validation
+#  # Top-k sampling parameter. -1 for vLLM rollout, 0 for HF rollout.
+#  top_k: -1
+#
+#  # Top-p sampling parameter. Default 1.0.
+#  top_p: 1.0
+#
+#  # Sampling temperature for rollout.
+#  temperature: 0
 
   # Sampling temperature for rollout.
-  temperature: 0
+  temperature: 1.0
+  #temperature: 0.7
+
+  # Top-k sampling parameter. -1 for vLLM rollout, 0 for HF rollout.
+  top_k: -1
+  #top_k: 20
+
+  # Top-p sampling parameter. Default 1.0.
+  top_p: 1
+  #top_p: 0.8
 
   # whether to repeat n times for validation
   n: 1
 
-  # Whether to sample during training rollout. False uses greedy sampling.
-  do_sample: False
+  do_sample: True
 
 # Multi-turn interaction config for tools or chat.
 multi_turn:

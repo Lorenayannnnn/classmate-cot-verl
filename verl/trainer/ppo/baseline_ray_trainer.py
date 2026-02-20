@@ -823,11 +823,9 @@ class RayPPOTrainer:
                     f"val-core/monitor/{metric_name}": float(metric_val)
                     for metric_name, metric_val in monitor_metrics.items()
                 })
-                if verifier.reward_type == "binary":
-                    main_monitor_consistent = np.mean((main_model_reward == 1) == (monitor_scores == 1))
-                else:
-                    main_monitor_consistent = np.mean((monitor_scores - main_model_reward) ** 2)
-                metric_dict["val-core/monitor/main_monitor_consistent"] = float(main_monitor_consistent)
+
+        print(f"Validation metrics: {metric_dict}")
+        print("🐛🐛🐛 End validating")
 
         return metric_dict
 
@@ -1150,6 +1148,8 @@ class RayPPOTrainer:
             # True = add weights to batch (actor will apply them)
             # False = don't add weights (metrics only, no loss modification)
             apply_weights = self.config.algorithm.get("rollout_is", False)
+
+            assert not apply_weights, "actual importance ratio is calculated in the vanilla loss fn"
 
             if apply_weights:
                 # Add IS weights to batch for distribution to workers

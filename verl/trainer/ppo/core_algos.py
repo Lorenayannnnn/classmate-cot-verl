@@ -1333,6 +1333,101 @@ def compute_policy_loss_vanilla(
 
     return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
 
+@register_policy_loss("vanilla_classmate")
+def compute_policy_loss_vanilla_classmate(
+    old_log_prob: torch.Tensor,
+    log_prob: torch.Tensor,
+    main_advantages: torch.Tensor,
+    classmate_log_prob: torch.Tensor,
+    classmate_advantages: torch.Tensor,
+    classmate_input_mask: torch.Tensor,
+    response_mask: torch.Tensor,
+    loss_agg_mode: str = "token-mean",
+    config: Optional[DictConfig] = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Policy loss for classmate CoT training.
+
+    For each token, ratio-weighted advantages are computed separately for the main
+    and classmate signals, then combined. Three versions are built (unclipped,
+    clipped, dual-clip constant) and compared with the standard PPO max/min logic.
+    Batch normalization (macro-avg) is applied at CoT positions using the clipped
+    version (v2) as the reference, with all three versions normalized by the same
+    (mean, std) so their relative ordering for the comparison is preserved.
+    """
+    assert config is not None
+    assert not isinstance(config, AlgoConfig)
+
+    clip_ratio = config.clip_ratio
+    clip_ratio_low = config.clip_ratio_low if config.clip_ratio_low is not None else clip_ratio
+    clip_ratio_high = config.clip_ratio_high if config.clip_ratio_high is not None else clip_ratio
+    clip_ratio_c = config.get("clip_ratio_c", 3.0)
+
+    classmate_clip_ratio = config.classmate_clip_ratio
+    classmate_clip_ratio_low = config.classmate_clip_ratio_low if config.classmate_clip_ratio_low is not None else classmate_clip_ratio
+    classmate_clip_ratio_high = config.classmate_clip_ratio_high if config.classmate_clip_ratio_high is not None else classmate_clip_ratio
+    classmate_clip_ratio_c = config.get("classmate_clip_ratio_c", 3.0)
+
+    # Main ratio (unclipped and clipped)
+    negative_approx_kl = torch.clamp(log_prob - old_log_prob, min=-20.0, max=20.0)
+    ratio = torch.exp(negative_approx_kl)
+    ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask)
+    ratio_clipped = torch.clamp(ratio, 1 - clip_ratio_low, 1 + clip_ratio_high)
+    pg_clipfrac = verl_F.masked_mean(torch.ne(ratio, ratio_clipped).float(), response_mask)
+
+    # Classmate ratio (unclipped and clipped)
+    cl_negative_approx_kl = torch.clamp(classmate_log_prob - old_log_prob, min=-20.0, max=20.0)
+    cl_ratio = torch.exp(cl_negative_approx_kl)
+    cl_ratio_clipped = torch.clamp(cl_ratio, 1 - classmate_clip_ratio_low, 1 + classmate_clip_ratio_high)
+    pg_clipfrac_lower = verl_F.masked_mean(torch.ne(cl_ratio, cl_ratio_clipped).float(), classmate_input_mask)
+
+    # Masks
+    classmate_mask = classmate_input_mask.to(main_advantages.device).float()
+    non_cot_valid_mask = (1 - classmate_mask) * response_mask
+
+    # Three versions of combined ratio-weighted advantages:
+    #   v1 — both ratios unclipped
+    #   v2 — both ratios clipped  (reference for batch norm and sign check)
+    #   v3 — dual-clip constants  (caps loss when combined advantage is negative)
+    # At CoT: main + classmate; at non-CoT valid: main only
+    combined_v1 = (ratio * main_advantages + cl_ratio * classmate_advantages) * classmate_mask \
+                + ratio * main_advantages * non_cot_valid_mask
+    combined_v2 = (ratio_clipped * main_advantages + cl_ratio_clipped * classmate_advantages) * classmate_mask \
+                + ratio_clipped * main_advantages * non_cot_valid_mask
+    combined_v3 = (clip_ratio_c * main_advantages + classmate_clip_ratio_c * classmate_advantages) * classmate_mask \
+                + clip_ratio_c * main_advantages * non_cot_valid_mask
+
+    # Macro-avg batch normalization at CoT positions using v2 as reference.
+    # All three versions share the same (mean, std) so relative ordering is preserved.
+    # rollout_level_adv_mean = verl_F.masked_mean(combined_v2, classmate_mask, axis=1)
+    # batch_wise_adv_mean = verl_F.masked_mean(rollout_level_adv_mean, classmate_mask.sum(dim=1) > 0)
+    # rollout_level_adv_var = verl_F.masked_mean(
+    #     (combined_v2 - batch_wise_adv_mean).square(), classmate_mask, axis=1
+    # )
+    # adv_var = verl_F.masked_mean(rollout_level_adv_var, classmate_mask.sum(dim=1) > 0)
+    # adv_std = torch.sqrt(adv_var + 1e-8)
+
+    # def normalize_cot(x):
+        # Normalize at CoT positions; leave non-CoT valid positions unchanged
+        # return (x - batch_wise_adv_mean) / adv_std * classmate_mask + x * non_cot_valid_mask
+
+    # combined_v1 = normalize_cot(combined_v1)
+    # combined_v2 = normalize_cot(combined_v2)
+    # combined_v3 = normalize_cot(combined_v3)
+
+    # Three-loss comparison (same structure as standard PPO dual-clip)
+    pg_losses_v1 = -combined_v1                                       # unclipped
+    pg_losses_v2 = -combined_v2                                       # clipped (pessimistic)
+    clip_pg_losses1 = torch.maximum(pg_losses_v1, pg_losses_v2)       # standard PPO max
+
+    pg_losses_v3 = -combined_v3                                       # dual-clip constant
+    clip_pg_losses2 = torch.min(pg_losses_v3, clip_pg_losses1)        # dual-clip min
+
+    # Apply dual-clip only when the clipped combined advantage is negative
+    pg_losses = torch.where(combined_v2 < 0, clip_pg_losses2, clip_pg_losses1)
+    pg_loss = agg_loss(loss_mat=pg_losses, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+    return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
+
 
 @register_policy_loss("gspo")
 def compute_policy_loss_gspo(

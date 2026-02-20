@@ -134,6 +134,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             future.set_result(result)
             return future
 
+        think_open_id  = self.tokenizer.convert_tokens_to_ids("<think>")
+        think_close_id = self.tokenizer.convert_tokens_to_ids("</think>")
+
         item_contexts = []
         main_score_futures = []
 
@@ -159,7 +162,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
             # Extract things after <think>...</think> as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, _ = parse_out_main_cot_output(response_str)
+                main_cot, main_output, _, _, _, _ = parse_out_main_cot_output(
+                    response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
+                )
             else:
                 main_cot = response_str
                 main_output = response_str
@@ -237,17 +242,16 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
         # Second loop: resolve main rewards and submit classmate reward computations
         for ctx, main_score_future in zip(item_contexts, main_score_futures):
             actor_score = main_score_future.result()
-            if self.user_tinker_llm_judge and ctx["ground_truth"] is None:
-                if type(actor_score) == dict and "score" in actor_score:
-                    pass
-                else:
-                    verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                    judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
-                    actor_score = {
-                        "score": judge_score,
-                        "extracted_solution": ctx["main_output"],
-                        "judge_explanation": judge_explanation,
-                    }
+            if type(actor_score) == dict and "score" in actor_score:    # handle both non llm judge and main output is None case
+                pass
+            else:
+                verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
+                actor_score = {
+                    "score": judge_score,
+                    "extracted_solution": ctx["main_output"],
+                    "judge_explanation": judge_explanation,
+                }
             # main_p_bar.update(1)
             extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
 
@@ -274,10 +278,17 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 for classmate_output_sample in classmate_output:
                     # Submit main model reward computation
                     if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
-                        verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                        llm_judge_prompt = verifier.format_llm_judge_prompt(
-                            ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
-                        sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                        if classmate_output_sample is None:
+                            sample_futures.append(_as_future({
+                                "score": 0,
+                                "extracted_solution": None,
+                                "judge_explanation": "No valid output extracted from the classmate response."
+                            }))
+                        else:
+                            verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                            llm_judge_prompt = verifier.format_llm_judge_prompt(
+                                ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
+                            sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
                     else:
                         sample_futures.append(
                             _as_future(
@@ -322,13 +333,18 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 for classmate_future in classmate_futures:
                     tmp_classmate_result = classmate_future.result()
 
-                    if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
+                    # if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
+                    if type(tmp_classmate_result) == dict and "score" in tmp_classmate_result:  # handle both non llm judge and main output is None case
+                        pass
+                    else:
                         verifier = get_monitor_verifier(data_source=ctx["data_source"])
                         # Parse response
-                        judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result, self.judge_client_config)
+                        judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result,
+                                                                                         self.judge_client_config)
                         tmp_classmate_result = {
                             "score": judge_score,
-                            "extracted_solution": classmate_outputs[classmate_idx][0],   # currently only support num_samples_per_classmate=1
+                            "extracted_solution": classmate_outputs[classmate_idx][0],
+                            # currently only support num_samples_per_classmate=1
                             "judge_explanation": judge_explanation,
                         }
 
@@ -428,7 +444,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
                     print("🐛[monitor_score]", ctx["data_item"].non_tensor_batch["monitor_score"])
                     print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
-                    monitor_reward_type = ctx["data_item"].non_tensor_batch.get("monitor_reward_type", "binary")
+                    monitor_reward_type = ctx["data_item"].non_tensor_batch['monitor_reward_type']
                     monitor_score_value = ctx["data_item"].non_tensor_batch["monitor_score"]
                     if monitor_reward_type == "binary":
                         main_monitor_consistent = (base_reward == 1) == (monitor_score_value == 1)

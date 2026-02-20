@@ -9,7 +9,7 @@ defaults:
 
   # <folder_name>@<field_name>.<field_name>: <yaml_file_name>
   # actor_rollout_ref.actor: trainer/config/actor/dp_actor.yaml
-  - actor@actor_rollout_ref.actor: dp_actor
+  - actor@actor_rollout_ref.actor: classmate_dp_actor
 
   # data: trainer/config/data/legacy_data.yaml
   - data@data: qwen_data
@@ -86,8 +86,10 @@ reward_model:
 #    classmate_model_name_or_path_list: ["deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"]
 #    classmate_model_name_or_path_list: ["Qwen/Qwen2.5-Math-1.5B"]
 #    classmate_model_name_or_path_list: ["Qwen/Qwen3-0.6B-Base"]
-    classmate_model_name_or_path_list: ["Qwen/Qwen3-0.6B"]
 #    classmate_model_name_or_path_list: ["LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42"]
+#    classmate_model_name_or_path_list: ["Qwen/Qwen3-0.6B"]
+#    classmate_model_name_or_path_list: ["LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"]
+    classmate_model_name_or_path_list: null
 
     classmate_reward_weight: 1
 
@@ -106,10 +108,10 @@ reward_model:
     # Rollout Importance Sampling: corrects distribution mismatch between rollout and training policies
     # Main control: Upper threshold for IS weights (null = disabled, float = enabled)
     # When enabled, computes IS weights and mismatch metrics (KL, PPL, etc.)
-    cl_rollout_is_threshold: 4.0
+    cl_rollout_is_threshold: 1.4
 
     # Lower threshold for IS weights (null = auto-reciprocal of upper)
-    cl_rollout_is_threshold_lower: null
+    cl_rollout_is_threshold_lower: 0.6
 
     # Aggregation level: "token" (biased), "sequence" (unbiased), "geometric" (experimental)
     cl_rollout_is_level: token
@@ -219,10 +221,11 @@ algorithm:
   # Rollout Importance Sampling: corrects distribution mismatch between rollout and training policies
   # Main control: Upper threshold for IS weights (null = disabled, float = enabled)
   # When enabled, computes IS weights and mismatch metrics (KL, PPL, etc.)
-  rollout_is_threshold: 2.0
+  # TODO haha correspond to clip_ratio_low=0.2 and clip_ratio_high=0.2 in actor.yaml; but here just for logging
+  rollout_is_threshold: 1.2
 
   # Lower threshold for IS weights (null = auto-reciprocal of upper)
-  rollout_is_threshold_lower: null
+  rollout_is_threshold_lower: 0.8
 
   # Aggregation level: "token" (biased), "sequence" (unbiased), "geometric" (experimental)
   rollout_is_level: token
@@ -237,7 +240,7 @@ algorithm:
   # Whether to apply IS weights to policy loss
   # true = apply weights to loss, false = compute metrics only (no weight application)
   # Useful for monitoring mismatch before enabling correction
-  rollout_is: True
+  rollout_is: false
 
 # config for the trainer
 trainer:

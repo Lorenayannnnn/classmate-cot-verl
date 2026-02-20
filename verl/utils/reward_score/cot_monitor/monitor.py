@@ -106,14 +106,31 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     start_with_think = False
 
     if enable_thinking:
-        main_cot, final_output, start_with_think, end_with_think = parse_out_main_cot_output(main_response)
+        think_open_id  = tokenizer.convert_tokens_to_ids("<think>")
+        think_close_id = tokenizer.convert_tokens_to_ids("</think>")
 
-        main_pred_token_ids = tokenizer.encode(main_cot)
+        main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end = parse_out_main_cot_output(
+            main_response, main_pred_token_ids, tokenizer, think_open_id, think_close_id
+        )
 
-        if main_response_mask is not None:     # len(main_pred_token_ids) == 0 means main_cot is empty string
-            max_response_len = main_response_mask.size(0)       # not sure why this happens
-            main_pred_token_ids = main_pred_token_ids[:max_response_len]
-            main_response_mask = [1] * len(main_pred_token_ids) + [0] * (max_response_len - len(main_pred_token_ids))
+        if main_response_mask is not None:
+            max_response_len = main_response_mask.size(0)
+
+            # Resolve cot_end when </think> was not found
+            if cot_end is None:
+                cot_end = int(main_response_mask.sum().item())
+            cot_end = min(cot_end, max_response_len)
+
+            # Build classmate_input_mask anchored to actual token positions in `responses`
+            classmate_input_mask = (
+                [0] * cot_start
+                + [1] * max(0, cot_end - cot_start)
+                + [0] * (max_response_len - cot_end)
+            )
+            main_response_mask = classmate_input_mask
+
+            # Extract exact CoT token IDs from the response tensor (no re-encoding)
+            main_pred_token_ids = main_pred_token_ids[cot_start:cot_end].tolist()[:max_response_len]
 
             # if len(main_pred_token_ids) > 0:
             #     # Trim front and back until it doesn't start or end with \n

@@ -19,10 +19,12 @@ eval_files="['$eval_path']"
 #TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
 #base_model_name_path=Qwen/Qwen3-1.7B
 #base_model_name_path=Qwen/Qwen3-0.6B
-base_model_name_path=LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42
+base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
+classmate_model_name_or_path_list='["LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"]'
+
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
@@ -51,7 +53,7 @@ total_test_times=50
 save_freq=10
 test_freq=10
 
-epoch_num=2
+epoch_num=3
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
@@ -59,7 +61,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -100,7 +102,8 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
     reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
-    reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode}
+    reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
+    reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list}
 #    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
 
 #    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
@@ -116,4 +119,4 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_general_sycophancy.sh
+#bash my_scripts/self_qwen3_classmate_general_sycophancy.sh

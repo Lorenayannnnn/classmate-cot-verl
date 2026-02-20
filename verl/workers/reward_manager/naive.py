@@ -120,6 +120,9 @@ class NaiveRewardManager(AbstractRewardManager):
             future.set_result(result)
             return future
 
+        think_open_id  = self.tokenizer.convert_tokens_to_ids("<think>")
+        think_close_id = self.tokenizer.convert_tokens_to_ids("</think>")
+
         item_contexts = []
         score_futures = []
 
@@ -144,7 +147,9 @@ class NaiveRewardManager(AbstractRewardManager):
 
             # Extract things after <think>...</think> as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, _ = parse_out_main_cot_output(response_str)
+                main_cot, main_output, _, _, _, _ = parse_out_main_cot_output(
+                    response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
+                )
             else:
                 main_cot = response_str
                 main_output = response_str
@@ -239,7 +244,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 for key, value in score.items():
                     if key == "score":
                         # reward_extra_info["main_model_reward"].append(value)
-                        reward_extra_info["main_reward"].append(value)
+                        reward_extra_info["main_model_reward"].append(value)
                     else:
                         reward_extra_info[f"main_model_{key}"].append(value)
             else:
@@ -284,7 +289,7 @@ class NaiveRewardManager(AbstractRewardManager):
                     print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
                     print("🐛[monitor_score]", ctx["data_item"].non_tensor_batch["monitor_score"])
                     print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
-                    monitor_reward_type = ctx["data_item"].non_tensor_batch.get("monitor_reward_type", "binary")
+                    monitor_reward_type = ctx["data_item"].non_tensor_batch["monitor_reward_type"]
                     monitor_score_value = ctx["data_item"].non_tensor_batch["monitor_score"]
                     if monitor_reward_type == "binary":
                         main_monitor_consistent = (score == 1) == (monitor_score_value == 1)

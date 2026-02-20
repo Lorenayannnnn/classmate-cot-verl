@@ -18,7 +18,7 @@ eval_files="['$eval_path']"
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 #base_model_name_path=Qwen/Qwen3-0.6B
-base_model_name_path=LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42
+base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
 # TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
@@ -39,7 +39,7 @@ total_test_times=50
 save_freq=10
 test_freq=10
 
-epoch_num=2
+epoch_num=3
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
@@ -47,7 +47,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \

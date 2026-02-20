@@ -49,17 +49,19 @@ class SycophancyInferenceExpRunner:
         assert self.inference_backend == "vllm", "Only vLLM inference backend is implemented for main model inference."
         # if self.use_vllm:
         from vllm import SamplingParams
-        sampling_param = SamplingParams(
-            logprobs=0,
-            repetition_penalty=1.0,
-            best_of=1,
-            top_p=1.0,
-            top_k=-1,
-            min_p=0.0,
-            temperature=0,
-            n=1,
-            max_tokens=self.args.max_tokens
-        )
+        # sampling_param = SamplingParams(
+        #     logprobs=0,
+        #     repetition_penalty=1.0,
+        #     best_of=1,
+        #     top_p=1.0,
+        #     top_k=-1,
+        #     min_p=0.0,
+        #     temperature=0,
+        #     n=1,
+        #     max_tokens=self.args.max_tokens
+        # )
+
+        sampling_param = SamplingParams(**self.args.generation_args)
 
         # else:
         #     self.model.eval()

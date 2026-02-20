@@ -27,7 +27,7 @@ from torch.distributed.tensor import DTensor
 
 import verl.utils.torch_functional as verl_F
 from verl import DataProto
-from verl.trainer.ppo.core_algos import agg_loss, get_policy_loss_fn, kl_penalty
+from verl.trainer.ppo.core_algos import agg_loss, compute_policy_loss_vanilla_classmate, get_policy_loss_fn, kl_penalty
 from verl.utils.attention_utils import index_first_axis, pad_input, rearrange, unpad_input
 from verl.utils.device import get_device_id, get_device_name
 from verl.utils.fsdp_utils import FSDPModule, fsdp2_clip_grad_norm_
@@ -384,8 +384,8 @@ class DataParallelPPOActor(BasePPOActor):
             # select_keys.append("advantages")
             if "classmate_input_mask" in data.batch.keys():
                 select_keys.append("classmate_input_mask")
-            if "classmate_rollout_is_weights" in data.batch.keys():
-                select_keys.append("classmate_rollout_is_weights")
+            if "classmate_prompt_logprobs" in data.batch.keys():
+                select_keys.append("classmate_prompt_logprobs")
             if "classmate_prompt_logprobs_mask" in data.batch.keys():
                 select_keys.append("classmate_prompt_logprobs_mask")
 
@@ -450,97 +450,25 @@ class DataParallelPPOActor(BasePPOActor):
                         loss_mode = self.config.policy_loss.get("loss_mode", "vanilla")
                         # vanilla -> verl.trainer.ppo.core_algos.compute_policy_loss_vanilla
 
-                        # Extract pre-computed rollout importance sampling weights if present
-                        # Weights are computed centrally in trainer and added when algorithm.rollout_is=True
-                        rollout_is_weights = model_inputs["rollout_is_weights"]
-
-                        # Separate reweighting for main vs classmate advantages
                         main_advantages = model_inputs["main_advantages"]
                         classmate_advantages = model_inputs["classmate_advantages"]
-                        classmate_rollout_is_weights = model_inputs["classmate_rollout_is_weights"]
+                        classmate_rollout_is_weights = model_inputs.get("classmate_rollout_is_weights", None)
+                        assert classmate_rollout_is_weights is None, "Classmate rollout IS will be calculated in vanilla cl loss; should not be pre-computed."
                         classmate_input_mask = model_inputs["classmate_input_mask"]
-                        # classmate_prompt_logprobs_mask = model_inputs["classmate_prompt_logprobs_mask"]
-
-                        # with open("test_1.txt", "w") as f:
-                        #     f.write("🐛🐛🐛 11111\n")
-                        #     f.write(f"🐛🐛🐛 classmate_input_mask {classmate_input_mask[0].tolist()}\n")
-                        #     f.write(f"🐛🐛🐛 classmate_prompt_logprobs_mask {classmate_prompt_logprobs_mask[0].tolist()}\n")
-                        # with open("test_2.txt", "w") as f:
-                        #     f.write("🐛🐛🐛 22222\n")
-                        #     f.write(f"🐛🐛🐛 classmate_input_mask {classmate_input_mask[1].tolist()}\n")
-                        #     f.write(f"🐛🐛🐛 classmate_prompt_logprobs_mask {classmate_prompt_logprobs_mask[1].tolist()}\n")
-                        # with open("test_3.txt", "w") as f:
-                        #     f.write("🐛🐛🐛 33333\n")
-                        #     f.write(f"🐛🐛🐛 classmate_input_mask {classmate_input_mask[2].tolist()}\n")
-                        #     f.write(f"🐛🐛🐛 classmate_prompt_logprobs_mask {classmate_prompt_logprobs_mask[2].tolist()}\n")
-
-                        # if (
-                        #     rollout_is_weights is not None
-                        #     and main_advantages is not None
-                        #     and classmate_advantages is not None
-                        #     and classmate_rollout_is_weights is not None
-                        #     and classmate_input_mask is not None
-                        # ):
-                        #     # Reweight main advantages using rollout IS weights
-                        main_adv_reweighted = main_advantages * rollout_is_weights
-
-                        # Classmate IS weights are already token-shaped and masked
-                        classmate_adv_reweighted = classmate_advantages * classmate_rollout_is_weights
-
-                        # Apply masks: rollout tokens vs classmate tokens
-                        classmate_mask = classmate_input_mask.to(main_adv_reweighted.device).float()
-
-                        combined_advantages = main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask
-
-                        # Batch-wise normalization only over classmate prefix tokens
-                        # print("🐛🐛🐛 combined_advantages", combined_advantages, combined_advantages.shape)
-                        rollout_level_adv_mean = verl_F.masked_mean(combined_advantages, classmate_mask, axis=1)
-                        # print("🐛🐛🐛 rollout_level_adv_mean", rollout_level_adv_mean, rollout_level_adv_mean.shape)
-                        batch_wise_adv_mean = verl_F.masked_mean(rollout_level_adv_mean, classmate_mask.sum(dim=1) > 0)
-                        # print("🐛🐛🐛 batch_wise_adv_mean", batch_wise_adv_mean, batch_wise_adv_mean.shape)
-                        adv_mean = batch_wise_adv_mean.expand(combined_advantages.shape[0], 1)
-                        # adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), classmate_mask)
-                        # advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
-                        # TODO haha
-                        # print("🐛🐛🐛 adv_mean", adv_mean, adv_mean.shape)
-                        # print("🐛🐛🐛 combined_advantages[0]", combined_advantages[0], combined_advantages[0].shape)
-                        # print("🐛🐛🐛 combined_advantages[1]", combined_advantages[1], combined_advantages[1].shape)
-                        advantages = (combined_advantages - adv_mean) * classmate_mask  # only normalize the classmate prefix tokens
-
-                        # adv_mean = verl_F.masked_mean(combined_advantages, classmate_mask)
-                        #                         # adv_var = verl_F.masked_mean((combined_advantages - adv_mean).square(), classmate_mask)
-                        #                         # combined_advantages = (combined_advantages - adv_mean) / torch.sqrt(adv_var + 1e-8)
-                        #
-
-                        # print("🐛🐛🐛 classmate adjusted")
-                        # print("🐛🐛🐛 main_adv_reweighted", main_adv_reweighted[0].tolist())
-                        # print("🐛🐛🐛 response_mask", response_mask[0].tolist())
-                        # print("🐛🐛🐛 classmate_adv_reweighted", classmate_adv_reweighted[0].tolist())
-                        # print("🐛🐛🐛 classmate_mask", classmate_mask[0].tolist())
-                        # print("🐛🐛🐛 combined advantage", (main_adv_reweighted * response_mask + classmate_adv_reweighted * classmate_mask)[0].tolist())
-                        # print("🐛🐛🐛 combined_advantages_after_normalize", combined_advantages[0].tolist())
-
-                        # Avoid double-applying IS weights in policy loss
-                        rollout_is_weights = None
 
                         # NOTE: Both mismatch diagnostic metrics (PPL, KL, etc.) and IS weight metrics
                         # are computed centrally in ray_trainer.py for consistency and efficiency.
-                        # This ensures metrics are computed uniformly across all batches at the trainer level
-                        # and avoids redundant computation across workers and micro-batches.
 
-                        # gpg -> verl.trainer.ppo.core_algos.compute_policy_loss_gpg
-                        # clip_cov -> verl.trainer.ppo.core_algos.compute_policy_loss_clip_cov
-                        policy_loss_fn = get_policy_loss_fn(loss_mode)
-
-                        # Compute policy loss (all functions return 4 values)
-                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = policy_loss_fn(
+                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = compute_policy_loss_vanilla_classmate(
                             old_log_prob=old_log_prob,
                             log_prob=log_prob,
-                            advantages=advantages,
+                            main_advantages=main_advantages,
+                            classmate_log_prob=model_inputs["classmate_prompt_logprobs"],
+                            classmate_advantages=classmate_advantages,
+                            classmate_input_mask=classmate_input_mask,
                             response_mask=response_mask,
                             loss_agg_mode=loss_agg_mode,
                             config=self.config,
-                            rollout_is_weights=rollout_is_weights,
                         )
 
                         if entropy_coeff != 0:

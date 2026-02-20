@@ -150,7 +150,7 @@ class BaseVerifier(ABC):
             "prediction_mean": float(prediction_mean),
             "ground_truth_mean": float(ground_truth_mean),
             # "rmse": float(rmse),
-            "mae": float(mae)
+            # "mae": float(mae)
         }
 
     def compute_score(self, continuation: str, gt: Any, debug: bool = False, **kwargs) -> Dict[str, Any]:

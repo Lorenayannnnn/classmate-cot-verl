@@ -289,11 +289,10 @@ class ClassmateWorker(Worker):
         classmate_input_lens = []
         classmate_input_and_main_cot_lens = []
 
-        # TODO haha
-        debug_user_only_token_ids = []
-        debug_user_only_prompt_strs = []
-        debug_cls_input_token_ids = []
-        debug_cls_input_prompt_strs = []
+        # debug_user_only_token_ids = []
+        # debug_user_only_prompt_strs = []
+        # debug_cls_input_token_ids = []
+        # debug_cls_input_prompt_strs = []
         try:
             # ONLOAD: Load model to GPU before generation (no-op for vLLM API mode)
             self._onload_model()
@@ -315,14 +314,12 @@ class ClassmateWorker(Worker):
                 batch_prompts = batch_prompts.tolist()
             if isinstance(batch_actor_responses, np.ndarray):
                 batch_actor_responses = batch_actor_responses.tolist()
-            if isinstance(batch_actor_responses_token_ids, np.ndarray):
-                batch_actor_responses_token_ids = batch_actor_responses_token_ids.tolist()
+            # Keep batch_actor_responses_token_ids as np.ndarray to avoid re-casting later
             if isinstance(batch_all_end_with_thinks, np.ndarray):
                 batch_all_end_with_thinks = batch_all_end_with_thinks.tolist()
             if isinstance(batch_all_start_with_thinks, np.ndarray):
                 batch_all_start_with_thinks = batch_all_start_with_thinks.tolist()
-            if isinstance(classmate_input_mask, np.ndarray):
-                classmate_input_mask = classmate_input_mask.tolist()
+            # Keep classmate_input_mask as np.ndarray to avoid re-casting later
             if isinstance(batch_all_other_prompts, np.ndarray):
                 batch_all_other_prompts = batch_all_other_prompts.tolist()
 
@@ -334,12 +331,12 @@ class ClassmateWorker(Worker):
             if len(valid_indices) != original_length:
                 batch_prompts = [batch_prompts[i] for i in valid_indices]
                 batch_actor_responses = [batch_actor_responses[i] for i in valid_indices]
-                batch_actor_responses_token_ids = [batch_actor_responses_token_ids[i] for i in valid_indices]
-                batch_all_end_with_thinks = [batch_all_end_with_thinks[i] for i in valid_indices]
-                batch_all_start_with_thinks = [batch_all_start_with_thinks[i] for i in valid_indices]
-                classmate_input_mask = [classmate_input_mask[i] for i in valid_indices]
-                if batch_all_other_prompts is not None:
-                    batch_all_other_prompts = [batch_all_other_prompts[i] for i in valid_indices]
+                batch_actor_responses_token_ids = batch_actor_responses_token_ids[valid_indices]
+                # batch_all_end_with_thinks = [batch_all_end_with_thinks[i] for i in valid_indices]
+                # batch_all_start_with_thinks = [batch_all_start_with_thinks[i] for i in valid_indices]
+                classmate_input_mask = classmate_input_mask[valid_indices]
+                # if batch_all_other_prompts is not None:
+                #     batch_all_other_prompts = [batch_all_other_prompts[i] for i in valid_indices]
 
             assert self.generation_config.get("num_return_sequences", 1) == 1 or self.generation_config.get("n", 1) == 1, "Classmate worker currently only supports num_return_sequences=1"
 
@@ -349,8 +346,9 @@ class ClassmateWorker(Worker):
                 mini_batch_end = min(mini_batch_start + self.batch_size, total_samples)
                 mini_batch_prompts = batch_prompts[mini_batch_start:mini_batch_end]
                 mini_batch_actor_responses = batch_actor_responses[mini_batch_start:mini_batch_end]
-                mini_batch_end_with_thinks = batch_all_end_with_thinks[mini_batch_start:mini_batch_end]
-                mini_batch_start_with_thinks = batch_all_start_with_thinks[mini_batch_start:mini_batch_end]
+                mini_batch_actor_responses_token_ids = batch_actor_responses_token_ids[mini_batch_start:mini_batch_end]
+                # mini_batch_end_with_thinks = batch_all_end_with_thinks[mini_batch_start:mini_batch_end]
+                # mini_batch_start_with_thinks = batch_all_start_with_thinks[mini_batch_start:mini_batch_end]
                 mini_batch_classmate_input_mask = classmate_input_mask[mini_batch_start:mini_batch_end]
 
                 mini_batch_input_prompts = []
@@ -361,8 +359,8 @@ class ClassmateWorker(Worker):
                     messages = [{"role": "user", "content": tmp_prompt}]
                     user_only_message_token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
 
-                    debug_user_only_token_ids.append(user_only_message_token_ids)
-                    debug_user_only_prompt_strs.append(self.tokenizer.decode(user_only_message_token_ids, skip_special_tokens=False))
+                    # debug_user_only_token_ids.append(user_only_message_token_ids)
+                    # debug_user_only_prompt_strs.append(self.tokenizer.decode(user_only_message_token_ids, skip_special_tokens=False))
 
                     # if batch_other_prompt is not None:      # help other q
                         # messages.append({"role": "user", "content": batch_other_prompt[idx]})
@@ -385,21 +383,27 @@ class ClassmateWorker(Worker):
                         classmate_input_lens.append(0)
                         classmate_input_and_main_cot_lens.append(0)
 
-                        debug_cls_input_token_ids.append(None)
-                        debug_cls_input_prompt_strs.append(None)
+                        # debug_cls_input_token_ids.append(None)
+                        # debug_cls_input_prompt_strs.append(None)
                         continue
                     else:
                         if self.enable_thinking:
                             assert "Qwen2.5-Math-1.5B" in self.model_name_or_path or "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in self.model_name_or_path or "Qwen3" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
-                            prefix_str = "<think>\n"
-                            suffix_str = "\n</think>\n\n"
+                            tmp_response_token_ids = mini_batch_actor_responses_token_ids[idx][tmp_classmate_input_mask.astype(bool)].tolist()
+
+                            # haha include <think> in CoT?
+                            # prefix_token_ids = user_only_message_token_ids
+                            # token_ids = prefix_token_ids + tmp_response_token_ids
+
+                            # haha NOT include <think> in CoT?
+                            prefix_str = "<think>"
+                            suffix_str = "</think>\n\n"
                             prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str)
-                            tmp_response_token_ids = self.tokenizer.encode(tmp_response)[:int(np.sum(tmp_classmate_input_mask))]
                             suffix_token_ids = self.tokenizer.encode(suffix_str)
                             token_ids = prefix_token_ids + tmp_response_token_ids + suffix_token_ids
 
-                            debug_cls_input_token_ids.append(token_ids)
-                            debug_cls_input_prompt_strs.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
+                            # debug_cls_input_token_ids.append(token_ids)
+                            # debug_cls_input_prompt_strs.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
 
                             # messages.append({"role": "assistant", "content": f"<think>{tmp_response}</think>"})
                             # token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
@@ -482,19 +486,19 @@ class ClassmateWorker(Worker):
                     tmp_padded_classmate_prompt_logprobs = logprobs
                     tmp_padded_classmate_prompt_logprobs_mask = [1] * len(logprobs)
                 else:
-                    try:
-                        assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}"
-                    except Exception as e:
-                        with open("debug.txt", "a") as f:
-                            f.write(f"❌ Assertion error when slicing logprobs for classmate prompt: {e}\n")
-                            f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}\n")
-                            f.write(f"resp_token_ids={resp_token_ids}\n")
-                            f.write(f"debug_user_only_token_ids={debug_user_only_token_ids[idx]}\n")
-                            f.write(f"debug_user_only_prompt_strs={debug_user_only_prompt_strs[idx]}\n")
-                            f.write(f"debug_cls_input_token_ids={debug_cls_input_token_ids[idx]}\n")
-                            f.write(f"debug_cls_input_prompt_strs={debug_cls_input_prompt_strs[idx]}\n")
-                            f.write("-" * 50 + "\n")
-                        raise
+                    # try:
+                    #     assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}"
+                    # except Exception as e:
+                        # with open("debug.txt", "a") as f:
+                        #     f.write(f"❌ Assertion error when slicing logprobs for classmate prompt: {e}\n")
+                        #     f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}\n")
+                        #     f.write(f"resp_token_ids={resp_token_ids}\n")
+                        #     f.write(f"debug_user_only_token_ids={debug_user_only_token_ids[idx]}\n")
+                        #     f.write(f"debug_user_only_prompt_strs={debug_user_only_prompt_strs[idx]}\n")
+                        #     f.write(f"debug_cls_input_token_ids={debug_cls_input_token_ids[idx]}\n")
+                        #     f.write(f"debug_cls_input_prompt_strs={debug_cls_input_prompt_strs[idx]}\n")
+                        #     f.write("-" * 50 + "\n")
+                        # raise
 
                     # Pre pad for tokens that got truncated in process_main_cot_helper, and then logprob of main CoT
                     cls_input_mask = np.array(cls_input_mask)

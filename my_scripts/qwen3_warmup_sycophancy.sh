@@ -38,7 +38,7 @@ total_test_times=10
 save_freq=5
 test_freq=5
 
-epoch_num=3
+epoch_num=2
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))

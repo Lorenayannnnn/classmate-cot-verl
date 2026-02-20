@@ -50,7 +50,7 @@ gpu_idx=1
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=3072 \
         data_args.dataset_name=helpful_instructions \
         data_args.max_predict_samples=1000
     echo "Finished inference main model at step ${step_idx}"

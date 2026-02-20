@@ -23,11 +23,17 @@ model_args:
 running_args:
   exp_type: "inference_main_model"
   batch_size: 1
-  max_tokens: null
   output_dir: null    # will be overwritten in the main script
 
   monitor_template_name: null
   monitor_model_name: null
+
+  generation_args:
+    temperature: 1
+    top_k: -1
+    top_p: 1
+    n: 1
+    max_tokens: null
 
 hydra:
   output_subdir: null
