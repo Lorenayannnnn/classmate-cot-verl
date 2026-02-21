@@ -47,7 +47,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=2,3,4,5 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \

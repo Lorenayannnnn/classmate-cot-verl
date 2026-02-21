@@ -126,5 +126,4 @@ logs
 log
 outputs
 .history
-keys.txt
 keys.py

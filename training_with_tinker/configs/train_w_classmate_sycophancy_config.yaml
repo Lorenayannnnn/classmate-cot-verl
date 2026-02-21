@@ -1,0 +1,75 @@
+data_args:
+  #  Dataset
+  dataset_name: hendrycks_math_minimal_answer_box_prompt_105_test
+  #  Tokenization
+  max_prompt_length: 1024
+
+main_model_args:
+  model_name_or_path: Qwen/Qwen3-8B-Base
+  generation_configs:
+    max_tokens: 4096    # response length
+#    seed: ${training_args.seed}
+    temperature: 1.0
+    top_k: -1
+    top_p: 1.0
+
+classmate_model_args:
+  model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
+  classmate_reward_weight: 1
+
+  # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility
+  classmate_reward_type: null
+
+  # always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+  use_classmate_main_cond: no_classmate_when_main_incorrect
+
+  add_consistency_reward: False
+
+  train_main_cot_keep_rate: null   # only effective for vanilla_reward
+  eval_main_cot_keep_rate: 0.7   # only effective for vanilla_reward
+  random_truncate_min_keep_rate: 0.1    # only effective for random_truncate
+  random_truncate_max_keep_rate: 0.9    # only effective for random_truncate
+
+  generation_configs:
+    max_tokens: 3072    # max num of new tokens to generate
+    seed: ${training_args.seed}
+    temperature: 0
+    top_k: 1
+    top_p: 1.0
+
+training_args:
+  adv_estimator: null   # grpo, grpo_main_classmate_separated
+
+  output_dir: outputs_tinker/${training_args.wandb_run_name}
+
+  seed: 42
+  epochs: 12
+  total_save_time_num: 50
+  total_test_time_num: 100
+  batch_size: 256
+  group_size: 8   # for grpo
+  micro_batch_size: 32
+  lr_scheduler_type: "linear"
+  resume_from_checkpoint: null
+
+  optim:
+    # AdamW by default
+#    optimizer: AdamW
+#    optimizer_impl: torch.optim
+    learning_rate: 1.0e-06
+    beta1: 0.9
+    beta2: 0.999
+    eps: 0.00000001
+    weight_decay: 0.01
+    grad_clip_norm: 1.0
+
+
+  # wandb
+  # TODO haha
+  use_wandb: True
+  wandb_project: classmate_cot_w_verl
+  wandb_run_name: null
+
+hydra:
+  run:
+    dir: ${training_args.output_dir}
