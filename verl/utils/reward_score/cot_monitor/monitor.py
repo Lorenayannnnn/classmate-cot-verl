@@ -16,7 +16,7 @@ from openai import (
 )
 
 import tinker
-from keys import TINKER_API_KEY, INPUT_TINKER_MODEL_NAME
+from keys import TINKER_API_KEY, INPUT_MONITOR_MODEL_NAME
 from tinker_cookbook import model_info, renderers
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
@@ -32,7 +32,7 @@ USE_TINKER = True
 # ---------------------------------------------------------------------------
 
 def create_llm_judge(
-    judge_model_name: str = INPUT_TINKER_MODEL_NAME,
+    judge_model_name: str = INPUT_MONITOR_MODEL_NAME,
     base_url: str | None = None,
 ) -> Dict[str, Any]:
     """
@@ -187,7 +187,7 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     # return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
 
 def monitor_cot_wrapper_w_tinker(
-    judge_client_config: Dict[str, Any],
+    monitor_config: Dict[str, Any],
     monitor_prompts: List[str],
     verifier=None,
     temperature: float = 0.0,
@@ -205,7 +205,7 @@ def monitor_cot_wrapper_w_tinker(
             if monitor_prompt is None:
                 tinker_futures.append(None)
             else:
-                tinker_futures.append(send_prompt_to_tinker(judge_client_config, monitor_prompt, temperature))
+                tinker_futures.append(send_prompt_to_tinker(monitor_config, monitor_prompt, temperature))
 
         # Execute monitor_cot calls in parallel
         all_monitor_scores = []
@@ -217,9 +217,9 @@ def monitor_cot_wrapper_w_tinker(
                 all_monitor_explanations.append("No monitor prompt provided.")
                 continue
             sample_result = sample_future.result()
-            judge_score, judge_explanation = verifier.parse_llm_judge_output(sample_result, judge_client_config)
-            all_monitor_scores.append(judge_score)
-            all_monitor_explanations.append(judge_explanation)
+            monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
+            all_monitor_scores.append(monitor_score)
+            all_monitor_explanations.append(monitor_explanation)
 
         return all_monitor_scores, all_monitor_explanations
     else:

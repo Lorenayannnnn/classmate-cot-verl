@@ -36,7 +36,7 @@ from torch.utils.data import Dataset, Sampler
 from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 
-from keys import INPUT_JUDGE_MODEL_NAME
+from keys import INPUT_MONITOR_MODEL_NAME
 from verl import DataProto
 from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
     create_llm_judge
@@ -296,7 +296,6 @@ class RayPPOTrainer:
         train_sampler: Optional[Sampler] = None,
         device_name=None,
         enable_thinking=None,
-        tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -364,8 +363,8 @@ class RayPPOTrainer:
 
         self.enable_thinking = enable_thinking
 
-        self.judge_client_config = create_llm_judge(
-            judge_model_name=tinker_llm_judge_model_name,
+        self.monitor_config = create_llm_judge(
+            judge_model_name=INPUT_MONITOR_MODEL_NAME,
         )
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
@@ -711,7 +710,7 @@ class RayPPOTrainer:
                 # )
 
                 all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
-                    judge_client_config=self.judge_client_config,
+                    monitor_config=self.monitor_config,
                     monitor_prompts=monitor_prompts,
                     verifier=verifier,
                 )

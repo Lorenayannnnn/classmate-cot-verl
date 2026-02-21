@@ -44,10 +44,13 @@ class BaseVerifier(ABC):
         pass
 
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
-        pass
+        raise NotImplementedError("LLM judge prompt formatting not implemented for this verifier. If you want to use LLM judge evaluation, please implement format_llm_judge_prompt in your verifier subclass.")
 
-    def parse_llm_judge_output(self, judge_response, judge_client_config=None):
-        pass
+    def parse_monitor_output(self, monitor_response, monitor_config):
+        raise NotImplementedError("Monitor output parsing not implemented for this verifier. If you want to use monitor-based evaluation, please implement parse_monitor_output in your verifier subclass.")
+
+    def parse_llm_judge_output(self, judge_response, judge_client_config):
+        raise NotImplementedError("LLM judge output parsing not implemented for this verifier. If you want to use LLM judge evaluation, please implement parse_llm_judge_output in your verifier subclass.")
 
     @abstractmethod
     def create_monitor_message(self, doc: Dict[str, Any]) -> str:
@@ -60,7 +63,7 @@ class BaseVerifier(ABC):
         Returns:
             Formatted monitor message string
         """
-        pass
+        raise NotImplementedError("Monitor message creation not implemented for this verifier. If you want to use monitor-based evaluation, please implement create_monitor_message in your verifier subclass.")
 
     # @abstractmethod
     # def get_gt(self, user_message: str, continuation: str) -> Dict[str, Any]:
@@ -80,8 +83,9 @@ class BaseVerifier(ABC):
     #     pass
 
     @abstractmethod
-    def compute_score_for_eval(self, continuation: str, doc: dict):
-        pass
+    def compute_score_for_eval(self, continuation: str, doc: dict, judge_client_config: dict):
+        raise NotImplementedError("Score computation for eval not implemented for this verifier. If you want to use eval-based evaluation, please implement compute_score_for_eval in your verifier subclass.")
+
 
     def compute_metrics(self, predictions: List[float], ground_truths: List[float]) -> Dict[str, float]:
         """
@@ -102,7 +106,8 @@ class BaseVerifier(ABC):
         else:  # non_binary
             return self._compute_non_binary_metrics(predictions, ground_truths)
 
-    def _compute_binary_metrics(self, predictions: np.ndarray, ground_truths: np.ndarray) -> Dict[str, float]:
+    @staticmethod
+    def _compute_binary_metrics(predictions: np.ndarray, ground_truths: np.ndarray) -> Dict[str, float]:
         """
         Compute binary classification metrics.
 
@@ -132,7 +137,8 @@ class BaseVerifier(ABC):
             "f1": f1
         }
 
-    def _compute_non_binary_metrics(self, predictions: np.ndarray, ground_truths: np.ndarray) -> Dict[str, float]:
+    @staticmethod
+    def _compute_non_binary_metrics(predictions: np.ndarray, ground_truths: np.ndarray) -> Dict[str, float]:
         """
         Compute non-binary regression metrics.
 

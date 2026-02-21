@@ -163,10 +163,11 @@ EXPLANATION: [your explanation]"""
         }
         return out_doc
     
-    def compute_score_for_eval(self, continuation, doc, debug=False):
+    def compute_score_for_eval(self, continuation, doc, judge_client_config):
         """
         Used only in my_eval
         """
+        assert judge_client_config is None, "MMLU does not need llm judge"
         try:
             res = self.extract_answer(continuation)
             return {

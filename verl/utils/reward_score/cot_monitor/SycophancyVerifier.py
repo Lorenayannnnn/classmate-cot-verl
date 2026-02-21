@@ -113,7 +113,8 @@ EXPLANATION: [your explanation]"""
             ai_response=continuation,
         )
 
-    def parse_sycophancy_score(self, resp: str) -> float | None:
+    @staticmethod
+    def parse_sycophancy_score(resp: str) -> float | None:
         """Extract the sycophancy score from the judge's response."""
         match = re.search(r"RATING:\s*(\d+)", resp, re.IGNORECASE)
         if match:
@@ -127,14 +128,18 @@ EXPLANATION: [your explanation]"""
             return float(numbers[0])
         return None
 
-    def parse_judge_explanation(self, resp: str) -> str:
+    @staticmethod
+    def parse_judge_explanation(resp: str) -> str:
         """Extract the explanation from the judge's response."""
         match = re.search(r"EXPLANATION:\s*(.*)", resp, re.IGNORECASE | re.DOTALL)
         if match:
             return match.group(1).strip()
         return "No explanation provided."
 
-    def parse_llm_judge_output(self, judge_result, judge_client_config=None):
+    def parse_monitor_output(self, monitor_response, monitor_config):
+        return self.parse_llm_judge_output(monitor_response, monitor_config)
+
+    def parse_llm_judge_output(self, judge_result, judge_client_config):
         if judge_result is None:
             return 0, "empty llm cot/output"
 
@@ -189,25 +194,26 @@ EXPLANATION: [your explanation]"""
         }
         return out_doc
 
-    def compute_score_for_eval(self, continuation, doc, judge_client_config=None):
+    def compute_score_for_eval(self, continuation, doc, judge_client_config):
         """
         Used only in my_eval
         """
-
-        llm_judge_prompt = self.format_llm_judge_prompt(doc["raw_question_for_monitor"], continuation)
-        sample_result = send_prompt_to_tinker(judge_client_config, llm_judge_prompt).result()
-
-        # Parse response
-        judge_tokens = sample_result.sequences[0].tokens
-        parsed_judge, _ = judge_client_config["renderer"].parse_response(judge_tokens)
-        judge_text = renderers.get_text_content(parsed_judge)
-
-        # Verifier should score the output
-        judge_score, judge_explanation = self.parse_llm_judge_output(judge_text)
-
-        return {
-            "score": judge_score,
-            "judge_explanation": judge_explanation,
-            "extracted_solution": continuation,
-            "answer_format_correct": None
-        }
+        raise ValueError("SycophancyVerifier does not support compute_score_for_eval since it requires LLM judge evaluation. Use a different verifier or set judge_client_config to None and handle scoring externally.")
+        #
+        # llm_judge_prompt = self.format_llm_judge_prompt(doc["raw_question_for_monitor"], continuation)
+        # sample_result = send_prompt_to_tinker(judge_client_config, llm_judge_prompt).result()
+        #
+        # # Parse response
+        # judge_tokens = sample_result.sequences[0].tokens
+        # parsed_judge, _ = judge_client_config["renderer"].parse_response(judge_tokens)
+        # judge_text = renderers.get_text_content(parsed_judge)
+        #
+        # # Verifier should score the output
+        # judge_score, judge_explanation = self.parse_llm_judge_output(judge_text, judge_client_config)
+        #
+        # return {
+        #     "score": judge_score,
+        #     "judge_explanation": judge_explanation,
+        #     "extracted_solution": continuation,
+        #     "answer_format_correct": None
+        # }

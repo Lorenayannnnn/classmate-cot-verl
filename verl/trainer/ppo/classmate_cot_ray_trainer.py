@@ -390,7 +390,6 @@ class ClassmateCoTRayPPOTrainer:
         seed=None,
         enable_thinking=None,
         # host_classmate_name_to_url_json_fn=None,
-        tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -512,8 +511,8 @@ class ClassmateCoTRayPPOTrainer:
         assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
         self.enable_thinking = enable_thinking
 
-        self.judge_client_config = create_llm_judge(
-            judge_model_name=tinker_llm_judge_model_name,
+        self.monitor_config = create_llm_judge(
+            judge_model_name=INPUT_JUDGE_MODEL_NAME,
         )
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
@@ -859,7 +858,7 @@ class ClassmateCoTRayPPOTrainer:
                 #     model_name=self.config.reward_model["monitor_model_name"]
                 # )
                 all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
-                    judge_client_config=self.judge_client_config,
+                    monitor_config=self.monitor_config,
                     monitor_prompts=monitor_prompts,
                     verifier=verifier,
                 )

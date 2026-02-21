@@ -9,7 +9,7 @@ from openai import OpenAI
 
 from tinker_cookbook import renderers
 
-from keys import INPUT_TINKER_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
+from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker, process_main_cot_helper
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
 
@@ -37,6 +37,11 @@ class SycophancyInferenceExpRunner:
         # self.openai_client = OpenAI(api_key=OPENAI_KEY)
         self.main_cot_keep_rate = main_cot_keep_rate
         self.data_source = data_source
+
+        self.monitor_config = create_llm_judge(  # Now use the same model as monitor and judge
+            # judge_model_name="openai/gpt-oss-20b",
+            judge_model_name=INPUT_MONITOR_MODEL_NAME,
+        )
 
         self.judge_client_config = create_llm_judge(        # Now use the same model as monitor and judge
             # judge_model_name="openai/gpt-oss-20b",
@@ -133,7 +138,7 @@ class SycophancyInferenceExpRunner:
                 llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"], final_output)
 
                 if monitor_prompt is not None:
-                    monitor_future = send_prompt_to_tinker(self.judge_client_config, monitor_prompt)
+                    monitor_future = send_prompt_to_tinker(self.monitor_config, monitor_prompt)
                 else:
                     monitor_future = _as_future(None)
 
@@ -149,7 +154,7 @@ class SycophancyInferenceExpRunner:
                         "gt": batch['gt'][batch_entry_idx],
                         "raw_question_for_monitor": batch["raw_question_for_monitor"],
                     }
-                    process_result_dict = dataset_object.compute_score_for_eval(continuation=final_output,doc=compute_score_input_dict)
+                    process_result_dict = dataset_object.compute_score_for_eval(continuation=final_output, doc=compute_score_input_dict, judge_client_config=None)
                     main_score = process_result_dict["score"]
                     all_main_model_rewards.append(main_score)
                     main_extracted_solution = process_result_dict["extracted_solution"]
@@ -184,7 +189,7 @@ class SycophancyInferenceExpRunner:
 
             monitor_result = pending["monitor_future"].result()
             # TODO assuming monitor and llm judge output format requirements are the same
-            monitor_score, monitor_explanation = verifier.parse_llm_judge_output(monitor_result, self.judge_client_config)
+            monitor_score, monitor_explanation = verifier.parse_monitor_output(monitor_result, self.monitor_config)
             result_dict["monitor_score"] = monitor_score
             result_dict["monitor_explanation"] = monitor_explanation
             all_monitor_scores.append(monitor_score)

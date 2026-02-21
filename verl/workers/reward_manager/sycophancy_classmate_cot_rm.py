@@ -20,7 +20,7 @@ import ray
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tinker_cookbook import renderers
 
-from keys import INPUT_TINKER_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
+from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
