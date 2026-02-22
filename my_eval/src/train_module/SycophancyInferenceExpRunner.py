@@ -188,7 +188,6 @@ class SycophancyInferenceExpRunner:
             result_dict = pending["result_dict"]
 
             monitor_result = pending["monitor_future"].result()
-            # TODO assuming monitor and llm judge output format requirements are the same
             monitor_score, monitor_explanation = verifier.parse_monitor_output(monitor_result, self.monitor_config)
             result_dict["monitor_score"] = monitor_score
             result_dict["monitor_explanation"] = monitor_explanation

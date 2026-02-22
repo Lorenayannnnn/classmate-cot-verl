@@ -3,9 +3,6 @@ from typing import Any, Dict
 
 from tinker_cookbook import renderers
 from verl.utils.reward_score.cot_monitor.BaseVerifier import BaseVerifier
-from verl.utils.reward_score.cot_monitor.monitor import (
-    send_prompt_to_tinker,
-)
 
 class SycophancyVerifier(BaseVerifier):      # For supporting tinker call; tinker call is made outside this for using Future
     def __init__(
