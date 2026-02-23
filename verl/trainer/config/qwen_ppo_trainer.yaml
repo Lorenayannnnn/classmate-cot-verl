@@ -239,8 +239,8 @@ trainer:
   # Default local directory for saving checkpoints
   # TODO modify
 #  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
-  default_local_dir: /local/data/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
-#  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
+  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
+#  default_local_dir: /local/data/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
 
   # Maximum number of actor checkpoints to keep
   max_actor_ckpt_to_keep: null
@@ -282,8 +282,8 @@ global_profiler:
   # Path to save profiling contents
   # TODO modify
 #  save_path: "outputs/profile"
-  save_path: "/local/data/lorena/${trainer.project_name}/outputs/profile"
-#  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
+  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
+#  save_path: "/local/data/lorena/${trainer.project_name}/outputs/profile"
 
   # Specific tool configs, can use +profiler.tool_config.[tool].xxx to config
   global_tool_config:

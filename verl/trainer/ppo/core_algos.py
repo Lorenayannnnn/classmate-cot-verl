@@ -1375,7 +1375,10 @@ def compute_policy_loss_vanilla_classmate(
     pg_clipfrac = verl_F.masked_mean(torch.ne(ratio, ratio_clipped).float(), response_mask)
 
     # Classmate ratio (unclipped and clipped)
-    cl_negative_approx_kl = torch.clamp(classmate_log_prob - old_log_prob, min=-20.0, max=20.0)
+    # TODO haha cl IS???
+    # cl_negative_approx_kl = torch.clamp(classmate_log_prob - old_log_prob, min=-20.0, max=20.0)
+    # TODO haha NO cl IS???
+    cl_negative_approx_kl = torch.clamp(log_prob - old_log_prob, min=-20.0, max=20.0)
     cl_ratio = torch.exp(cl_negative_approx_kl)
     cl_ratio_clipped = torch.clamp(cl_ratio, 1 - classmate_clip_ratio_low, 1 + classmate_clip_ratio_high)
     pg_clipfrac_lower = verl_F.masked_mean(torch.ne(cl_ratio, cl_ratio_clipped).float(), classmate_input_mask)

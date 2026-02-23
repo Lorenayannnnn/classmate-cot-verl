@@ -124,6 +124,6 @@ ENV/
 # local logs
 logs
 log
-outputs
+outputs*
 .history
 keys.py

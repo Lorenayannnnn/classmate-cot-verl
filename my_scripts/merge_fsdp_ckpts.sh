@@ -38,23 +38,24 @@
 #main_dir="/home/ubuntu/midwest/classmate-cot-verl/outputs/classmate_cot_w_verl/grpo_Qwen/Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/gdpo_Qwen/Qwen3-0.6B_mmlu_sycophancy_new_vanilla_reward_always_m_cl_consistent_False_cl_classmate_partial_classmate_llama_269136_episodes_seed_42"
 #main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_Qwen/Qwen3-0.6B_grpo_warmup_24000_episodes_seed_42"
-
-main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_Qwen/Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"
-repo_name="20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_Qwen/Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"
 
 # max length 96
-#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42_grpo_baseline_128000_episodes_seed_42"
-#repo_name="20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42_grpo_baseline_192000_episodes_seed_42"
+#repo_name="20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42"
 
-#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42_gdpo_vanilla_reward_always_cl_classmate_partial_128000_episodes_seed_42"
-#repo_name="20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42_gdpo_vanilla_reward_always_cl_classmate_partial_192000_episodes_seed_42"
+#repo_name="20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42"
 
-#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260216-Qwen3-no_nonfactual_irrelevance-0.6B_grpo_warmup_24000_episodes_seed_42_gdpo_vanilla_reward_always_cl_SELF_classmate_partial_128000_episodes_seed_42"
-#repo_name="20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42"
+#main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42_gdpo_vanilla_reward_always_cl_SELF_classmate_partial_192000_episodes_seed_42"
+#repo_name="20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42"
+
+main_dir="/local/data/lorena/classmate_cot_w_verl/outputs/helpful_instructions_LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42_gdpo_vanilla_reward_always_cl_classmate_partial_192000_episodes_seed_42_no_cl_IS"
+repo_name="20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS"
 
 start_idx=0
-max_idx=3
-step_size=5
+max_idx=20
+step_size=10
 
 for (( i=start_idx; i<=max_idx; i++ )); do
   echo "== Starting group beginning at index ${i} =="

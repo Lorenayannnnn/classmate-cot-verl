@@ -80,7 +80,7 @@ def plot_monitor_metrics_across_steps(
 
     for dataset_name in dataset_list:
         metric_mode = _detect_metric_mode(dataset_name)
-        count_metrics = ["total_monitored_entries", "total_output_valid_entries", "total_monitor_valid_entries"]
+        count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
         if metric_mode == "non_binary":
             # metrics = ["mse", "prediction_mean", "ground_truth_mean", "mae"] + count_metrics
             metrics = ["mse", "prediction_mean", "ground_truth_mean"] + count_metrics
@@ -138,16 +138,16 @@ def plot_monitor_metrics_across_steps(
                 hue_order=hue_order,
                 palette=model_palette,
                 marker="o",
-                markersize=7,
-                linewidth=2.0,
+                markersize=9,
+                linewidth=3.0,
                 ax=ax,
             )
 
             metric_label = metric.replace("_", " ").title()
-            ax.set_title(metric_label, fontsize=12, fontweight="bold", pad=6)
-            ax.set_xlabel("RL Steps", fontsize=11)
+            ax.set_title(metric_label, fontsize=14, fontweight="bold", pad=6)
+            ax.set_xlabel("RL Steps", fontsize=13)
             ax.set_ylabel("")
-            ax.tick_params(axis="both", labelsize=10)
+            ax.tick_params(axis="both", labelsize=12)
             ax.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.6)
             sns.despine(ax=ax)
 
@@ -156,14 +156,14 @@ def plot_monitor_metrics_across_steps(
                 x = step_to_x.get(row["RL Steps"], None)
                 if x is None or pd.isna(row["Value"]):
                     continue
-                value_str = f"{row['Value']:.2f}" if metric in float_metrics else f"{int(round(row['Value']))}"
+                value_str = f"{row['Value']:.1f}" if metric in float_metrics else f"{int(round(row['Value']))}"
                 ax.text(
                     x,
                     row["Value"],
                     value_str,
                     ha="center",
                     va="bottom",
-                    fontsize=8,
+                    fontsize=11,
                     color="#555555",
                 )
 
@@ -193,7 +193,7 @@ def plot_monitor_metrics_across_steps(
                 legend_labels,
                 loc="upper center",
                 bbox_to_anchor=(0.5, 0.0),
-                ncol=min(len(legend_labels), 3),
+                ncol=len(legend_labels),
                 frameon=True,
                 framealpha=0.9,
                 edgecolor="#cccccc",
@@ -278,15 +278,36 @@ if __name__ == "__main__":
     # all_step_idx = ["base"] + [str(10 + i * step_size) for i in range(0, (max_step_num+1)) if str(i * step_size) not in skip_indices]
     # calculate_metric_vals(main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir)
 
+    combinations = [
+        # ("Qwen_Qwen3-4B-Instruct-2507_monitor-Qwen_Qwen3-4B-Instruct-2507_llm_judge_metrics.json", "Qwen3-4B-Instruct-2507", "Qwen3-4B-Instruct-2507"),
+        # ("gpt-4o-mini_monitor-gpt-4.1-mini_llm_judge_metrics.json", "gpt-4o-mini", "gpt-4.1-mini"),
+        # ("Qwen_Qwen2.5-0.5B-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "Qwen2.5-0.5B-Instruct", "gpt-4.1-mini"),
+        ("HuggingFaceTB_SmolLM2-360M-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "HuggingFaceTB/SmolLM2-360M-Instruct", "gpt-4.1-mini"),
+    ]
+
     print("Start!")
-    plot_monitor_metrics_across_steps(
-        main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir,
-        # metrics_filename="monitor_metrics.json",
-        # monitor_model_name="Qwen3-4B-Instruct-2507",
-        # judge_model_name="Qwen3-4B-Instruct-2507",
-        metrics_filename="gpt-4o-mini_monitor-gpt-4.1-mini_llm_judge_metrics.json",
-        monitor_model_name="gpt-4o-mini",
-        judge_model_name="gpt-4.1-mini",
-    )
+
+    for metrics_filename, monitor_model_name, judge_model_name in combinations:
+        plot_monitor_metrics_across_steps(
+            main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir,
+            metrics_filename=metrics_filename,
+            monitor_model_name=monitor_model_name,
+            judge_model_name=judge_model_name,
+        )
+
+    # plot_monitor_metrics_across_steps(
+    #     main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir,
+    #     metrics_filename="monitor_metrics.json",
+    #     monitor_model_name="Qwen3-4B-Instruct-2507",
+    #     judge_model_name="Qwen3-4B-Instruct-2507",
+    #
+    #     # metrics_filename="gpt-4o-mini_monitor-gpt-4.1-mini_llm_judge_metrics.json",
+    #     # monitor_model_name="gpt-4o-mini",
+    #     # judge_model_name="gpt-4.1-mini",
+    #
+    #     # metrics_filename="Qwen_Qwen2.5-0.5B-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json",
+    #     # monitor_model_name="Qwen2.5-0.5B-Instruct",
+    #     # judge_model_name="gpt-4.1-mini",
+    # )
 
 #bash my_eval/scripts/run_sycophancy_across_models.sh

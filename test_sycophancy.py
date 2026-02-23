@@ -684,15 +684,15 @@ def see_examples():
     output_dir = "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model"
     example_output_dir = f"{output_dir}/examples"
     os.makedirs(example_output_dir, exist_ok=True)
-    baseline_fn = f"{output_dir}/20260216-Qwen3-0.6B_warmup_grpo_baseline_128000_episodes_seed_42/step_130/helpful_instructions/main/preds.jsonl"
-    ours_fn = f"{output_dir}/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_0.6B_128000_episodes_seed_42/step_130/helpful_instructions/main/preds.jsonl"
+    baseline_fn = f"{output_dir}/20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42/step_140/helpful_instructions/main/preds.jsonl"
+    ours_fn = f"{output_dir}/20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS/step_140/helpful_instructions/main/preds.jsonl"
 
     with open(baseline_fn, "r") as f:
         baseline_preds = [json.loads(line) for line in f.readlines()]
     with open(ours_fn, "r") as f:
         ours_preds = [json.loads(line) for line in f.readlines()]
 
-    example_num = min(len(baseline_preds), len(ours_preds), 30)
+    example_num = min(len(baseline_preds), len(ours_preds), 20)
 
     baseline_preds = baseline_preds[:example_num]
     ours_preds = ours_preds[:example_num]
@@ -814,8 +814,8 @@ if __name__ == "__main__":
     # encoded = tokenizer.decode(tokenizer.encode(test), skip_special_tokens=True)
     # breakpoint()
     # main()
-    # see_examples()
-    recompute()
+    see_examples()
+    # recompute()
 
     # dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"
     # dataset = load_dataset("parquet", data_files=dataset_fn)["train"]

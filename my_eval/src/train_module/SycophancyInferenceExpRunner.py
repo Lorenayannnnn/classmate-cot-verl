@@ -14,6 +14,10 @@ from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_p
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
 
 
+def _sanitize_model_name(name: str) -> str:
+    return name.replace("/", "_")
+
+
 def _as_future(result):
     future = Future()
     future.set_result(result)
@@ -69,6 +73,11 @@ class SycophancyInferenceExpRunner:
 
         # else:
         #     self.model.eval()
+        monitor_score_key = f"{_sanitize_model_name(self.monitor_config['judge_model_name'])}_monitor_score"
+        monitor_expl_key = f"{_sanitize_model_name(self.monitor_config['judge_model_name'])}_monitor_explanation"
+        judge_score_key = f"{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_score"
+        judge_expl_key = f"{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_explanation"
+
         output_fn = os.path.join(self.output_dir, "preds.jsonl")
         dataset_size = len(self.data_loader)
         if os.path.exists(output_fn):
@@ -82,12 +91,15 @@ class SycophancyInferenceExpRunner:
             all_monitor_scores = []
             for line in all_curr_lines:
                 result_dict = json.loads(line)
-                # Support both old format (main_is_correct) and new format (main_score)
-                if "main_score" in result_dict:
-                    all_main_model_rewards.append(float(result_dict["main_score"]))
+                # For gt-based entries use main_score; for judge-based entries fall back to judge score key.
+                main_score_val = result_dict.get("main_score")
+                if main_score_val is not None:
+                    all_main_model_rewards.append(float(main_score_val))
                 else:
-                    all_main_model_rewards.append(float(result_dict["main_is_correct"]))
-                all_monitor_scores.append(result_dict["monitor_score"])
+                    judge_val = result_dict.get(judge_score_key)
+                    assert judge_val is not None, "main_score is None given we are using llm judge; but getting llm judge score to be None"
+                    all_main_model_rewards.append(float(judge_val))
+                all_monitor_scores.append(result_dict.get(monitor_score_key) or result_dict.get("monitor_score") or 0)
             result_f.close()
         else:
             ckpt_idx = 0
@@ -167,7 +179,7 @@ class SycophancyInferenceExpRunner:
                     "truncated_main_CoT": truncated_main_cot,
                     "main_output": final_output,
                     "main_extracted_solution": main_extracted_solution,
-                    "main_score": main_score,
+                    "main_score": main_score,  # None for judge-based tasks; gt-based score otherwise
                     "gt": batch['gt'][batch_entry_idx],
                 }
                 if "actual_answer" in batch:
@@ -189,19 +201,17 @@ class SycophancyInferenceExpRunner:
 
             monitor_result = pending["monitor_future"].result()
             monitor_score, monitor_explanation = verifier.parse_monitor_output(monitor_result, self.monitor_config)
-            result_dict["monitor_score"] = monitor_score
-            result_dict["monitor_explanation"] = monitor_explanation
+            result_dict[monitor_score_key] = monitor_score
+            result_dict[monitor_expl_key] = monitor_explanation
             all_monitor_scores.append(monitor_score)
 
             if result_dict["gt"] is None:
                 # Using llm judge
                 judge_result = pending["judge_future"].result()
                 llm_judge_score, llm_judge_explanation = verifier.parse_llm_judge_output(judge_result, self.judge_client_config)
-                result_dict["main_score"] = llm_judge_score
-                result_dict["llm_judge_score"] = llm_judge_score
-                result_dict["llm_judge_explanation"] = llm_judge_explanation
-
-            all_main_model_rewards.append(result_dict["main_score"])
+                result_dict[judge_score_key] = llm_judge_score
+                result_dict[judge_expl_key] = llm_judge_explanation
+                all_main_model_rewards.append(llm_judge_score)
 
             result_f.write(json.dumps(result_dict) + "\n")
         result_f.flush()
@@ -238,7 +248,11 @@ class SycophancyInferenceExpRunner:
             print(f"{'='*60}\n")
             
             # Save metrics to JSON file
-            metrics_output_path = os.path.join(self.output_dir, "monitor_metrics.json")
+            metrics_filename = (
+                f"{_sanitize_model_name(self.monitor_config['judge_model_name'])}_monitor"
+                f"-{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_metrics.json"
+            )
+            metrics_output_path = os.path.join(self.output_dir, metrics_filename)
             with open(metrics_output_path, "w") as f:
                 json.dump(monitor_metrics, f, indent=2)
             print(f"Monitor metrics saved to {metrics_output_path}")

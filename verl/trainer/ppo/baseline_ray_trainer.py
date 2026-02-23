@@ -824,9 +824,9 @@ class RayPPOTrainer:
                     predictions=monitor_scores.tolist(),
                     ground_truths=main_model_reward.tolist(),
                 )
-                metric_dict["val-core/monitor/total_monitor_valid_entries"] = np.sum(valid_mask)
-                metric_dict["val-core/monitor/total_output_valid_entries"] = np.sum(main_reward_valid_mask)
-                metric_dict["val-core/monitor/total_monitored_entries"] = len(all_monitor_scores)
+                metric_dict["val-core/monitor/total_monitored_entries"] = np.sum(valid_mask)
+                metric_dict["val-core/monitor/total_valid_output_entries"] = np.sum(main_reward_valid_mask)
+                metric_dict["val-core/monitor/total_valid_CoT_entries"] = np.sum(monitor_valid_mask)
                 metric_dict.update({
                     f"val-core/monitor/{metric_name}": float(metric_val)
                     for metric_name, metric_val in monitor_metrics.items()
