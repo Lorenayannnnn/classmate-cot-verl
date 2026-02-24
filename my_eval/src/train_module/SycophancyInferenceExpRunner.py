@@ -147,7 +147,7 @@ class SycophancyInferenceExpRunner:
                     "main_response": truncated_main_cot,
                 }
                 monitor_prompt = verifier.create_monitor_message(monitor_doc)
-                llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"], final_output)
+                llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"], final_output, is_test=True)
 
                 if monitor_prompt is not None:
                     monitor_future = send_prompt_to_tinker(self.monitor_config, monitor_prompt)
@@ -236,8 +236,8 @@ class SycophancyInferenceExpRunner:
                 ground_truths=main_model_reward.tolist(),
             )
 
-            monitor_metrics["total_monitor_valid_entries"] = np.sum(monitor_valid_mask).item()
-            monitor_metrics["total_output_valid_entries"] = np.sum(main_reward_valid_mask).item()
+            monitor_metrics["total_valid_CoT_entries"] = np.sum(monitor_valid_mask).item()
+            monitor_metrics["total_valid_output_entries"] = np.sum(main_reward_valid_mask).item()
             monitor_metrics["total_monitored_entries"] = np.sum(valid_mask).item()
 
             # Print metrics

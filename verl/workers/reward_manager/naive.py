@@ -112,6 +112,7 @@ class NaiveRewardManager(AbstractRewardManager):
 
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         reward_extra_info = defaultdict(list)
+        per_score_reward_tensors = {}
 
         already_print_data_sources = {}
 
@@ -167,18 +168,25 @@ class NaiveRewardManager(AbstractRewardManager):
 
             # Submit main model reward computation
             if self.user_tinker_llm_judge and ground_truth is None:
+                verifier = get_monitor_verifier(data_source=data_source)
+                use_multi_score = len(verifier.output_scoring_prompt) > 1
                 if main_output is None:
                     score_futures.append(_as_future({
                         "score": 0,
                         "extracted_solution": None,
-                        "judge_explanation": "No valid output extracted from the response."
+                        "judge_explanation": "No valid output extracted from the response.",
+                        **{score_name: 0.0 for score_name, _ in verifier.output_scoring_prompt},
                     }))
                 else:
-                    verifier = get_monitor_verifier(data_source=data_source)
-                    llm_judge_prompt = verifier.format_llm_judge_prompt(
+                    llm_judge_prompts = verifier.format_llm_judge_prompt(
                         extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                    score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                    # llm_judge_prompts is a dict {score_name: prompt_str}; submit one future per score
+                    score_futures.append({
+                        score_name: send_prompt_to_tinker(self.judge_client_config, prompt)
+                        for score_name, prompt in llm_judge_prompts.items()
+                    })
             else:
+                use_multi_score = False
                 score_futures.append(
                     _as_future(
                         self.compute_score(
@@ -207,24 +215,41 @@ class NaiveRewardManager(AbstractRewardManager):
                     "ground_truth": ground_truth,
                     "data_source": data_source,
                     "valid_response_length": valid_response_length,
+                    "use_multi_score": use_multi_score,
                 }
             )
 
-        for ctx, score_future in zip(item_contexts, score_futures):
-            score = score_future.result()
 
-            if ctx["ground_truth"] is None:
-                assert self.user_tinker_llm_judge, "If there is no ground truth, we must use LLM judge to compute the reward."
-                if type(score) == dict and "score" in score:
-                    pass
-                else:
-                    verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                    judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
-                    score = {
-                        "score": judge_score,
-                        "extracted_solution": ctx["main_output"],
-                        "judge_explanation": judge_explanation,
-                    }
+        for ctx, score_future in zip(item_contexts, score_futures):
+            if isinstance(score_future, dict):
+                # Dict of {score_name: Future} from LLM judge with multiple scores
+                verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                scores_dict = {}
+                explanations_dict = {}
+                for score_name, future in score_future.items():
+                    result = future.result()
+                    s, expl = verifier.parse_llm_judge_output(result, self.judge_client_config)
+                    scores_dict[score_name] = s
+                    explanations_dict[score_name] = expl
+                total_score = sum(scores_dict.values())
+                score = {
+                    "score": total_score,
+                    "extracted_solution": ctx["main_output"],
+                    "judge_explanation": explanations_dict,
+                    **scores_dict,
+                }
+            else:
+                score = score_future.result()
+                if ctx["ground_truth"] is None:
+                    assert self.user_tinker_llm_judge, "If there is no ground truth, we must use LLM judge to compute the reward."
+                    if not (type(score) == dict and "score" in score):
+                        verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                        judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
+                        score = {
+                            "score": judge_score,
+                            "extracted_solution": ctx["main_output"],
+                            "judge_explanation": judge_explanation,
+                        }
 
             # Debug
             extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None
@@ -241,18 +266,27 @@ class NaiveRewardManager(AbstractRewardManager):
 
             if isinstance(score, dict):
                 reward = score["score"]
-                # Store the information including original reward
+                reward_extra_info["main_model_reward"].append(reward)
+                # reward_extra_info["main_model_total_score"].append(reward)
+                # Log each individual score name (e.g. main_model_sycophancy_score, main_model_helpfulness_score)
                 for key, value in score.items():
-                    if key == "score":
-                        # reward_extra_info["main_model_reward"].append(value)
-                        reward_extra_info["main_model_reward"].append(value)
-                    else:
+                    if key != "score":
                         reward_extra_info[f"main_model_{key}"].append(value)
             else:
                 reward = score
+                reward_extra_info["main_model_reward"].append(reward)
 
             # reward_extra_info["main_model_reward"].append(reward)     # Modify: Temporarily added for plotting main model's reward of baseline and one trained with classmate in the same figure
             reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = reward
+
+            # Track per-score reward tensors for multi-score advantage computation
+            # Only when GT is None (LLM judge path) and verifier has multiple scoring prompts
+            if ctx["use_multi_score"] and isinstance(score, dict):
+                for key, value in score.items():
+                    if key != "score":
+                        if key not in per_score_reward_tensors:
+                            per_score_reward_tensors[key] = torch.zeros_like(reward_tensor)
+                        per_score_reward_tensors[key][ctx["index"], ctx["valid_response_length"] - 1] = value
 
             data_source = ctx["data_source"]
             if data_source not in already_print_data_sources:
@@ -269,8 +303,14 @@ class NaiveRewardManager(AbstractRewardManager):
                 if ctx["ground_truth"] is None:
                     # for open-ended generation
                     if isinstance(score, dict):
-                        print("🐛[llm judge score]", reward)
-                        print("🐛[judge_explanation]", judge_explanation)
+                        if isinstance(judge_explanation, dict):
+                            for score_name, score_val in score.items():
+                                if score_name != "score":
+                                    print(f"🐛[llm judge score/{score_name}]", score_val)
+                                    print(f"🐛[judge_explanation/{score_name}]", judge_explanation.get(score_name))
+                        else:
+                            print("🐛[llm judge score]", reward)
+                            print("🐛[judge_explanation]", judge_explanation)
                 else:
                     print("🐛[main_extracted]", extracted_sol)
                     print("🐛[ground_truth]", ctx["ground_truth"])
@@ -305,6 +345,7 @@ class NaiveRewardManager(AbstractRewardManager):
             return {
                 "reward_tensor": reward_tensor,
                 "reward_extra_info": reward_extra_info,
+                "per_score_reward_tensors": per_score_reward_tensors,
             }
         else:
             return reward_tensor

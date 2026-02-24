@@ -259,80 +259,146 @@ def compute_advantage(
     elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED:
         raise ValueError("Not supported; should use GDPO for multiple rewards")
         # Initialize the mask for GRPO calculation
-
-        main_calculation_mask = data.batch["response_mask"]
-        classmate_calculation_mask = data.batch["classmate_input_mask"]
-
-        # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_main_classmate_separated_outcome_advantage(
-            main_token_level_rewards=data.batch["main_token_level_rewards"],
-            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
-            main_response_mask=main_calculation_mask,
-            classmate_input_mask=classmate_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-            token_level_classmate_reward_mode=token_level_classmate_reward_mode
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
+        # main_calculation_mask = data.batch["response_mask"]
+        # classmate_calculation_mask = data.batch["classmate_input_mask"]
+        #
+        # # Call compute_grpo_outcome_advantage with parameters matching its definition
+        # advantages, returns = core_algos.compute_grpo_main_classmate_separated_outcome_advantage(
+        #     main_token_level_rewards=data.batch["main_token_level_rewards"],
+        #     classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+        #     # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
+        #     main_response_mask=main_calculation_mask,
+        #     classmate_input_mask=classmate_calculation_mask,
+        #     index=data.non_tensor_batch["uid"],
+        #     norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+        #     token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        # )
+        # data.batch["advantages"] = advantages
+        # data.batch["returns"] = returns
     elif adv_estimator == AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL:
         raise NotImplementedError("GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL not implemented.")
-        # Initialize the mask for GRPO calculation
-
-        main_calculation_mask = data.batch["response_mask"]
-        classmate_calculation_mask = data.batch["classmate_input_mask"]
-
-        # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_main_classmate_separated_non_neg_cl_outcome_advantage(
-            main_token_level_rewards=data.batch["main_token_level_rewards"],
-            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            main_response_mask=main_calculation_mask,
-            classmate_input_mask=classmate_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-            token_level_classmate_reward_mode=token_level_classmate_reward_mode
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
+        # # Initialize the mask for GRPO calculation
+        #
+        # main_calculation_mask = data.batch["response_mask"]
+        # classmate_calculation_mask = data.batch["classmate_input_mask"]
+        #
+        # # Call compute_grpo_outcome_advantage with parameters matching its definition
+        # advantages, returns = core_algos.compute_grpo_main_classmate_separated_non_neg_cl_outcome_advantage(
+        #     main_token_level_rewards=data.batch["main_token_level_rewards"],
+        #     classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+        #     main_response_mask=main_calculation_mask,
+        #     classmate_input_mask=classmate_calculation_mask,
+        #     index=data.non_tensor_batch["uid"],
+        #     norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+        #     token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        # )
+        # data.batch["advantages"] = advantages
+        # data.batch["returns"] = returns
     elif adv_estimator == AdvantageEstimator.GDPO:
+        # Note: this is GDPO WITHOUT bach normalization
         # Initialize the mask for GRPO calculation
 
         main_calculation_mask = data.batch["response_mask"]
         classmate_calculation_mask = data.batch["classmate_input_mask"]
 
-        # Call compute_gdpo_outcome_advantage_separate with parameters matching its definition
-        (
-            main_advantages,
-            classmate_advantages,
-            main_group_reward_mean,
-            main_group_reward_std,
-            classmate_group_reward_mean,
-            classmate_group_reward_std,
-            batch_main_rewards,
-            batch_classmate_rewards
-        ) = core_algos.compute_gdpo_outcome_advantage_separate(
-            main_token_level_rewards=data.batch["main_token_level_rewards"],
-            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
-            main_response_mask=main_calculation_mask,
-            classmate_input_mask=classmate_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-            token_level_classmate_reward_mode=token_level_classmate_reward_mode
-        )
-        data.batch["main_advantages"] = main_advantages
-        data.batch["classmate_advantages"] = classmate_advantages
-        # data.batch["advantages"] = main_advantages + classmate_advantages
-        data.batch["returns"] = main_advantages + classmate_advantages      # Just for logging since we are not training critic model
-        data.batch["main_group_reward_mean"] = main_group_reward_mean
-        data.batch["main_group_reward_std"] = main_group_reward_std
-        data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean        # Note these are weighted
-        data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std  
-        data.batch["batch_main_rewards"] = batch_main_rewards
-        data.batch["batch_classmate_rewards"] = batch_classmate_rewards
-        # data.batch["consistency_group_reward_mean"] = consistency_group_reward_mean
-        # data.batch["consistency_group_reward_std"] = consistency_group_reward_std
+        # Check for per-score reward tensors (set when multiple LLM judge scores are used)
+        per_score_main_keys = sorted([
+            k for k in data.batch.keys()
+            if isinstance(k, str) and k.startswith("main_token_level_rewards_")
+        ])
+        per_score_cl_keys = sorted([
+            k for k in data.batch.keys()
+            if isinstance(k, str) and k.startswith("classmate_token_level_rewards_")
+        ])
+
+        if per_score_main_keys and per_score_cl_keys:
+            assert len(per_score_main_keys) == len(per_score_cl_keys), f"Got different key list len from main and classmate reward. per_score_main_keys={per_score_main_keys}, per_score_cl_keys={per_score_cl_keys}"
+
+            # Multiple scores: group-normalize each reward separately, then sum advantages
+            main_advantages = torch.zeros_like(data.batch["main_token_level_rewards"])
+            classmate_advantages = torch.zeros_like(data.batch["classmate_token_level_rewards"])
+            main_group_reward_mean_total = None
+            main_group_reward_std_total = None
+            cl_group_reward_mean_total = None
+            cl_group_reward_std_total = None
+            batch_main_rewards_total = None
+            batch_classmate_rewards_total = None
+
+            for main_key, cl_key in zip(per_score_main_keys, per_score_cl_keys):
+                (
+                    adv_main, adv_cl,
+                    m_mean, m_std,
+                    cl_mean, cl_std,
+                    b_main, b_cl,
+                ) = core_algos.compute_gdpo_outcome_advantage_separate(
+                    main_token_level_rewards=data.batch[main_key],
+                    classmate_token_level_rewards=data.batch[cl_key],
+                    main_response_mask=main_calculation_mask,
+                    classmate_input_mask=classmate_calculation_mask,
+                    index=data.non_tensor_batch["uid"],
+                    norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                    token_level_classmate_reward_mode=token_level_classmate_reward_mode,
+                )
+                main_advantages = main_advantages + adv_main
+                classmate_advantages = classmate_advantages + adv_cl
+                if main_group_reward_mean_total is None:
+                    main_group_reward_mean_total = m_mean
+                    main_group_reward_std_total = m_std
+                    cl_group_reward_mean_total = cl_mean
+                    cl_group_reward_std_total = cl_std
+                    batch_main_rewards_total = b_main
+                    batch_classmate_rewards_total = b_cl
+                else:
+                    main_group_reward_mean_total = main_group_reward_mean_total + m_mean
+                    main_group_reward_std_total = main_group_reward_std_total + m_std
+                    cl_group_reward_mean_total = cl_group_reward_mean_total + cl_mean
+                    cl_group_reward_std_total = cl_group_reward_std_total + cl_std
+                    batch_main_rewards_total = batch_main_rewards_total + b_main
+                    batch_classmate_rewards_total = batch_classmate_rewards_total + b_cl
+
+            data.batch["main_advantages"] = main_advantages
+            data.batch["classmate_advantages"] = classmate_advantages
+            data.batch["returns"] = main_advantages + classmate_advantages
+            data.batch["main_group_reward_mean"] = main_group_reward_mean_total
+            data.batch["main_group_reward_std"] = main_group_reward_std_total
+            data.batch["weighted_classmate_group_reward_mean"] = cl_group_reward_mean_total
+            data.batch["weighted_classmate_group_reward_std"] = cl_group_reward_std_total
+            data.batch["batch_main_rewards"] = batch_main_rewards_total
+            data.batch["batch_classmate_rewards"] = batch_classmate_rewards_total
+        else:
+            # Single combined reward (original behavior)
+            # Call compute_gdpo_outcome_advantage_separate with parameters matching its definition
+            (
+                main_advantages,
+                classmate_advantages,
+                main_group_reward_mean,
+                main_group_reward_std,
+                classmate_group_reward_mean,
+                classmate_group_reward_std,
+                batch_main_rewards,
+                batch_classmate_rewards
+            ) = core_algos.compute_gdpo_outcome_advantage_separate(
+                main_token_level_rewards=data.batch["main_token_level_rewards"],
+                classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+                # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
+                main_response_mask=main_calculation_mask,
+                classmate_input_mask=classmate_calculation_mask,
+                index=data.non_tensor_batch["uid"],
+                norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                token_level_classmate_reward_mode=token_level_classmate_reward_mode
+            )
+            data.batch["main_advantages"] = main_advantages
+            data.batch["classmate_advantages"] = classmate_advantages
+            # data.batch["advantages"] = main_advantages + classmate_advantages
+            data.batch["returns"] = main_advantages + classmate_advantages      # Just for logging since we are not training critic model
+            data.batch["main_group_reward_mean"] = main_group_reward_mean
+            data.batch["main_group_reward_std"] = main_group_reward_std
+            data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean        # Note these are weighted
+            data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std
+            data.batch["batch_main_rewards"] = batch_main_rewards
+            data.batch["batch_classmate_rewards"] = batch_classmate_rewards
+            # data.batch["consistency_group_reward_mean"] = consistency_group_reward_mean
+            # data.batch["consistency_group_reward_std"] = consistency_group_reward_std
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
@@ -2054,12 +2120,17 @@ class ClassmateCoTRayPPOTrainer:
                         if self.config.reward_model.launch_reward_fn_async:
                             # reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                             # main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
-                            main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                            main_reward_tensor, classmate_reward_tensor, per_score_main_reward_tensors, per_score_classmate_reward_tensors, reward_extra_infos_dict = ray.get(future_reward)
                         # batch.batch["token_level_scores"] = reward_tensor
 
                         if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                             batch.batch["main_token_level_scores"] = main_reward_tensor
                             batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
+                            # Store per-score tensors for GDPO multi-score advantage computation
+                            for score_name, tensor in per_score_main_reward_tensors.items():
+                                batch.batch[f"main_token_level_scores_{score_name}"] = tensor
+                            for score_name, tensor in per_score_classmate_reward_tensors.items():
+                                batch.batch[f"classmate_token_level_scores_{score_name}"] = tensor
                             # batch.batch["consistency_token_level_scores"] = consistency_reward_tensor if consistency_reward_tensor is not None else 0
                         else:
                             # reward_tensor = main_reward_tensor + classmate_reward_tensor + consistency_reward_tensor if consistency_reward_tensor is not None else 0
@@ -2081,6 +2152,11 @@ class ClassmateCoTRayPPOTrainer:
                             if self.config.algorithm.adv_estimator in [AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED, AdvantageEstimator.GDPO, AdvantageEstimator.GRPO_MAIN_CLASSMATE_SEPARATED_NON_NEG_CL]:
                                 batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
                                 batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
+                                # Copy per-score tensors to rewards
+                                for score_name in per_score_main_reward_tensors:
+                                    batch.batch[f"main_token_level_rewards_{score_name}"] = batch.batch[f"main_token_level_scores_{score_name}"]
+                                for score_name in per_score_classmate_reward_tensors:
+                                    batch.batch[f"classmate_token_level_rewards_{score_name}"] = batch.batch[f"classmate_token_level_scores_{score_name}"]
                                 # batch.batch["consistency_token_level_rewards"] = batch.batch["consistency_token_level_scores"]
                             else:
                                 batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]

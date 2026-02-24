@@ -43,7 +43,7 @@ class BaseVerifier(ABC):
         """
         pass
 
-    def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
+    def format_llm_judge_prompt(self, user_prompt, continuation, is_test=False, **kwargs):
         raise NotImplementedError("LLM judge prompt formatting not implemented for this verifier. If you want to use LLM judge evaluation, please implement format_llm_judge_prompt in your verifier subclass.")
 
     def parse_monitor_output(self, monitor_response, monitor_config):

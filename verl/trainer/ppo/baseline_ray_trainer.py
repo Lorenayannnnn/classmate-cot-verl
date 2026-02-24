@@ -237,6 +237,7 @@ def compute_advantage(
         grpo_calculation_mask = data.batch["response_mask"]
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
+        # token_level_rewards already contains the summed reward from the reward manager when there are multiple rewards
         advantages, returns, group_reward_mean, group_reward_std, batch_rewards = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
@@ -245,11 +246,46 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
-        # data.batch["group_reward_mean"] = group_reward_mean
-        # data.batch["group_reward_std"] = group_reward_std
         data.batch["main_group_reward_mean"] = group_reward_mean
         data.batch["main_group_reward_std"] = group_reward_std
         data.batch["batch_main_rewards"] = batch_rewards
+    elif adv_estimator == AdvantageEstimator.GDPO:
+        grpo_calculation_mask = data.batch["response_mask"]
+
+        per_score_keys = sorted(
+            [k for k in data.batch.keys() if isinstance(k, str) and k.startswith("token_level_rewards_")])
+
+        assert len(per_score_keys) > 1, "GDPO should have multiple reward scores for different groups, but no token_level_rewards_ keys found. Just use GRPO if has only one reward."
+
+        if per_score_keys:
+            # Multiple reward scores: normalize each separately and sum advantages
+            advantages = torch.zeros_like(data.batch["token_level_rewards"])
+            group_reward_mean_total = None
+            group_reward_std_total = None
+            batch_rewards_total = None
+
+            for score_key in per_score_keys:
+                adv_i, _, mean_i, std_i, batch_rew_i = core_algos.compute_grpo_outcome_advantage(
+                    token_level_rewards=data.batch[score_key],
+                    response_mask=grpo_calculation_mask,
+                    index=data.non_tensor_batch["uid"],
+                    norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                )
+                advantages = advantages + adv_i
+                if group_reward_mean_total is None:
+                    group_reward_mean_total = mean_i
+                    group_reward_std_total = std_i
+                    batch_rewards_total = batch_rew_i
+                else:
+                    group_reward_mean_total = group_reward_mean_total + mean_i
+                    group_reward_std_total = group_reward_std_total + std_i
+                    batch_rewards_total = batch_rewards_total + batch_rew_i
+
+            data.batch["advantages"] = advantages
+            data.batch["returns"] = advantages
+            data.batch["main_group_reward_mean"] = group_reward_mean_total
+            data.batch["main_group_reward_std"] = group_reward_std_total
+            data.batch["batch_main_rewards"] = batch_rewards_total
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
@@ -1364,7 +1400,7 @@ class RayPPOTrainer:
                                 data=batch, config=self.config, tokenizer=self.tokenizer
                             )
                         else:
-                            reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
+                            reward_tensor, per_score_reward_tensors, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
@@ -1403,8 +1439,10 @@ class RayPPOTrainer:
                         # we combine with rule-based rm
                         reward_extra_infos_dict: dict[str, list]
                         if self.config.reward_model.launch_reward_fn_async:
-                            reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
+                            reward_tensor, per_score_reward_tensors, reward_extra_infos_dict = ray.get(future_reward)
                         batch.batch["token_level_scores"] = reward_tensor
+                        for score_name, tensor in per_score_reward_tensors.items():
+                            batch.batch[f"token_level_scores_{score_name}"] = tensor
 
                         if reward_extra_infos_dict:
                             batch.non_tensor_batch.update({k: np.array(v) for k, v in reward_extra_infos_dict.items()})
@@ -1417,6 +1455,8 @@ class RayPPOTrainer:
                             metrics.update(kl_metrics)
                         else:
                             batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+                            for score_name in per_score_reward_tensors:
+                                batch.batch[f"token_level_rewards_{score_name}"] = batch.batch[f"token_level_scores_{score_name}"]
 
                         # Compute rollout importance sampling weights centrally (once per batch)
                         # This corrects for mismatch between rollout policy and training policy

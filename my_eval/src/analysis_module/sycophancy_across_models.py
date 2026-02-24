@@ -260,6 +260,8 @@ if __name__ == "__main__":
         "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42",
         "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42",
         "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS"
+
+        # "20260217-Qwen3-0.6B_grpo_sycophancy_warmup_4x_baseline_320000_episodes_seed_42"
     ]
 
     max_step_num = 7  # start form 0
@@ -273,16 +275,21 @@ if __name__ == "__main__":
 
     skip_indices = []
 
-    # mmlu sycophancy
     all_step_idx = ["base"] + [str((i+1) * step_size) for i in range(0, max_step_num) if str((i + 1) * step_size) not in skip_indices]
     # all_step_idx = ["base"] + [str(10 + i * step_size) for i in range(0, (max_step_num+1)) if str(i * step_size) not in skip_indices]
     # calculate_metric_vals(main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir)
+
+    # max_step_num = 9  # start form 0
+    # step_size = 60
+    # all_step_idx = ["base"] + [str((i+1) * step_size) for i in range(0, max_step_num) if str((i + 1) * step_size) not in skip_indices]
 
     combinations = [
         # ("Qwen_Qwen3-4B-Instruct-2507_monitor-Qwen_Qwen3-4B-Instruct-2507_llm_judge_metrics.json", "Qwen3-4B-Instruct-2507", "Qwen3-4B-Instruct-2507"),
         # ("gpt-4o-mini_monitor-gpt-4.1-mini_llm_judge_metrics.json", "gpt-4o-mini", "gpt-4.1-mini"),
         # ("Qwen_Qwen2.5-0.5B-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "Qwen2.5-0.5B-Instruct", "gpt-4.1-mini"),
-        ("HuggingFaceTB_SmolLM2-360M-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "HuggingFaceTB/SmolLM2-360M-Instruct", "gpt-4.1-mini"),
+        # ("HuggingFaceTB_SmolLM2-360M-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "HuggingFaceTB/SmolLM2-360M-Instruct", "gpt-4.1-mini"),
+
+        ("Qwen_Qwen3-4B-Instruct-2507_monitor-Qwen_Qwen3-4B-Instruct-2507_llm_judge_metrics.json", "Qwen3-4B-Instruct-2507", "Qwen3-4B-Instruct-2507"),
     ]
 
     print("Start!")

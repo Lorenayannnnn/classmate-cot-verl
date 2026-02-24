@@ -181,36 +181,42 @@ def compute_main_classmate_reward(data: DataProto, reward_fn: AbstractRewardMana
         classmate_reward_tensor = reward_result["classmate_reward_tensor"]
         # consistency_reward_tensor = reward_result.get("consistency_reward_tensor", None)
         reward_extra_infos_dict = reward_result.get("reward_extra_info", {})
+        per_score_main_reward_tensors = reward_result.get("per_score_main_reward_tensors", {})
+        per_score_classmate_reward_tensors = reward_result.get("per_score_classmate_reward_tensors", {})
     except Exception as e:
         print(f"Error in reward_fn: {e}")
         # main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor = reward_fn(data)
         main_reward_tensor, classmate_reward_tensor = reward_fn(data)
         reward_extra_infos_dict = {}
+        per_score_main_reward_tensors = {}
+        per_score_classmate_reward_tensors = {}
 
     # return main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor, reward_extra_infos_dict
-    return main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict
+    return main_reward_tensor, classmate_reward_tensor, per_score_main_reward_tensors, per_score_classmate_reward_tensors, reward_extra_infos_dict
 
 
 @tqbridge(put_data=False)
-def compute_reward(data: DataProto, reward_fn: AbstractRewardManager) -> tuple[torch.Tensor, dict[str, Any]]:
+def compute_reward(data: DataProto, reward_fn: AbstractRewardManager) -> tuple[torch.Tensor, dict, dict[str, Any]]:
     """
     Compute reward for a batch of data.
     Args:
         data: DataProto object containing the input data.
         reward_fn: Reward function to compute the reward.
     Returns:
-        Tuple of reward tensor and extra info dictionary.
+        Tuple of (reward_tensor, per_score_reward_tensors, extra_info_dict).
     """
     try:
         reward_result = reward_fn(data, return_dict=True)
         reward_tensor = reward_result["reward_tensor"]
         reward_extra_infos_dict = reward_result.get("reward_extra_info", {})
+        per_score_reward_tensors = reward_result.get("per_score_reward_tensors", {})
     except Exception as e:
         print(f"Error in reward_fn: {e}")
         reward_tensor = reward_fn(data)
         reward_extra_infos_dict = {}
+        per_score_reward_tensors = {}
 
-    return reward_tensor, reward_extra_infos_dict
+    return reward_tensor, per_score_reward_tensors, reward_extra_infos_dict
 
 
 @ray.remote(num_cpus=1)

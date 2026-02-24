@@ -123,6 +123,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
         # if self.classmate_cot_reward_configs.add_consistency_reward:
         #     consistency_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         reward_extra_info = defaultdict(list)
+        # Per-score reward tensors for GDPO advantage computation
+        per_score_main_reward_tensors = {}       # {score_name: tensor}
+        per_score_classmate_reward_tensors = {}  # {score_name: tensor}
 
         already_print_data_sources = {}
 
@@ -183,17 +186,24 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             # Submit main model reward computation
             if ground_truth is None:
                 assert self.user_tinker_llm_judge is not None, "For open-ended generation without ground truth, LLM judge is required to compute reward."
+                verifier = get_monitor_verifier(data_source=data_source)
+                use_multi_score = len(verifier.output_scoring_prompt) > 1
                 if main_output is None:
                     main_score_futures.append(_as_future({
                         "score": 0,
                         "extracted_solution": None,
-                        "judge_explanation": "No valid output extracted from the response."
+                        "judge_explanation": "No valid output extracted from the response.",
+                        **{score_name: 0.0 for score_name, _ in verifier.output_scoring_prompt},
                     }))
                 else:
-                    verifier = get_monitor_verifier(data_source=data_source)
-                    llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                    main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                    llm_judge_prompts = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
+                    # llm_judge_prompts is a dict {score_name: prompt_str}; submit one future per score
+                    main_score_futures.append({
+                        score_name: send_prompt_to_tinker(self.judge_client_config, prompt)
+                        for score_name, prompt in llm_judge_prompts.items()
+                    })
             else:
+                use_multi_score = False
                 main_score_futures.append(
                     _as_future(
                         self.compute_score(
@@ -233,6 +243,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     "classmate_outputs": classmate_outputs,
                     "main_keep_rate": main_keep_rate,
                     "classmate_ground_truth": classmate_ground_truth,
+                    "use_multi_score": use_multi_score,
                 }
             )
 
@@ -242,29 +253,54 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
         # Second loop: resolve main rewards and submit classmate reward computations
         for ctx, main_score_future in zip(item_contexts, main_score_futures):
-            actor_score = main_score_future.result()
-            if type(actor_score) == dict and "score" in actor_score:    # handle both non llm judge and main output is None case
-                pass
-            else:
+            if isinstance(main_score_future, dict):
+                # Dict of {score_name: Future} from LLM judge with multiple scores
                 verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
+                scores_dict = {}
+                explanations_dict = {}
+                for score_name, future in main_score_future.items():
+                    result = future.result()
+                    s, expl = verifier.parse_llm_judge_output(result, self.judge_client_config)
+                    scores_dict[score_name] = s
+                    explanations_dict[score_name] = expl
+                total_score = sum(scores_dict.values())
                 actor_score = {
-                    "score": judge_score,
+                    "score": total_score,
                     "extracted_solution": ctx["main_output"],
-                    "judge_explanation": judge_explanation,
+                    "judge_explanation": explanations_dict,
+                    **scores_dict,
                 }
+            else:
+                actor_score = main_score_future.result()
+                if not (type(actor_score) == dict and "score" in actor_score):    # handle both non llm judge and main output is None case
+                    verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                    judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
+                    actor_score = {
+                        "score": judge_score,
+                        "extracted_solution": ctx["main_output"],
+                        "judge_explanation": judge_explanation,
+                    }
             # main_p_bar.update(1)
             extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
 
             if isinstance(actor_score, dict):
                 base_reward = actor_score["score"]
-                # Store the information including original reward
+                reward_extra_info["main_model_reward"].append(base_reward)
+                # reward_extra_info["main_model_total_score"].append(base_reward)
+                # Log each individual score name (e.g. main_model_sycophancy_score, main_model_helpfulness_score)
                 for key, value in actor_score.items():
-                    reward_extra_info[f"main_model_{key}"].append(value)
+                    if key != "score":
+                        reward_extra_info[f"main_model_{key}"].append(value)
+                # Track per-score reward tensors for GDPO
+                if ctx["use_multi_score"]:
+                    for key, value in actor_score.items():
+                        if key not in ("score", "judge_explanation"):
+                            if key not in per_score_main_reward_tensors:
+                                per_score_main_reward_tensors[key] = torch.zeros_like(main_reward_tensor)
+                            per_score_main_reward_tensors[key][ctx["index"], ctx["valid_response_length"] - 1] = value
             else:
                 base_reward = actor_score
-
-            reward_extra_info["main_model_reward"].append(base_reward)
+                reward_extra_info["main_model_reward"].append(base_reward)
 
             ctx["actor_score"] = actor_score
             ctx["extracted_solution"] = extracted_solution
@@ -277,19 +313,25 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             for classmate_output in classmate_outputs:
                 sample_futures = []
                 for classmate_output_sample in classmate_output:
-                    # Submit main model reward computation
+                    # Submit classmate reward computation
                     if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
                         if classmate_output_sample is None:
+                            verifier = get_monitor_verifier(data_source=ctx["data_source"])
                             sample_futures.append(_as_future({
                                 "score": 0,
                                 "extracted_solution": None,
-                                "judge_explanation": "No valid output extracted from the classmate response."
+                                "judge_explanation": "No valid output extracted from the classmate response.",
+                                **{score_name: 0.0 for score_name, _ in verifier.output_scoring_prompt},
                             }))
                         else:
                             verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                            llm_judge_prompt = verifier.format_llm_judge_prompt(
+                            llm_judge_prompts = verifier.format_llm_judge_prompt(
                                 ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
-                            sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                            # llm_judge_prompts is a dict {score_name: prompt_str}; submit one future per score
+                            sample_futures.append({
+                                score_name: send_prompt_to_tinker(self.judge_client_config, prompt)
+                                for score_name, prompt in llm_judge_prompts.items()
+                            })
                     else:
                         sample_futures.append(
                             _as_future(
@@ -332,29 +374,41 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 tmp_extracted_classmate_sol_list = []
                 tmp_judge_explanation_list = []
                 for classmate_future in classmate_futures:
-                    tmp_classmate_result = classmate_future.result()
-
-                    # if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
-                    if type(tmp_classmate_result) == dict and "score" in tmp_classmate_result:  # handle both non llm judge and main output is None case
-                        pass
-                    else:
+                    if isinstance(classmate_future, dict):
+                        # Dict of {score_name: Future} from LLM judge with multiple scores
                         verifier = get_monitor_verifier(data_source=ctx["data_source"])
-                        # Parse response
-                        judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result,
-                                                                                         self.judge_client_config)
+                        tmp_scores_dict = {}
+                        tmp_explanations_dict = {}
+                        for score_name, future in classmate_future.items():
+                            result = future.result()
+                            s, expl = verifier.parse_llm_judge_output(result, self.judge_client_config)
+                            tmp_scores_dict[score_name] = s
+                            tmp_explanations_dict[score_name] = expl
+                        total_cl_score = sum(tmp_scores_dict.values())
                         tmp_classmate_result = {
-                            "score": judge_score,
-                            "extracted_solution": classmate_outputs[classmate_idx][0],
-                            # currently only support num_samples_per_classmate=1
-                            "judge_explanation": judge_explanation,
+                            "score": total_cl_score,
+                            **tmp_scores_dict,
                         }
+                        tmp_extracted_classmate_sol = classmate_outputs[classmate_idx][0]
+                        tmp_judge_explanation = tmp_explanations_dict
+                    else:
+                        tmp_classmate_result = classmate_future.result()
+                        if not (type(tmp_classmate_result) == dict and "score" in tmp_classmate_result):
+                            verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                            judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result,
+                                                                                             self.judge_client_config)
+                            tmp_classmate_result = {
+                                "score": judge_score,
+                                "extracted_solution": classmate_outputs[classmate_idx][0],
+                                "judge_explanation": judge_explanation,
+                            }
+                        tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
+                        tmp_judge_explanation = tmp_classmate_result.pop("judge_explanation", None)
 
-                    tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
-                    tmp_judge_explanation = tmp_classmate_result.pop("judge_explanation", None)
                     tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
                     tmp_judge_explanation_list.append(tmp_judge_explanation)
 
-                    for k, v in tmp_classmate_result.items():       # Should only have "score"
+                    for k, v in tmp_classmate_result.items():       # "score" + individual score names
                         if k not in tmp_total_classmate_reward_dict:
                             tmp_total_classmate_reward_dict[k] = 0.0
                         tmp_total_classmate_reward_dict[k] += v
@@ -370,22 +424,34 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             base_reward = ctx["base_reward"]
             classmate_reward = total_classmate_reward_dict["score"]
 
-            weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
+            # Compute condition scale factor (applied uniformly to all per-score classmate rewards)
+            condition_scale = 1.0
             if self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate":
-                weighted_classmate_reward = 0
+                condition_scale = 0.0
             elif self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate_when_main_incorrect":
-                # Multiply 0!!! Don't set it to 0!! Or it's possible that you are setting classmate reward to 1 when main & classmate are incorrect
-                weighted_classmate_reward *= 0 if base_reward <= 0 else 1        # TODO assuming RLVR binary reward: 0 classmate reward when main is incorrect
+                condition_scale = 0.0 if base_reward <= 0 else 1.0
             elif self.classmate_cot_reward_configs.use_classmate_main_cond == "neg_classmate_when_main_incorrect":
-                if base_reward <= 0:
-                    weighted_classmate_reward = -weighted_classmate_reward
+                condition_scale = -1.0 if base_reward <= 0 else 1.0
 
-            # Update total_classmate_reward_dict to reward_extra_info
+            weighted_classmate_reward = self.classmate_reward_weight * classmate_reward * condition_scale
+
+            # Update total_classmate_reward_dict to reward_extra_info;
+            # log classmate_{score_name} for each individual score and classmate_total_score
             for key, value in total_classmate_reward_dict.items():
                 if key == "score":
                     reward_extra_info["classmate_reward"].append(classmate_reward)
+                    # reward_extra_info["classmate_total_score"].append(classmate_reward)
                 else:
                     reward_extra_info[f"classmate_{key}"].append(value)
+
+            # Track per-score classmate reward tensors for GDPO
+            if ctx["use_multi_score"]:
+                for key, value in total_classmate_reward_dict.items():
+                    if key != "score":
+                        weighted_score_val = self.classmate_reward_weight * value * condition_scale
+                        if key not in per_score_classmate_reward_tensors:
+                            per_score_classmate_reward_tensors[key] = torch.zeros_like(classmate_reward_tensor)
+                        per_score_classmate_reward_tensors[key][ctx["index"], ctx["valid_response_length"] - 1] = weighted_score_val
 
             reward_extra_info[f"weighted_classmate_reward"].append(weighted_classmate_reward)
 
@@ -417,9 +483,16 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 extracted_solution = ctx["extracted_solution"]
                 if ground_truth is None:
                     # for open-ended generation
-                    print("🐛[llm judge score]", actor_score.get("score", None) if isinstance(actor_score, dict) else None)
                     if isinstance(actor_score, dict):
-                        print("🐛[llm judge explanation]", actor_score.get("judge_explanation", None))
+                        judge_expl = actor_score.get("judge_explanation", None)
+                        if isinstance(judge_expl, dict):
+                            for score_name, score_val in actor_score.items():
+                                if score_name not in ("score", "judge_explanation"):
+                                    print(f"🐛[llm judge score/{score_name}]", score_val)
+                                    print(f"🐛[judge_explanation/{score_name}]", judge_expl.get(score_name))
+                        else:
+                            print("🐛[llm judge score]", actor_score.get("score", None) if isinstance(actor_score, dict) else None)
+                            print("🐛[llm judge explanation]", judge_expl)
                 else:
                     # if extracted_solution is not None:
                     print("🐛[main_extracted]", extracted_solution)
@@ -435,8 +508,16 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 if ground_truth is not None:
                     print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)
                 else:
-                    print("🐛[cl_judge_explanation_list]", cl_judge_explanation_list[0][0])   # 0th classmate model, 0th sample
-                print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
+                    cl_expl = cl_judge_explanation_list[0][0]   # 0th classmate model, 0th sample
+                    if isinstance(cl_expl, dict):
+                        for score_name, score_val in total_classmate_reward_dict.items():
+                            if score_name != "score":
+                                print(f"🐛[cl_judge_score/{score_name}]", score_val)
+                                print(f"🐛[cl_judge_explanation/{score_name}]", cl_expl.get(score_name))
+                    else:
+                        # print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
+                        print("🐛[classmate_reward]", classmate_reward)
+                        print("🐛[cl_judge_explanation_list]", cl_expl)
                 print("🐛[final_reward]", final_reward)
                 if "classmate_outputs" in ctx["data_item"].non_tensor_batch:
                     print(f"[num_classmate_outputs]", len(ctx["data_item"].non_tensor_batch["classmate_outputs"]))
@@ -463,6 +544,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 "main_reward_tensor": main_reward_tensor,
                 "classmate_reward_tensor": classmate_reward_tensor,
                 "reward_extra_info": reward_extra_info,
+                "per_score_main_reward_tensors": per_score_main_reward_tensors,
+                "per_score_classmate_reward_tensors": per_score_classmate_reward_tensors,
             }
             # if self.classmate_cot_reward_configs.add_consistency_reward:
             #     result["consistency_reward_tensor"] = consistency_reward_tensor
