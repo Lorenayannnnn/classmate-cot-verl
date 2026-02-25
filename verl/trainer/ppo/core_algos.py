@@ -108,6 +108,7 @@ class AdvantageEstimator(str, Enum):
 
     GDPO = "gdpo"
     GDPO_WO_BN = "gdpo_wo_bn"
+    GRPO_W_CLASSMATE = "grpo_w_classmate"
 
 
 ADV_ESTIMATOR_REGISTRY: dict[str, Any] = {}
@@ -539,63 +540,86 @@ def compute_gdpo_wo_bn_outcome_advantage(
     return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, batch_main_rewards, batch_classmate_rewards
 
 
-# def compute_gdpo_outcome_advantage_separate(
-#     main_token_level_rewards: torch.Tensor,
-#     classmate_token_level_rewards: torch.Tensor,
-#     main_response_mask: torch.Tensor,
-#     classmate_input_mask: torch.Tensor,
-#     index: np.ndarray,
-#     token_level_classmate_reward_mode,
-#     epsilon: float = 1e-6,
-#     norm_adv_by_std_in_grpo: bool = True,
-#     config: Optional[AlgoConfig] = None,
-# ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-#     """Compute GDPO advantages separately for main and classmate rewards.
-#
-#     Returns token-level main and classmate advantages (masked), plus group stats.
-#     """
-#     with torch.no_grad():
-#         main_scores, _, main_group_mean, main_group_std, batch_main_rewards = compute_grpo_outcome_advantage(
-#             main_token_level_rewards,
-#             main_response_mask,
-#             index,
-#             epsilon,
-#             norm_adv_by_std_in_grpo,
-#             config,
-#             return_sequence_adv=False,
-#         )  # (bsz,)
-#         classmate_scores, _, classmate_group_mean, classmate_group_std, batch_classmate_rewards = compute_grpo_outcome_advantage(
-#             classmate_token_level_rewards,
-#             classmate_input_mask,
-#             index,
-#             epsilon,
-#             norm_adv_by_std_in_grpo,
-#             config,
-#             return_sequence_adv=False,
-#         )  # (bsz,)
-#
-#         if token_level_classmate_reward_mode == "classmate_partial":
-#             main_mask = main_response_mask
-#             classmate_mask = classmate_input_mask
-#         elif token_level_classmate_reward_mode == "all":
-#             main_mask = main_response_mask
-#             classmate_mask = main_response_mask
-#         else:
-#             raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
-#
-#         main_advantages = main_scores.unsqueeze(-1) * main_mask
-#         classmate_advantages = classmate_scores.unsqueeze(-1) * classmate_mask
-#
-#     return (
-#         main_advantages,
-#         classmate_advantages,
-#         main_group_mean,
-#         main_group_std,
-#         classmate_group_mean,
-#         classmate_group_std,
-#         batch_main_rewards,
-#         batch_classmate_rewards,
-#     )
+@register_adv_est(AdvantageEstimator.GRPO_W_CLASSMATE)
+def compute_grpo_outcome_advantage_w_classmate(
+    main_token_level_rewards: torch.Tensor,
+    classmate_token_level_rewards: torch.Tensor,
+    main_response_mask: torch.Tensor,
+    classmate_input_mask: torch.Tensor,
+    index: np.ndarray,
+    token_level_classmate_reward_mode,
+    epsilon: float = 1e-6,
+    norm_adv_by_std_in_grpo: bool = True,
+    config: Optional[AlgoConfig] = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Compute advantage for GRPO with classmate reward, applying token-level masking via classmate_input_mask.
+
+    Unlike GDPO which separately normalizes main and classmate rewards before adding, this function
+    first combines main + classmate rewards, then applies a single GRPO-style group normalization on
+    the combined reward. The token_level_classmate_reward_mode then controls which tokens receive the
+    combined advantage vs main-only advantage:
+      - "classmate_partial": CoT tokens (classmate_input_mask=1) get combined advantage;
+                             non-CoT response tokens get main-only advantage.
+      - "all": all response tokens get the combined advantage.
+
+    Args:
+        main_token_level_rewards: shape (bs, response_length)
+        classmate_token_level_rewards: shape (bs, response_length)
+        main_response_mask: shape (bs, response_length)
+        classmate_input_mask: shape (bs, response_length); marks CoT tokens passed to classmate
+        index: index array for grouping
+        token_level_classmate_reward_mode: "classmate_partial" or "all"
+        epsilon: small value to avoid division by zero
+        norm_adv_by_std_in_grpo: whether to divide by std (True = GRPO, False = Dr.GRPO)
+        config: algorithm configuration object
+
+    Returns:
+        advantages: (bs, response_length)
+        returns: (bs, response_length)  [same as advantages]
+        main_group_reward_mean: (bs,) group-wise mean of main-only rewards
+        main_group_reward_std: (bs,) group-wise std of main-only rewards
+        combined_group_reward_mean: (bs,) group-wise mean of combined rewards
+        combined_group_reward_std: (bs,) group-wise std of combined rewards
+        batch_main_rewards: flat tensor of raw main reward scalars
+        batch_classmate_rewards: flat tensor of raw classmate reward scalars
+    """
+    with torch.no_grad():
+        # GRPO-normalize combined (main + classmate) rewards
+        combined_token_level_rewards = main_token_level_rewards + classmate_token_level_rewards
+        combined_scores, _, combined_group_mean, combined_group_std, _ = compute_grpo_outcome_advantage(
+            combined_token_level_rewards,
+            main_response_mask,
+            index,
+            epsilon,
+            norm_adv_by_std_in_grpo,
+            config,
+            return_sequence_adv=False,
+        )
+
+        # GRPO-normalize main-only rewards (needed for non-CoT tokens in classmate_partial mode)
+        main_scores, _, main_group_mean, main_group_std, batch_main_rewards = compute_grpo_outcome_advantage(
+            main_token_level_rewards,
+            main_response_mask,
+            index,
+            epsilon,
+            norm_adv_by_std_in_grpo,
+            config,
+            return_sequence_adv=False,
+        )
+
+        # Raw classmate reward scalars for logging
+        batch_classmate_rewards = classmate_token_level_rewards.sum(dim=-1)
+
+        # Broadcast to token level
+        if token_level_classmate_reward_mode == "classmate_partial":
+            scores = combined_scores.unsqueeze(-1) * classmate_input_mask + main_scores.unsqueeze(-1) * (1 - classmate_input_mask) * main_response_mask
+        elif token_level_classmate_reward_mode == "all":
+            scores = combined_scores.unsqueeze(-1) * main_response_mask
+        else:
+            raise ValueError(f"Unsupported token_level_classmate_reward_mode: {token_level_classmate_reward_mode}")
+
+    return scores, scores, main_group_mean, main_group_std, combined_group_mean, combined_group_std, batch_main_rewards, batch_classmate_rewards
 
 
 @register_adv_est(AdvantageEstimator.GRPO_VECTORIZED)

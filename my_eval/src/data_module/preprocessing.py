@@ -24,13 +24,13 @@ def inference_main_model_tokenize(entry, tokenizer, dataset_object, enable_think
     ]
 
     processed_doc["query"] = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False, enable_thinking=enable_thinking)
-    input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, enable_thinking=enable_thinking)
+    # input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, enable_thinking=enable_thinking)
     # Note: processed_doc["query"] is used as the actual input. attention_mask is created for calculating max_token length in inference.
-    processed_doc.update({
-        "input_ids": input_ids,
-        "attention_mask": [1] * len(input_ids)
-    })
-    processed_doc.update(tokenizer(processed_doc["query"]))
+    # processed_doc.update({
+    #     "input_ids": input_ids,
+    #     "attention_mask": [1] * len(input_ids)
+    # })
+    # processed_doc.update(tokenizer(processed_doc["query"]))
 
     return processed_doc
 

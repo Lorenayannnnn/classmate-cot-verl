@@ -21,7 +21,7 @@ import torch
 from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 from verl.utils.reward_score.cot_monitor.monitor import send_prompt_to_tinker, create_llm_judge, \
     parse_out_main_cot_output
 from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
@@ -174,7 +174,7 @@ class NaiveRewardManager(AbstractRewardManager):
                         "judge_explanation": "No valid output extracted from the response."
                     }))
                 else:
-                    verifier = get_monitor_verifier(data_source=data_source)
+                    verifier = get_verifier(data_source=data_source)
                     llm_judge_prompt = verifier.format_llm_judge_prompt(
                         extra_info["reward_model"]["raw_question_for_monitor"], main_output)
                     score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
@@ -218,7 +218,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 if type(score) == dict and "score" in score:
                     pass
                 else:
-                    verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                    verifier = get_verifier(data_source=ctx["data_source"])
                     judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
                     score = {
                         "score": judge_score,

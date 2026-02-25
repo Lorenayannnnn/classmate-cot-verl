@@ -23,7 +23,7 @@ from tinker_cookbook import renderers
 from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker, \
     parse_out_main_cot_output
 from verl.utils.reward_score.olmo_verifiers import CodeVerifier, CodeVerifierConfig
@@ -190,7 +190,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                         "judge_explanation": "No valid output extracted from the response."
                     }))
                 else:
-                    verifier = get_monitor_verifier(data_source=data_source)
+                    verifier = get_verifier(data_source=data_source)
                     llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
                     main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
             else:
@@ -246,7 +246,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             if type(actor_score) == dict and "score" in actor_score:    # handle both non llm judge and main output is None case
                 pass
             else:
-                verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                verifier = get_verifier(data_source=ctx["data_source"])
                 judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
                 actor_score = {
                     "score": judge_score,
@@ -286,7 +286,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                                 "judge_explanation": "No valid output extracted from the classmate response."
                             }))
                         else:
-                            verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                            verifier = get_verifier(data_source=ctx["data_source"])
                             llm_judge_prompt = verifier.format_llm_judge_prompt(
                                 ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
                             sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
@@ -338,7 +338,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     if type(tmp_classmate_result) == dict and "score" in tmp_classmate_result:  # handle both non llm judge and main output is None case
                         pass
                     else:
-                        verifier = get_monitor_verifier(data_source=ctx["data_source"])
+                        verifier = get_verifier(data_source=ctx["data_source"])
                         # Parse response
                         judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result,
                                                                                          self.judge_client_config)

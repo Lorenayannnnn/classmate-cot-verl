@@ -1,4 +1,4 @@
-import re
+
 from abc import ABC, abstractmethod
 import logging
 from typing import Any, Dict, List
@@ -28,29 +28,18 @@ class BaseVerifier(ABC):
         self.reward_type = reward_type
 
     @abstractmethod
-    def extract_answer(self, continuation: str) -> Dict[str, Any]:
-        """
-        Extract the answer from the model's continuation.
-
-        Args:
-            continuation: The model's generated text
-
-        Returns:
-            Dict containing:
-                - answer: The extracted answer
-                - answer_format_correct: Whether the format is correct (1.0 or 0.0)
-                - pre_answer_text: Text before the answer
-        """
-        pass
-
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
-        raise NotImplementedError("LLM judge prompt formatting not implemented for this verifier. If you want to use LLM judge evaluation, please implement format_llm_judge_prompt in your verifier subclass.")
+        if self.reward_type == "binary":
+            raise ValueError("Reward is binary; gt should be provided; should not use llm judge")
+        else:
+            raise NotImplementedError("LLM judge prompt formatting not implemented for this verifier. If you want to use LLM judge evaluation, please implement format_llm_judge_prompt in your verifier subclass.")
 
-    def parse_monitor_output(self, monitor_response, monitor_config):
-        raise NotImplementedError("Monitor output parsing not implemented for this verifier. If you want to use monitor-based evaluation, please implement parse_monitor_output in your verifier subclass.")
-
+    @abstractmethod
     def parse_llm_judge_output(self, judge_response, judge_client_config):
-        raise NotImplementedError("LLM judge output parsing not implemented for this verifier. If you want to use LLM judge evaluation, please implement parse_llm_judge_output in your verifier subclass.")
+        if self.reward_type == "binary":
+            raise ValueError("Reward is binary; gt should be provided; should not use llm judge")
+        else:
+            raise NotImplementedError("LLM judge output parsing not implemented for this verifier. If you want to use LLM judge evaluation, please implement parse_llm_judge_output in your verifier subclass.")
 
     @abstractmethod
     def create_monitor_message(self, doc: Dict[str, Any]) -> str:
@@ -65,27 +54,9 @@ class BaseVerifier(ABC):
         """
         raise NotImplementedError("Monitor message creation not implemented for this verifier. If you want to use monitor-based evaluation, please implement create_monitor_message in your verifier subclass.")
 
-    # @abstractmethod
-    # def get_gt(self, user_message: str, continuation: str) -> Dict[str, Any]:
-    #     """
-    #     Get the ground truth answer for a given user message and continuation.
-    #
-    #     Args:
-    #         user_message: The original user message
-    #         continuation: The model's generated text
-    #
-    #     Returns:
-    #         Dict containing:
-    #             - answer: The ground truth answer
-    #             - answer_format_correct: Whether the format is correct (1.0 or 0.0)
-    #             - pre_answer_text: Text before the answer
-    #     """
-    #     pass
-
     @abstractmethod
-    def compute_score_for_eval(self, continuation: str, doc: dict, judge_client_config: dict):
-        raise NotImplementedError("Score computation for eval not implemented for this verifier. If you want to use eval-based evaluation, please implement compute_score_for_eval in your verifier subclass.")
-
+    def parse_monitor_output(self, monitor_response, monitor_config):
+        raise NotImplementedError("Monitor output parsing not implemented for this verifier. If you want to use monitor-based evaluation, please implement parse_monitor_output in your verifier subclass.")
 
     def compute_metrics(self, predictions: List[float], ground_truths: List[float]) -> Dict[str, float]:
         """
@@ -159,46 +130,58 @@ class BaseVerifier(ABC):
             # "mae": float(mae)
         }
 
-    def compute_score(self, continuation: str, gt: Any, debug: bool = False, **kwargs) -> Dict[str, Any]:
+    @abstractmethod
+    def compute_score(self, continuation: str, doc: Any) -> Dict[str, Any]:
+        if self.reward_type == "binary":
+            raise NotImplementedError("Should be implemented in subclass.")
+        else:
+            raise NotImplementedError("Should use llm judge; this function should not be called.")
+        # """
+        # Compute the score for a continuation.
+        #
+        # Args:
+        #     continuation: The model's generated text
+        #     gt: Ground truth value
+        #     debug: Whether to output debug information
+        #     **kwargs: Additional arguments
+        #
+        # Returns:
+        #     Dict containing score and extracted_solution
+        # """
+        # try:
+        #     res = self.extract_answer(continuation)
+        #
+        #     if self.reward_type == "binary":
+        #         score = 1.0 if res["answer"] == gt else 0.0
+        #     else:
+        #         # For non-binary, we might need to parse both answer and gt as floats
+        #         try:
+        #             answer_val = float(res["answer"])
+        #             gt_val = float(gt)
+        #             # For non-binary, we could return the actual value or a normalized score
+        #             # Here we'll return the actual predicted value
+        #             score = answer_val
+        #         except ValueError:
+        #             score = 0.0
+        #
+        #     return {
+        #         "score": score,
+        #         "extracted_solution": res["answer"],
+        #         "answer_format_correct": res.get("answer_format_correct", 1.0)
+        #     }
+        # except Exception as e:
+        #     return {
+        #         "score": 0.0,
+        #         "extracted_solution": f"empty result (probably didn't end with </think>)" if continuation is None else f"ERROR: {str(e)}",
+        #         "answer_format_correct": 0.0
+        #     }
+
+    @abstractmethod
+    def process_doc(self, doc):
         """
-        Compute the score for a continuation.
-
-        Args:
-            continuation: The model's generated text
-            gt: Ground truth value
-            debug: Whether to output debug information
-            **kwargs: Additional arguments
-
-        Returns:
-            Dict containing score and extracted_solution
+        Used only in my_eval
         """
-        try:
-            res = self.extract_answer(continuation)
-
-            if self.reward_type == "binary":
-                score = 1.0 if res["answer"] == gt else 0.0
-            else:
-                # For non-binary, we might need to parse both answer and gt as floats
-                try:
-                    answer_val = float(res["answer"])
-                    gt_val = float(gt)
-                    # For non-binary, we could return the actual value or a normalized score
-                    # Here we'll return the actual predicted value
-                    score = answer_val
-                except ValueError:
-                    score = 0.0
-
-            return {
-                "score": score,
-                "extracted_solution": res["answer"],
-                "answer_format_correct": res.get("answer_format_correct", 1.0)
-            }
-        except Exception as e:
-            return {
-                "score": 0.0,
-                "extracted_solution": f"empty result (probably didn't end with </think>)" if continuation is None else f"ERROR: {str(e)}",
-                "answer_format_correct": 0.0
-            }
+        raise NotImplementedError("Should be implemented in subclass.")
 
 
 def _normalize_data_sources(data_source) -> List[str]:
@@ -214,7 +197,7 @@ def _normalize_data_sources(data_source) -> List[str]:
     return [str(data_source)]
 
 
-def get_monitor_verifier(data_source=None) -> BaseVerifier:
+def get_verifier(data_source=None) -> BaseVerifier:
     # TODO: if data_source is a list, currently assuming all elements are the same type
     """Get the appropriate verifier based on data_source.
 
@@ -259,7 +242,7 @@ def compute_score(
     return_dict=True,
     **kwargs,
 ):
-    verifier = get_monitor_verifier(data_source=data_source)
+    verifier = get_verifier(data_source=data_source)
     assert ground_truth is not None, "Ground truth must be provided for scoring. Otherwise use Tinker-based judge."
 
     # if ground_truth is None:
@@ -272,7 +255,7 @@ def compute_score(
     #     score = ground_truth
     #     extracted_sol = solution_str
     # else:
-    res = verifier.compute_score(solution_str, ground_truth, debug=False)
+    res = verifier.compute_score(solution_str, ground_truth)
     score = res["score"]
     extracted_sol = res["extracted_solution"]
 

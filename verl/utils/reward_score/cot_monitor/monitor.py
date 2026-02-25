@@ -18,7 +18,7 @@ from keys import TINKER_API_KEY, INPUT_MONITOR_MODEL_NAME
 from tinker_cookbook import model_info, renderers
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 
 USE_OPENAI = False
 USE_TINKER = True
@@ -94,7 +94,7 @@ def monitor_cot_wrapper_w_tinker(
     """
     if USE_TINKER:
         if verifier is None:
-            verifier = get_monitor_verifier()
+            verifier = get_verifier()
 
         tinker_futures = []
 

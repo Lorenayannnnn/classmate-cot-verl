@@ -332,6 +332,35 @@ def compute_advantage(
         # data.batch["batch_classmate_rewards"] = batch_classmate_rewards
         # # data.batch["consistency_group_reward_mean"] = consistency_group_reward_mean
         # # data.batch["consistency_group_reward_std"] = consistency_group_reward_std
+    elif adv_estimator == AdvantageEstimator.GRPO_W_CLASSMATE:
+        main_calculation_mask = data.batch["response_mask"]
+        classmate_calculation_mask = data.batch["classmate_input_mask"]
+
+        (advantages,
+         returns,
+         main_group_reward_mean,
+         main_group_reward_std,
+         classmate_group_reward_mean,
+         classmate_group_reward_std,
+         batch_main_rewards,
+         batch_classmate_rewards
+         ) = core_algos.compute_grpo_outcome_advantage_w_classmate(
+            main_token_level_rewards=data.batch["main_token_level_rewards"],
+            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+            main_response_mask=main_calculation_mask,
+            classmate_input_mask=classmate_calculation_mask,
+            index=data.non_tensor_batch["uid"],
+            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
+        data.batch["main_group_reward_mean"] = main_group_reward_mean
+        data.batch["main_group_reward_std"] = main_group_reward_std
+        data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean
+        data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std
+        data.batch["batch_main_rewards"] = batch_main_rewards
+        data.batch["batch_classmate_rewards"] = batch_classmate_rewards
     elif adv_estimator == AdvantageEstimator.GDPO_WO_BN:
         # Initialize the mask for GRPO calculation
 
@@ -536,11 +565,11 @@ class ClassmateCoTRayPPOTrainer:
         # for CoT monitoring
         if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
             # Initialize openai client
-            from openai import OpenAI
-            from keys import OPENAI_KEY
-            self.openai_client = OpenAI(api_key=OPENAI_KEY)
-            self._monitor_verifier = None
-            self._monitor_verifier_key = None
+            # from openai import OpenAI
+            # from keys import OPENAI_KEY
+            # self.openai_client = OpenAI(api_key=OPENAI_KEY)
+            self._verifier = None
+            self._verifier_key = None
 
         assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
         self.enable_thinking = enable_thinking
@@ -732,7 +761,7 @@ class ClassmateCoTRayPPOTrainer:
 
         return gen_batch
 
-    def _get_monitor_verifier(self, data_sources=None):
+    def _get_verifier(self, data_sources=None):
         # Optimize this later
         is_mmlu = False
         is_mmlu_pro = False
@@ -751,15 +780,15 @@ class ClassmateCoTRayPPOTrainer:
                 is_mmlu_pro = False
 
         cache_key = (is_mmlu, is_mmlu_pro)
-        if self._monitor_verifier is not None and self._monitor_verifier_key == cache_key:
-            return self._monitor_verifier
+        if self._verifier is not None and self._verifier_key == cache_key:
+            return self._verifier
 
-        from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+        from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 
-        verifier = get_monitor_verifier(data_source=data_source_values)
+        verifier = get_verifier(data_source=data_source_values)
 
-        self._monitor_verifier = verifier
-        self._monitor_verifier_key = cache_key
+        self._verifier = verifier
+        self._verifier_key = cache_key
         return verifier
 
     def _validate(self):
@@ -853,7 +882,7 @@ class ClassmateCoTRayPPOTrainer:
                 print("Performing CoT monitoring...")
 
                 data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-                verifier = self._get_monitor_verifier(data_sources=data_sources_batch)
+                verifier = self._get_verifier(data_sources=data_sources_batch)
                 if verifier is None:
                     raise ValueError("Monitor verifier could not be initialized from data_source.")
 
@@ -1010,7 +1039,7 @@ class ClassmateCoTRayPPOTrainer:
             monitor_scores = monitor_scores.astype(float)
             main_model_reward = main_model_reward.astype(float)
 
-            verifier = self._get_monitor_verifier(data_sources=data_sources)
+            verifier = self._get_verifier(data_sources=data_sources)
             if verifier is not None:
                 monitor_metrics = verifier.compute_metrics(
                     predictions=monitor_scores.tolist(),
@@ -1579,7 +1608,7 @@ class ClassmateCoTRayPPOTrainer:
         if all_other_prompt_gts is not None:
             batch.non_tensor_batch["all_other_prompt_gts"] = all_other_prompt_gts
 
-        batch.batch["classmate_input_mask"] = torch.tensor(classmate_batch.non_tensor_batch["classmate_input_mask"], dtype=torch.bool)
+        batch.batch["classmate_input_mask"] = torch.tensor(classmate_batch.non_tensor_batch["classmate_input_mask"], dtype=torch.float32)
 
         return batch
 
@@ -2134,7 +2163,7 @@ class ClassmateCoTRayPPOTrainer:
                             main_reward_tensor, classmate_reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                         # batch.batch["token_level_scores"] = reward_tensor
 
-                        if self.config.algorithm.adv_estimator in [AdvantageEstimator.GDPO, AdvantageEstimator.GDPO_WO_BN]:
+                        if self.config.algorithm.adv_estimator in [AdvantageEstimator.GDPO, AdvantageEstimator.GDPO_WO_BN, AdvantageEstimator.GRPO_W_CLASSMATE]:
                             batch.batch["main_token_level_scores"] = main_reward_tensor
                             batch.batch["classmate_token_level_scores"] = classmate_reward_tensor
                             # batch.batch["consistency_token_level_scores"] = consistency_reward_tensor if consistency_reward_tensor is not None else 0
@@ -2148,14 +2177,14 @@ class ClassmateCoTRayPPOTrainer:
 
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:
-                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GDPO, AdvantageEstimator.GDPO_WO_BN]:
+                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GDPO, AdvantageEstimator.GDPO_WO_BN, AdvantageEstimator.GRPO_W_CLASSMATE]:
                                 raise NotImplementedError("GDPO/GDPO_WO_BN with KL in reward not implemented yet.")
                             batch, kl_metrics = apply_kl_penalty(
                                 batch, kl_ctrl=self.kl_ctrl_in_reward, kl_penalty=self.config.algorithm.kl_penalty
                             )
                             metrics.update(kl_metrics)
                         else:
-                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GDPO, AdvantageEstimator.GDPO_WO_BN]:
+                            if self.config.algorithm.adv_estimator in [AdvantageEstimator.GDPO, AdvantageEstimator.GDPO_WO_BN, AdvantageEstimator.GRPO_W_CLASSMATE]:
                                 batch.batch["main_token_level_rewards"] = batch.batch["main_token_level_scores"]
                                 batch.batch["classmate_token_level_rewards"] = batch.batch["classmate_token_level_scores"]
                                 # batch.batch["consistency_token_level_rewards"] = batch.batch["consistency_token_level_scores"]

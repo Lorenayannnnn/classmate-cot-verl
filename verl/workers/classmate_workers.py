@@ -390,13 +390,14 @@ class ClassmateWorker(Worker):
                     else:
                         if self.enable_thinking:
                             assert "Qwen2.5-Math-1.5B" in self.model_name_or_path or "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in self.model_name_or_path or "Qwen3" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
-                            tmp_response_token_ids = mini_batch_actor_responses_token_ids[idx][tmp_classmate_input_mask.astype(bool)].tolist()
+                            # tmp_response_token_ids = mini_batch_actor_responses_token_ids[idx][tmp_classmate_input_mask.astype(bool)].tolist()
+                            tmp_response_token_ids = self.tokenizer.encode(tmp_response)
 
-                            # haha include <think> in CoT?
+                            # include <think> in CoT
                             # prefix_token_ids = user_only_message_token_ids
                             # token_ids = prefix_token_ids + tmp_response_token_ids
 
-                            # haha NOT include <think> in CoT?
+                            # NOT include <think> in CoT?
                             prefix_str = "<think>"
                             suffix_str = "</think>\n\n"
                             prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str)
@@ -421,8 +422,8 @@ class ClassmateWorker(Worker):
                         else:
                             mini_batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
                             mini_batch_input_prompt_ids.append(TokensPrompt(prompt_token_ids=token_ids))
-                            cls_input_len = len(prefix_token_ids)
-                            tmp_input_and_main_cot_len = len(prefix_token_ids) + len(tmp_response_token_ids)
+                            # cls_input_len = len(prefix_token_ids)
+                            # tmp_input_and_main_cot_len = len(prefix_token_ids) + len(tmp_response_token_ids)
                             # classmate_input_lens.append(cls_input_len)
                             # classmate_input_and_main_cot_lens.append(tmp_input_and_main_cot_len)
 

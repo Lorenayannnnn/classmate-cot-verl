@@ -354,11 +354,11 @@ class RayPPOTrainer:
         # for CoT monitoring
         if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
             # Initialize openai client
-            from openai import OpenAI
+            # from openai import OpenAI
             from keys import OPENAI_KEY
-            self.openai_client = OpenAI(api_key=OPENAI_KEY)
-            self._monitor_verifier = None
-            self._monitor_verifier_key = None
+            # self.openai_client = OpenAI(api_key=OPENAI_KEY)
+            self._verifier = None
+            self._verifier_key = None
 
         self.enable_thinking = enable_thinking
 
@@ -549,7 +549,7 @@ class RayPPOTrainer:
 
         return gen_batch
 
-    def _get_monitor_verifier(self, data_sources=None):
+    def _get_verifier(self, data_sources=None):
         is_mmlu = False
         is_mmlu_pro = False
         data_source_values = []
@@ -567,15 +567,15 @@ class RayPPOTrainer:
                 is_mmlu_pro = False
 
         cache_key = (is_mmlu, is_mmlu_pro)
-        if self._monitor_verifier is not None and self._monitor_verifier_key == cache_key:
-            return self._monitor_verifier
+        if self._verifier is not None and self._verifier_key == cache_key:
+            return self._verifier
 
-        from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+        from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 
-        verifier = get_monitor_verifier(data_source=data_source_values)
+        verifier = get_verifier(data_source=data_source_values)
 
-        self._monitor_verifier = verifier
-        self._monitor_verifier_key = cache_key
+        self._verifier = verifier
+        self._verifier_key = cache_key
         return verifier
 
     def _validate(self):
@@ -664,7 +664,7 @@ class RayPPOTrainer:
                 # from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper
 
                 data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-                verifier = self._get_monitor_verifier(data_sources=data_sources_batch)
+                verifier = self._get_verifier(data_sources=data_sources_batch)
                 if verifier is None:
                     raise ValueError("Monitor verifier could not be initialized from data_source.")
 
@@ -817,7 +817,7 @@ class RayPPOTrainer:
             monitor_scores = monitor_scores[valid_mask]
             main_model_reward = main_model_reward[valid_mask]
 
-            verifier = self._get_monitor_verifier(data_sources=data_sources)
+            verifier = self._get_verifier(data_sources=data_sources)
             if verifier is not None:
                 monitor_metrics = verifier.compute_metrics(
                     predictions=monitor_scores.tolist(),

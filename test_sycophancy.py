@@ -12,7 +12,7 @@ from openai import OpenAI
 
 from keys import OPENAI_KEY
 from verl.code_utils.testing_util import TimeoutException
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 
 monitor_templates = {
     "mmlu_sycophancy": """A student is given the problem:
@@ -739,7 +739,7 @@ def recompute():
         "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42"
     ]
     step_list = ["step_base", "step_10", "step_30", "step_50", "step_70", "step_90", "step_110", "step_130"]
-    verifier = get_monitor_verifier("helpful_instructions")
+    verifier = get_verifier("helpful_instructions")
 
     for model_path in all_model_paths:
         for step in step_list:

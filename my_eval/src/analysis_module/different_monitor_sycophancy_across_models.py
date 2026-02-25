@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from keys import OPENAI_KEY
 from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 
 
 def _sanitize_model_name(name: str) -> str:
@@ -268,7 +268,7 @@ def run_different_monitor_and_judge(
     # Main loop
     # ------------------------------------------------------------------ #
     for dataset_name in dataset_name_list:
-        verifier = get_monitor_verifier(data_source=dataset_name)
+        verifier = get_verifier(data_source=dataset_name)
 
         for model_idx, main_model_name_or_path in enumerate(main_model_name_or_path_list):
             for step_idx in step_idx_list:

@@ -174,6 +174,38 @@
   - Pass in sandbox fusion url: ppo_trainer.yaml config files, ppo_trainer.py, reward_manager (naive.py, classmate_cot_rm.py)
   - compute_score: check the ```elif code_contests_modify_code``` in ```default_compute_score```
 
+# Code Structure (after refactoring for sycophancy)
+- Configs:
+  - Baseline: [qwen_ppo_trainer.yaml](verl/trainer/config/qwen_ppo_trainer.yaml)
+  - With classmate reward: [qwen_classmate_cot_ppo_trainer.yaml](verl/trainer/config/qwen_classmate_cot_ppo_trainer.yaml)
+- Training entry:
+  - Baseline: [qwen_main_ppo.py](verl/trainer/qwen_main_ppo.py) 
+  - With classmate reward: [qwen_classmate_cot_main_ppo.py](verl/trainer/qwen_classmate_cot_main_ppo.py)
+- Trainers:
+  - Baseline: [baseline_ray_trainer.py](verl/trainer/ppo/baseline_ray_trainer.py)
+  - With classmate: [classmate_cot_ray_trainer.py](verl/trainer/ppo/classmate_cot_ray_trainer.py)
+  - Monitoring during validation is handled in the Trainer files with ```monitor_cot_wrapper_w_tinker```
+- Calculate reward:
+  - Reward manager: 
+    - [sycophancy_classmate_cot_rm.py](verl/workers/reward_manager/sycophancy_classmate_cot_rm.py)
+    - Register rm:
+      - ```@register("sycophancy_classmate_cot")``` on top of the rm class
+      - Update [__init__.py](verl/workers/reward_manager/__init__.py)
+      - Change ```reward_manager``` in training config: [qwen_classmate_cot_ppo_trainer.yaml](verl/trainer/config/qwen_classmate_cot_ppo_trainer.yaml)
+    - Handle making llm judge api calls with ```send_prompt_to_tinker```
+  - Reward function/verifier:
+    - Base class you should inherit: [BaseVerifier.py](verl/utils/reward_score/cot_monitor/BaseVerifier.py)
+      - compute_metrics report binary/non-binary metrics
+      - get_verifier: return specific verifier based on the given data source
+    - When you do not have gt and need llm judge:
+      - Judge prompt and output parsings are handled by specific verifier you implemented (that inherits the base class)
+    - When you have gt: ```compute_score``` is from [BaseVerifier.py](verl/utils/reward_score/cot_monitor/BaseVerifier.py)
+- What to do when adding new tasks and verifiers:
+  - Data preprocessing script:
+    - Sycophancy: [h4_helpful_instructions.py](verl/data_preprocessing/h4_helpful_instructions.py)
+  - Implement BaseVerifier subclass
+  - Update ```get_verifier```
+
 # Hosting Sandbox for coding tasks
 - Dolci code/code_stdio:
   - ```
@@ -235,7 +267,6 @@
   bash my_scripts/run_olmo_hendrycks_classmate_cot.sh
   ```
 - Merge ckpts: [merge_fsdp_ckpts.sh](my_scripts/merge_fsdp_ckpts.sh)
-
 
 # Others
 - Storage path:

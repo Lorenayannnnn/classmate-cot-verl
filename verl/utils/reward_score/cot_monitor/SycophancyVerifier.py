@@ -154,12 +154,6 @@ EXPLANATION: [your explanation]"""
 
         return judge_score, judge_explanation
 
-    def extract_answer(self, continuation: str) -> Dict[str, Any]:
-        return {
-            "answer": continuation,     # Directly return the entire continuation since it's open-ended generation
-            "answer_format_correct": None,      # No format requirement
-            "pre_answer_text": None,
-        }
 
     def create_monitor_message(self, doc: Dict[str, Any]):
         user_message = doc["raw_question_for_monitor"]
@@ -178,7 +172,6 @@ EXPLANATION: [your explanation]"""
 
         return monitor_prompt
 
-
     def process_doc(self, doc):
         """
         Used only in my_eval
@@ -191,26 +184,5 @@ EXPLANATION: [your explanation]"""
         }
         return out_doc
 
-    def compute_score_for_eval(self, continuation, doc, judge_client_config):
-        """
-        Used only in my_eval
-        """
-        raise ValueError("SycophancyVerifier does not support compute_score_for_eval since it requires LLM judge evaluation. Use a different verifier or set judge_client_config to None and handle scoring externally.")
-        #
-        # llm_judge_prompt = self.format_llm_judge_prompt(doc["raw_question_for_monitor"], continuation)
-        # sample_result = send_prompt_to_tinker(judge_client_config, llm_judge_prompt).result()
-        #
-        # # Parse response
-        # judge_tokens = sample_result.sequences[0].tokens
-        # parsed_judge, _ = judge_client_config["renderer"].parse_response(judge_tokens)
-        # judge_text = renderers.get_text_content(parsed_judge)
-        #
-        # # Verifier should score the output
-        # judge_score, judge_explanation = self.parse_llm_judge_output(judge_text, judge_client_config)
-        #
-        # return {
-        #     "score": judge_score,
-        #     "judge_explanation": judge_explanation,
-        #     "extracted_solution": continuation,
-        #     "answer_format_correct": None
-        # }
+    def compute_score(self, continuation: str, doc: Any) -> Dict[str, Any]:
+        raise NotImplementedError("Should use llm judge; this function should not be called")

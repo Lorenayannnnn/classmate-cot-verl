@@ -11,7 +11,7 @@ from tinker_cookbook import renderers
 
 from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker, process_main_cot_helper
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 
 
 def _sanitize_model_name(name: str) -> str:
@@ -113,7 +113,7 @@ class SycophancyInferenceExpRunner:
 
         assert self.batch_size == 1
 
-        verifier = get_monitor_verifier(data_source=self.data_source)
+        verifier = get_verifier(data_source=self.data_source)
 
         for batch in progress:
             batch_prompts = batch["query"]
@@ -166,7 +166,7 @@ class SycophancyInferenceExpRunner:
                         "gt": batch['gt'][batch_entry_idx],
                         "raw_question_for_monitor": batch["raw_question_for_monitor"],
                     }
-                    process_result_dict = dataset_object.compute_score_for_eval(continuation=final_output, doc=compute_score_input_dict, judge_client_config=None)
+                    process_result_dict = dataset_object.compute_score(continuation=final_output, doc=compute_score_input_dict, judge_client_config=None)
                     main_score = process_result_dict["score"]
                     all_main_model_rewards.append(main_score)
                     main_extracted_solution = process_result_dict["extracted_solution"]
@@ -230,7 +230,7 @@ class SycophancyInferenceExpRunner:
             monitor_scores = monitor_scores[valid_mask].astype(float)
             main_model_reward = main_model_reward[valid_mask].astype(float)
 
-            verifier = get_monitor_verifier(data_source=self.data_source)
+            verifier = get_verifier(data_source=self.data_source)
             monitor_metrics = verifier.compute_metrics(
                 predictions=monitor_scores.tolist(),
                 ground_truths=main_model_reward.tolist(),
