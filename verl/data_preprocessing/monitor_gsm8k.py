@@ -33,7 +33,6 @@ def extract_solution(solution_str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--local_dir", default=None, help="The save directory for the preprocessed dataset.")
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--local_dataset_path", default=None, help="The local path to the raw dataset, if it exists.")
     parser.add_argument("--seed", default=42)
@@ -42,20 +41,13 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    local_dataset_path = args.local_dataset_path
 
     data_source = "openai/gsm8k"
 
-    if local_dataset_path is not None:
-        dataset = datasets.load_dataset(local_dataset_path, "main")
-    else:
-        dataset = datasets.load_dataset(data_source, "main")
+    dataset = datasets.load_dataset(data_source, "main")
 
-    original_dataset = dataset["train"]
+    original_dataset = dataset["train"].shuffle(seed=int(args.seed))
     test_dataset = dataset["test"]
-
-    import random
-    rng = random.Random(args.seed)
 
     train_num = 7000
     dev_num = 200
@@ -64,12 +56,11 @@ if __name__ == "__main__":
     total_train_dev_num = train_num + dev_num
 
     assert total_train_dev_num <= len(original_dataset)
-    assert test_num <= len(original_dataset)
+    assert test_num <= len(test_dataset)
 
-    train_dataset = original_dataset.select(range(int(train_num)))
-    dev_dataset = original_dataset.select(range(int(train_num), int(train_num + dev_num)))
-
-    test_dataset = test_dataset.select(range(int(test_num)))
+    train_dataset = original_dataset.select(range(train_num))
+    dev_dataset = original_dataset.select(range(train_num, train_num + dev_num))
+    test_dataset = test_dataset.select(range(test_num))
 
     # warmup_train_dataset = original_dataset.select(range(int(total_sample_num), int(total_sample_num) + warmup_train_num))
     # warmup_dev_dataset = original_dataset.select(range(int(total_sample_num) + warmup_train_num, int(total_sample_num) + warmup_train_num + warmup_dev_num))
@@ -114,17 +105,21 @@ if __name__ == "__main__":
     # warmup_dev_dataset = warmup_dev_dataset.map(function=make_map_fn("warmup"), with_indices=True)
 
     hdfs_dir = args.hdfs_dir
-    local_save_dir = args.local_dir
-    if local_save_dir is not None:
-        print("Warning: Argument 'local_dir' is deprecated. Please use 'local_save_dir' instead.")
-    else:
-        local_save_dir = args.local_save_dir
+    base_save_dir = args.local_save_dir
+    seed_save_dir = args.local_save_dir + f"/seed_{args.seed}"
+    os.makedirs(base_save_dir, exist_ok=True)
+    os.makedirs(seed_save_dir, exist_ok=True)
 
-    train_dataset.to_parquet(os.path.join(local_save_dir, "train.parquet"))
-    dev_dataset.to_parquet(os.path.join(local_save_dir, "dev.parquet"))
-    test_dataset.to_parquet(os.path.join(local_save_dir, "test.parquet"))
-    # warmup_train_dataset.to_parquet(os.path.join(local_save_dir, "warmup_train.parquet"))
-    # warmup_dev_dataset.to_parquet(os.path.join(local_save_dir, "warmup_dev.parquet"))
+    test_parquet_path = os.path.join(base_save_dir, "test.parquet")
+    if os.path.exists(test_parquet_path):
+        print(f"Warning: test set already exists at {test_parquet_path}, skipping.")
+    else:
+        test_dataset.to_parquet(test_parquet_path)
+
+    train_dataset.to_parquet(os.path.join(seed_save_dir, "train.parquet"))
+    dev_dataset.to_parquet(os.path.join(seed_save_dir, "dev.parquet"))
+    # warmup_train_dataset.to_parquet(os.path.join(seed_save_dir, "warmup_train.parquet"))
+    # warmup_dev_dataset.to_parquet(os.path.join(seed_save_dir, "warmup_dev.parquet"))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

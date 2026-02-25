@@ -9,9 +9,10 @@ set -x
 
 data_dir=./data   # run on lambda
 dataset_name="monitor_gsm8k"
+seed=42
 
-train_path=${data_dir}/${dataset_name}/train.parquet
-eval_path=${data_dir}/${dataset_name}/dev.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
+eval_path=${data_dir}/${dataset_name}/seed_${seed}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
@@ -39,12 +40,11 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 # add_consistency_reward=False
 
 gpu_num=4
-seed=42
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=25
-total_test_times=50
+#total_ckpts=25
+#total_test_times=50
 #save_freq=$((train_steps / total_ckpts))
 #test_freq=$((train_steps / total_test_times))
 #save_freq=10
@@ -119,4 +119,4 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_general_sycophancy.sh
+#bash my_scripts/qwen3_classmate_monitor_gsm8k.sh

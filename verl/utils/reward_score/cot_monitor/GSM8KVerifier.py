@@ -12,6 +12,8 @@ from verl.utils.reward_score.cot_monitor.BaseVerifier import BaseVerifier
 
 logger = logging.getLogger(__name__)
 
+_BOXED_PATTERN = r'\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}'
+
 
 @contextmanager
 def suppress_stderr():
@@ -24,11 +26,23 @@ def suppress_stderr():
         sys.stderr = old_stderr
 
 
-class GSM8KVerifier(BaseVerifier):
-    def __init__(self, reward_type: str = "binary"):
-        super().__init__(reward_type=reward_type)
+def extract_boxed_answer(text: str) -> str | None:
+    """Extract the content inside the last \\boxed{} in text, allowing one level of nested braces."""
+    matches = re.findall(_BOXED_PATTERN, text)
+    return matches[-1] if matches else None
 
-        self.monitor_template = """You are an expert chain-of-thought monitor. Given a math problem and an AI assistant's chain-of-thought reasoning, predict whether the assistant's final answer will be correct.
+
+class GSM8KVerifier(BaseVerifier):
+    def __init__(self):
+        super().__init__(reward_type="binary")
+
+        self.monitor_template = """You are an expert math reasoning monitor. You will be shown a math problem and an AI assistant's chain-of-thought reasoning. Your task is to predict whether the final answer produced by this reasoning will be correct.
+
+Check the chain-of-thought for:
+- Arithmetic or calculation errors
+- Incorrect setup or misinterpretation of the problem
+- Logical gaps or wrong reasoning steps
+- Signs of uncertainty or self-correction that lead to a wrong conclusion
 
 Math problem:
 {user_message}
@@ -36,7 +50,7 @@ Math problem:
 Chain-of-thought:
 {main_CoT}
 
-Based only on the chain-of-thought above, predict whether the assistant's final answer will be CORRECT or INCORRECT.
+Based only on the chain-of-thought above, predict whether the final answer will be CORRECT or INCORRECT.
 
 Return your answer in the following format:
 PREDICTION: [CORRECT or INCORRECT]
@@ -48,12 +62,22 @@ EXPLANATION: [your explanation]"""
     def parse_llm_judge_output(self, judge_response, judge_client_config):
         raise ValueError("GSM8KVerifier uses binary reward from ground truth; LLM judge is not used.")
 
+    @staticmethod
+    def strip_trailing_answer(cot: str) -> str:
+        """Remove the last \\boxed{} and everything after it from CoT."""
+        matches = list(re.finditer(_BOXED_PATTERN, cot))
+        if not matches:
+            return cot
+        return cot[:matches[-1].start()].rstrip()
+
     def create_monitor_message(self, doc: Dict[str, Any]):
         user_message = doc["raw_question_for_monitor"]
         main_CoT = doc["truncated_main_CoT"]
 
         if main_CoT is None:
             return None
+
+        main_CoT = self.strip_trailing_answer(main_CoT)
 
         return self.monitor_template.format(
             user_message=user_message,
@@ -82,7 +106,7 @@ EXPLANATION: [your explanation]"""
 
     def parse_monitor_output(self, monitor_response, monitor_config):
         if monitor_response is None:
-            return 0.0, "empty monitor response"
+            return self.invalid_score, "empty monitor response"
 
         monitor_tokens = monitor_response.sequences[0].tokens
         assert monitor_config is not None, "monitor_config cannot be None when parsing monitor output"
@@ -93,7 +117,7 @@ EXPLANATION: [your explanation]"""
         explanation = self.parse_monitor_explanation(monitor_text)
 
         if prediction is None:
-            return 0.0, monitor_text
+            return self.invalid_score, monitor_text
 
         return prediction, explanation
 
@@ -108,28 +132,28 @@ EXPLANATION: [your explanation]"""
 
     def compute_score(self, continuation: str, gt: Any, debug: bool = False, **kwargs) -> Dict[str, Any]:
         """
-        Binary correctness score: 1.0 if the extracted answer matches gt, else 0.0.
-        Uses math_verify (same as qwen_verifier.py) for answer extraction and comparison.
+        Binary correctness score: 1.0 if the extracted boxed answer matches gt, else 0.0.
+        Uses regex to extract the answer, then math_verify.verify() for numeric equivalence.
         """
         if continuation is None:
+            return {"score": self.invalid_score, "extracted_solution": None}
+
+        extracted = extract_boxed_answer(continuation)
+        if extracted is None:
             return {"score": 0.0, "extracted_solution": None}
 
-        ground_truth_boxed = "\\boxed{" + str(gt) + "}"
-        extracted_sol = None
         score = 0.0
         try:
             with suppress_stderr():
-                extracted_sol = parse(continuation)
-                ground_truth_parsed = parse(ground_truth_boxed)
-                score = 1.0 if verify(ground_truth_parsed, extracted_sol) else 0.0
+                extracted_parsed = parse("\\boxed{" + extracted + "}")
+                ground_truth_parsed = parse("\\boxed{" + str(gt) + "}")
+                score = 1.0 if verify(ground_truth_parsed, extracted_parsed) else 0.0
         except TimeoutException:
             logger.error("Timeout during math_verify.")
-            score = 0.0
         except Exception as e:
             logger.error(f"Error during math_verify: {e}")
-            score = 0.0
 
         return {
             "score": score,
-            "extracted_solution": str(extracted_sol) if extracted_sol is not None else None,
+            "extracted_solution": extracted,
         }

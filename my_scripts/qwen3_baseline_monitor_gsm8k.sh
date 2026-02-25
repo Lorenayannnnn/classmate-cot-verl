@@ -8,9 +8,10 @@ set -x
 
 data_dir=./data   # run on lambda
 dataset_name="monitor_gsm8k"
+seed=42
 
-train_path=${data_dir}/${dataset_name}/train.parquet
-eval_path=${data_dir}/${dataset_name}/dev.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
+eval_path=${data_dir}/${dataset_name}/seed_${seed}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
@@ -26,12 +27,11 @@ train_size=7000   # After filtering out too long prompts
 max_response_length=3072
 
 gpu_num=4
-seed=42
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=25
-total_test_times=50
+#total_ckpts=25
+#total_test_times=50
 #save_freq=$((train_steps / total_ckpts))
 #test_freq=$((train_steps / total_test_times))
 save_freq=10
@@ -92,4 +92,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
 
 #outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
 
-#bash my_scripts/qwen3_baseline_general_sycophancy.sh
+#bash my_scripts/qwen3_baseline_monitor_gsm8k.sh
