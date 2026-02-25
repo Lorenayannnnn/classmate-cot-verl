@@ -9,7 +9,8 @@ defaults:
 
   # <folder_name>@<field_name>.<field_name>: <yaml_file_name>
   # actor_rollout_ref.actor: trainer/config/actor/dp_actor.yaml
-  - actor@actor_rollout_ref.actor: classmate_dp_actor
+#  - actor@actor_rollout_ref.actor: classmate_dp_actor
+  - actor@actor_rollout_ref.actor: dp_actor
 
   # data: trainer/config/data/legacy_data.yaml
   - data@data: qwen_data
@@ -109,20 +110,20 @@ reward_model:
     # Rollout Importance Sampling: corrects distribution mismatch between rollout and training policies
     # Main control: Upper threshold for IS weights (null = disabled, float = enabled)
     # When enabled, computes IS weights and mismatch metrics (KL, PPL, etc.)
-    cl_rollout_is_threshold: 1.4
+#    cl_rollout_is_threshold: 1.4
 
     # Lower threshold for IS weights (null = auto-reciprocal of upper)
-    cl_rollout_is_threshold_lower: 0.6
+#    cl_rollout_is_threshold_lower: 0.6
 
     # Aggregation level: "token" (biased), "sequence" (unbiased), "geometric" (experimental)
-    cl_rollout_is_level: token
+#    cl_rollout_is_level: token
 
     # Bounding mode: "truncate" (cap upper only), "mask" (zero outside bounds)
-    cl_rollout_is_mode: truncate
+#    cl_rollout_is_mode: truncate
 
     # Per-token veto threshold for catastrophic outliers
 #    cl_rollout_is_veto_threshold: 1e-4
-    cl_rollout_is_veto_threshold: null
+#    cl_rollout_is_veto_threshold: null
 
     # Whether to apply IS weights to policy loss
     # true = apply weights to loss, false = compute metrics only (no weight application)

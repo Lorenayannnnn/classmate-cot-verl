@@ -20,7 +20,7 @@ import ray
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from verl import DataProto
-from verl.utils.my_utils import parse_out_main_cot_output
+from verl.utils.reward_score.cot_monitor.monitor import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.olmo_verifiers import CodeVerifier, CodeVerifierConfig
 from verl.workers.reward_manager import register
@@ -172,7 +172,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             # Extract things after <think>...</think> as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, _, _, _ = parse_out_main_cot_output(
+                main_cot, main_output, _, _ = parse_out_main_cot_output(
                     response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
                 )
             else:

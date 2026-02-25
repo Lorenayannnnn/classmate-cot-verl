@@ -22,10 +22,10 @@ from tinker_cookbook import renderers
 
 from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
-from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
-from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker
+from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker, \
+    parse_out_main_cot_output
 from verl.utils.reward_score.olmo_verifiers import CodeVerifier, CodeVerifierConfig
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
@@ -162,7 +162,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
             # Extract things after <think>...</think> as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, _, _, _ = parse_out_main_cot_output(
+                main_cot, main_output, _, _ = parse_out_main_cot_output(
                     response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
                 )
             else:
@@ -468,6 +468,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             #     result["consistency_reward_tensor"] = consistency_reward_tensor
             return result
         else:
-            return main_reward_tensor, classmate_reward_tensor, None  # consistency_reward_tensor
+            # return main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor  # consistency_reward_tensor
+            return main_reward_tensor, classmate_reward_tensor
 
 

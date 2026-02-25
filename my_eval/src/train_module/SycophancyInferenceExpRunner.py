@@ -127,7 +127,7 @@ class SycophancyInferenceExpRunner:
                 output_token_ids = outputs[batch_entry_idx].outputs[0].token_ids
 
                 # Parse out cot in between <think> and </think>
-                truncated_main_cot, _, final_output, _, _, _ = process_main_cot_helper(
+                truncated_main_cot, _, final_output, _ = process_main_cot_helper(
                     tokenizer=self.tokenizer,
                     enable_thinking=self.enable_thinking,
                     data_source=None,

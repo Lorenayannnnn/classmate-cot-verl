@@ -20,10 +20,10 @@ import torch
 
 from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
-from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
-from verl.utils.reward_score.cot_monitor.monitor import send_prompt_to_tinker, create_llm_judge
+from verl.utils.reward_score.cot_monitor.monitor import send_prompt_to_tinker, create_llm_judge, \
+    parse_out_main_cot_output
 from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
@@ -147,7 +147,7 @@ class NaiveRewardManager(AbstractRewardManager):
 
             # Extract things after <think>...</think> as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, _, _, _ = parse_out_main_cot_output(
+                main_cot, main_output, _, _ = parse_out_main_cot_output(
                     response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
                 )
             else:

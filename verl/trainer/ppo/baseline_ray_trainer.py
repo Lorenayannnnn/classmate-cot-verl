@@ -60,7 +60,6 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, shou
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
-from verl.utils.my_utils import parse_out_main_cot_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.torch_functional import masked_mean
@@ -677,7 +676,7 @@ class RayPPOTrainer:
                 all_main_cots, all_raw_questions, all_hint_strs = [], [], []
                 monitor_prompts = []
                 for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                    truncated_main_cot, _, _, _, _, _ = process_main_cot_helper(
+                    truncated_main_cot, _, _, _ = process_main_cot_helper(
                         self.tokenizer,
                         self.enable_thinking,
                         item.non_tensor_batch["data_source"],

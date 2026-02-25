@@ -305,7 +305,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     #     )
 
     print_if_exists("rollout_is_weights", "rollout_is_weights")
-    print_if_exists("classmate_rollout_is_weights", "classmate_rollout_is_weights")
+    # print_if_exists("classmate_rollout_is_weights", "classmate_rollout_is_weights")
 
     # (Deprecated) Modify for leetcode: For code + test case generation
     # print_if_exists("base_test_case_format_score", "main_model_test_case_format_score")

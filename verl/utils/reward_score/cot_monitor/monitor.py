@@ -1,8 +1,6 @@
-import json
-import re
-import time
+
 from concurrent.futures import Future
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from openai import (
     APIError,
@@ -14,14 +12,13 @@ from openai import (
     PermissionDeniedError,
     RateLimitError,
 )
-
+import torch
 import tinker
 from keys import TINKER_API_KEY, INPUT_MONITOR_MODEL_NAME
 from tinker_cookbook import model_info, renderers
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
 from verl.utils.reward_score.cot_monitor.BaseVerifier import get_monitor_verifier
-from verl.utils.my_utils import parse_out_main_cot_output
 
 USE_OPENAI = False
 USE_TINKER = True
@@ -86,6 +83,130 @@ def send_prompt_to_tinker(
     )
 
 
+def monitor_cot_wrapper_w_tinker(
+    monitor_config: Dict[str, Any],
+    monitor_prompts: List[str],
+    verifier=None,
+    temperature: float = 0.0,
+):
+    """
+    Handle batch-wise requests to tinker
+    """
+    if USE_TINKER:
+        if verifier is None:
+            verifier = get_monitor_verifier()
+
+        tinker_futures = []
+
+        for monitor_prompt in monitor_prompts:
+            if monitor_prompt is None:
+                tinker_futures.append(None)
+            else:
+                tinker_futures.append(send_prompt_to_tinker(monitor_config, monitor_prompt, temperature))
+
+        # Execute monitor_cot calls in parallel
+        all_monitor_scores = []
+        all_monitor_explanations = []
+
+        for sample_future in tinker_futures:
+            if sample_future is None:
+                all_monitor_scores.append(0)
+                all_monitor_explanations.append("No monitor prompt provided.")
+                continue
+            sample_result = sample_future.result()
+            monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
+            all_monitor_scores.append(monitor_score)
+            all_monitor_explanations.append(monitor_explanation)
+
+        return all_monitor_scores, all_monitor_explanations
+    else:
+        raise NotImplementedError("monitor_cot_wrapper_new is only implemented for Tinker judge. Set USE_TINKER=True and USE_OPENAI=False.")
+
+
+def parse_out_main_cot_output(
+    main_pred,
+    main_pred_token_ids,
+    tokenizer,
+    think_open_id,
+    think_close_id,
+):
+    """Parse CoT and final output from a model response using token-level boundaries.
+
+    Locates <think> and </think> directly in ``main_pred_token_ids`` so that
+    the returned ``cot_start`` / ``cot_end`` indices are correctly aligned with
+    ``data.batch["responses"]``.  ``main_cot`` is decoded from those exact token
+    positions (no re-encoding round-trip).
+
+    Note: only called when enable_thinking=True.
+
+    Parameters
+    ----------
+    main_pred            : str   – decoded response string (used as fallback text
+                                   for main_cot when </think> is absent)
+    main_pred_token_ids  : Tensor or list – full response token IDs
+    tokenizer            : tokenizer instance
+    think_open_id        : int – token ID of <think>
+    think_close_id       : int – token ID of </think>
+
+    Returns
+    -------
+    main_cot         : str   – CoT text
+    final_output     : str | None – text after </think>, or None if not found
+    # start_with_think : bool
+    # end_with_think   : bool
+    cot_start        : int   – index of first CoT token in the response tensor
+    cot_end          : int | None – exclusive end index (== index of </think>),
+                                    or None when </think> was not found;
+                                    caller should clamp with the valid response length
+    """
+    if not isinstance(main_pred_token_ids, torch.Tensor):
+        main_pred_token_ids = torch.tensor(main_pred_token_ids)
+
+    open_positions  = (main_pred_token_ids == think_open_id).nonzero(as_tuple=True)[0]
+    close_positions = (main_pred_token_ids == think_close_id).nonzero(as_tuple=True)[0]
+
+    if len(open_positions) > 0:
+        first_open = open_positions[0].item()
+        # TODO haha include <think> in CoT?
+        cot_start = first_open + 1  # CoT begins right after <think>
+        # cot_start = first_open  # CoT begins AT <think>
+        start_with_think = True
+
+        # First </think> that appears after the opening tag
+        close_after_open = close_positions[close_positions > first_open]
+        if len(close_after_open) > 0:
+            # TODO haha include <think> in CoT?
+            cot_end = close_after_open[0].item()  # CoT ends right before </think>
+            # cot_end = close_after_open[0].item() + 1    # CoT ends right AT </think>
+            end_with_think = True
+            final_output = tokenizer.decode(
+                main_pred_token_ids[cot_end + 1:].tolist(), skip_special_tokens=True
+            )
+            main_cot = tokenizer.decode(
+                main_pred_token_ids[cot_start:cot_end].tolist(), skip_special_tokens=True
+            )
+        else:
+            # No </think> found after <think>.  cot_end=None signals to the caller
+            # to clamp using the valid response length from response_mask.
+            # main_cot falls back to text splitting because we cannot determine the
+            # valid end boundary (vs. padding) from token IDs alone here.
+            cot_end = None
+            end_with_think = False
+            final_output = None
+            main_cot = main_pred.split("<think>", 1)[1] if "<think>" in main_pred else main_pred
+    else:
+        cot_start = 0
+        start_with_think = False
+        cot_end = None
+        end_with_think = False
+        final_output = None
+        main_cot = main_pred
+
+    # return main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end
+    return main_cot, final_output, cot_start, cot_end
+
+
+
 def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_response, main_pred_token_ids, main_response_mask, keep_ratio):
     """
     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
@@ -94,13 +215,14 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     if data_source == "code_contests_modify_code":
         raise NotImplementedError("code_contests_modify_code truncation not supported now.")
 
-    start_with_think = False
+    # start_with_think = False
 
     if enable_thinking:
         think_open_id  = tokenizer.convert_tokens_to_ids("<think>")
         think_close_id = tokenizer.convert_tokens_to_ids("</think>")
 
-        main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end = parse_out_main_cot_output(
+        # main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end = parse_out_main_cot_output(
+        main_cot, final_output, cot_start, cot_end = parse_out_main_cot_output(
             main_response, main_pred_token_ids, tokenizer, think_open_id, think_close_id
         )
 
@@ -140,7 +262,7 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     else:
         main_cot = main_response
         final_output = main_response
-        end_with_think = False
+        # end_with_think = False
 
     # with open("debug_main_cot.txt", "w") as f:
     #     f.write(f"main_cot: {main_cot}\n")
@@ -155,7 +277,7 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
         # count num of new lines at the front and end
         # num_newlines_front = len(main_cot) - len(main_cot.lstrip("\n"))
         # num_newlines_end = len(main_cot) - len(main_cot.rstrip("\n"))
-        return main_cot, main_pred_token_ids, final_output, main_response_mask if main_response_mask is not None else None, end_with_think, start_with_think
+        return main_cot, main_pred_token_ids, final_output, main_response_mask if main_response_mask is not None else None
 
     raise NotImplementedError("Only keep_ratio=1 is supported now. Implementing other keep_ratio requires careful handling of response mask and start/end with think cases.")
 
@@ -185,45 +307,6 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     #     classmate_response_mask = None
     #
     # return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
-
-def monitor_cot_wrapper_w_tinker(
-    monitor_config: Dict[str, Any],
-    monitor_prompts: List[str],
-    verifier=None,
-    temperature: float = 0.0,
-):
-    """
-    Handle batch-wise requests to tinker
-    """
-    if USE_TINKER:
-        if verifier is None:
-            verifier = get_monitor_verifier()
-
-        tinker_futures = []
-
-        for monitor_prompt in monitor_prompts:
-            if monitor_prompt is None:
-                tinker_futures.append(None)
-            else:
-                tinker_futures.append(send_prompt_to_tinker(monitor_config, monitor_prompt, temperature))
-
-        # Execute monitor_cot calls in parallel
-        all_monitor_scores = []
-        all_monitor_explanations = []
-
-        for sample_future in tinker_futures:
-            if sample_future is None:
-                all_monitor_scores.append(0)
-                all_monitor_explanations.append("No monitor prompt provided.")
-                continue
-            sample_result = sample_future.result()
-            monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
-            all_monitor_scores.append(monitor_score)
-            all_monitor_explanations.append(monitor_explanation)
-
-        return all_monitor_scores, all_monitor_explanations
-    else:
-        raise NotImplementedError("monitor_cot_wrapper_new is only implemented for Tinker judge. Set USE_TINKER=True and USE_OPENAI=False.")
 
 # def send_one_api_call(
 #     openai_client,

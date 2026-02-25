@@ -101,13 +101,9 @@ class ActorConfig(BaseConfig):
     clip_ratio: float = 0.2
     clip_ratio_low: float = 0.2
     clip_ratio_high: float = 0.2
-    clip_ratio_c: float = 3.0
-    classmate_clip_ratio: Optional[float] = None
-    classmate_clip_ratio_low: Optional[float] = None
-    classmate_clip_ratio_high: Optional[float] = None
-    classmate_clip_ratio_c: Optional[float] = None
     freeze_vision_tower: bool = False
     policy_loss: PolicyLossConfig = field(default_factory=PolicyLossConfig)
+    clip_ratio_c: float = 3.0
     loss_agg_mode: str = "token-mean"
     entropy_coeff: float = 0
     use_kl_loss: bool = False

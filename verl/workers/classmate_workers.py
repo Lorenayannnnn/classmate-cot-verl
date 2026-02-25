@@ -148,7 +148,7 @@ class ClassmateWorker(Worker):
                 top_k=-1,
                 top_p=1.0,
                 max_tokens=self.generation_config["max_tokens"],
-                prompt_logprobs=0  # Request prompt log probabilities
+                # prompt_logprobs=0  # Request prompt log probabilities
             )
         else:
             sampling_params = SamplingParams(**self.generation_config)
@@ -156,21 +156,22 @@ class ClassmateWorker(Worker):
 
         completions = []
         completion_token_len = []
-        prompt_logprobs = []
+        # prompt_logprobs = []
         for i in range(len(batch_input_prompt_ids)):
             if i in is_none_idx:
                 completions.append(None)
                 completion_token_len.append(0)
-                prompt_logprobs.append(None)
+                # prompt_logprobs.append(None)
             else:
                 output = outputs.pop(0)
                 completions.append(output.outputs[0].text)
                 completion_token_len.append(len(output.outputs[0].token_ids))
 
-                token_prob = [list(tok.values())[0].logprob if tok is not None else float("-inf") for tok in output.prompt_logprobs]
-                prompt_logprobs.append(token_prob)
+                # token_prob = [list(tok.values())[0].logprob if tok is not None else float("-inf") for tok in output.prompt_logprobs]
+                # prompt_logprobs.append(token_prob)
 
-        return completions, completion_token_len, prompt_logprobs
+        # return completions, completion_token_len, prompt_logprobs
+        return completions, completion_token_len
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
@@ -285,9 +286,9 @@ class ClassmateWorker(Worker):
         classmate_outputs = []
         classmate_output_lens = []
         classmate_prompts = []
-        classmate_prompt_logprobs = []
-        classmate_input_lens = []
-        classmate_input_and_main_cot_lens = []
+        # classmate_prompt_logprobs = []
+        # classmate_input_lens = []
+        # classmate_input_and_main_cot_lens = []
 
         # debug_user_only_token_ids = []
         # debug_user_only_prompt_strs = []
@@ -303,9 +304,9 @@ class ClassmateWorker(Worker):
             batch_prompts = data.non_tensor_batch["raw_prompts"]
             batch_actor_responses = data.non_tensor_batch["main_model_responses"]
             batch_actor_responses_token_ids = data.non_tensor_batch["main_model_response_token_ids"]
-            batch_all_end_with_thinks = data.non_tensor_batch["end_with_thinks"]
-            batch_all_start_with_thinks = data.non_tensor_batch["start_with_thinks"]
-            batch_all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
+            # batch_all_end_with_thinks = data.non_tensor_batch["end_with_thinks"]
+            # batch_all_start_with_thinks = data.non_tensor_batch["start_with_thinks"]
+            # batch_all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
 
             # Convert numpy array to list if needed
             # if isinstance(prompt_plus_actor_responses, np.ndarray):
@@ -315,13 +316,13 @@ class ClassmateWorker(Worker):
             if isinstance(batch_actor_responses, np.ndarray):
                 batch_actor_responses = batch_actor_responses.tolist()
             # Keep batch_actor_responses_token_ids as np.ndarray to avoid re-casting later
-            if isinstance(batch_all_end_with_thinks, np.ndarray):
-                batch_all_end_with_thinks = batch_all_end_with_thinks.tolist()
-            if isinstance(batch_all_start_with_thinks, np.ndarray):
-                batch_all_start_with_thinks = batch_all_start_with_thinks.tolist()
+            # if isinstance(batch_all_end_with_thinks, np.ndarray):
+            #     batch_all_end_with_thinks = batch_all_end_with_thinks.tolist()
+            # if isinstance(batch_all_start_with_thinks, np.ndarray):
+            #     batch_all_start_with_thinks = batch_all_start_with_thinks.tolist()
             # Keep classmate_input_mask as np.ndarray to avoid re-casting later
-            if isinstance(batch_all_other_prompts, np.ndarray):
-                batch_all_other_prompts = batch_all_other_prompts.tolist()
+            # if isinstance(batch_all_other_prompts, np.ndarray):
+            #     batch_all_other_prompts = batch_all_other_prompts.tolist()
 
             original_length = len(batch_prompts)
             valid_indices = [
@@ -380,8 +381,8 @@ class ClassmateWorker(Worker):
                         # Empty response; return None
                         mini_batch_input_prompts.append(None)
                         mini_batch_input_prompt_ids.append(None)
-                        classmate_input_lens.append(0)
-                        classmate_input_and_main_cot_lens.append(0)
+                        # classmate_input_lens.append(0)
+                        # classmate_input_and_main_cot_lens.append(0)
 
                         # debug_cls_input_token_ids.append(None)
                         # debug_cls_input_prompt_strs.append(None)
@@ -414,16 +415,16 @@ class ClassmateWorker(Worker):
                             print(f"⚠️ Warning: Input for classmate is too long (have length {len(token_ids)})")
                             mini_batch_input_prompts.append(None)
                             mini_batch_input_prompt_ids.append(None)
-                            classmate_input_lens.append(0)
-                            classmate_input_and_main_cot_lens.append(0)
+                            # classmate_input_lens.append(0)
+                            # classmate_input_and_main_cot_lens.append(0)
                             continue
                         else:
                             mini_batch_input_prompts.append(self.tokenizer.decode(token_ids, skip_special_tokens=False))
                             mini_batch_input_prompt_ids.append(TokensPrompt(prompt_token_ids=token_ids))
                             cls_input_len = len(prefix_token_ids)
                             tmp_input_and_main_cot_len = len(prefix_token_ids) + len(tmp_response_token_ids)
-                            classmate_input_lens.append(cls_input_len)
-                            classmate_input_and_main_cot_lens.append(tmp_input_and_main_cot_len)
+                            # classmate_input_lens.append(cls_input_len)
+                            # classmate_input_and_main_cot_lens.append(tmp_input_and_main_cot_len)
 
                     # with open("classmate_worker_debug.txt", "a") as f:
                     #     f.write(f"🐛Original prompt: {tmp_prompt}\n")
@@ -454,14 +455,15 @@ class ClassmateWorker(Worker):
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts, batch_max_token_len)
                 # batch_completions = self._generate_via_remote_api(batch_input_prompts)
 
-                batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(
+                # batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(
+                batch_completions, batch_completion_lens = self._generate_via_vllm(
                     mini_batch_input_prompt_ids, is_eval=is_eval
                 )
                 classmate_prompts.extend(mini_batch_input_prompts)
                 # Extend back to with padding
                 classmate_outputs.extend(batch_completions)
                 classmate_output_lens.extend(batch_completion_lens)
-                classmate_prompt_logprobs.extend(batch_prompt_logprobs)
+                # classmate_prompt_logprobs.extend(batch_prompt_logprobs)
 
                 # print(f"🐛🐛🐛 Classmate completions: {classmate_outputs}")
         except Exception as e:
@@ -474,63 +476,63 @@ class ClassmateWorker(Worker):
             log_gpu_memory_usage(f"After offloading classmate model {self.model_index} post-generation", logger=logger)
 
         # Pad classmate_prompt_logprobs to self.main_model_max_tokens with None for inputs that were too long or None
-        padded_classmate_prompt_logprobs = []
-        padded_classmate_prompt_logprobs_mask = []
-        for idx, (logprobs, cls_input_len, cls_input_and_main_cot_len, cls_input_mask, resp_token_ids) in enumerate(zip(classmate_prompt_logprobs, classmate_input_lens, classmate_input_and_main_cot_lens, classmate_input_mask, batch_actor_responses_token_ids)):
-            if logprobs is None:        # happens when classmate prompt is None, which happens when e.g. actor response is empty or input is too long
-                padded_classmate_prompt_logprobs.append([float("-inf")] * self.main_model_max_tokens)
-                padded_classmate_prompt_logprobs_mask.append([0] * self.main_model_max_tokens)
-            else:
-                logprobs = logprobs[cls_input_len:cls_input_and_main_cot_len]
-                if cls_input_mask is None:
-                    tmp_padded_classmate_prompt_logprobs = logprobs
-                    tmp_padded_classmate_prompt_logprobs_mask = [1] * len(logprobs)
-                else:
-                    # try:
-                    #     assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}"
-                    # except Exception as e:
-                        # with open("debug.txt", "a") as f:
-                        #     f.write(f"❌ Assertion error when slicing logprobs for classmate prompt: {e}\n")
-                        #     f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}\n")
-                        #     f.write(f"resp_token_ids={resp_token_ids}\n")
-                        #     f.write(f"debug_user_only_token_ids={debug_user_only_token_ids[idx]}\n")
-                        #     f.write(f"debug_user_only_prompt_strs={debug_user_only_prompt_strs[idx]}\n")
-                        #     f.write(f"debug_cls_input_token_ids={debug_cls_input_token_ids[idx]}\n")
-                        #     f.write(f"debug_cls_input_prompt_strs={debug_cls_input_prompt_strs[idx]}\n")
-                        #     f.write("-" * 50 + "\n")
-                        # raise
-
-                    # Pre pad for tokens that got truncated in process_main_cot_helper, and then logprob of main CoT
-                    cls_input_mask = np.array(cls_input_mask)
-                    first_one_candidates = np.flatnonzero(cls_input_mask == 1)
-                    first_one_idx = int(first_one_candidates[0]) if first_one_candidates.size > 0 else self.main_model_max_tokens
-
-                    tmp_padded_classmate_prompt_logprobs = [float("-inf")] * first_one_idx + logprobs
-                    tmp_padded_classmate_prompt_logprobs_mask = [0] * first_one_idx + [1] * len(logprobs)
-
-                # assert len(tmp_padded_classmate_prompt_logprobs) <= self.main_model_max_tokens, f"Length of padded logprobs should not exceed main_model_max_tokens; got {len(tmp_padded_classmate_prompt_logprobs)} vs {self.main_model_max_tokens}; first_one_idx={first_one_idx}, logprobs_len={len(logprobs)}"
-                # Pad the rest with -inf and 0 to main model max len
-                pad_len = self.main_model_max_tokens - len(tmp_padded_classmate_prompt_logprobs)
-                tmp_padded_classmate_prompt_logprobs += [float("-inf")] * pad_len
-                tmp_padded_classmate_prompt_logprobs_mask += [0] * pad_len
-
-                padded_classmate_prompt_logprobs.append(tmp_padded_classmate_prompt_logprobs)
-                padded_classmate_prompt_logprobs_mask.append(tmp_padded_classmate_prompt_logprobs_mask)
-                # padded_classmate_prompt_logprobs.append(logprobs + [float("-inf")] * max((self.main_model_max_tokens - len(logprobs), 0)))
-                # padded_classmate_prompt_logprobs_mask.append([1] * len(logprobs) + [0] * max((self.main_model_max_tokens - len(logprobs), 0)))
+        # padded_classmate_prompt_logprobs = []
+        # padded_classmate_prompt_logprobs_mask = []
+        # for idx, (logprobs, cls_input_len, cls_input_and_main_cot_len, cls_input_mask, resp_token_ids) in enumerate(zip(classmate_prompt_logprobs, classmate_input_lens, classmate_input_and_main_cot_lens, classmate_input_mask, batch_actor_responses_token_ids)):
+        #     if logprobs is None:        # happens when classmate prompt is None, which happens when e.g. actor response is empty or input is too long
+        #         padded_classmate_prompt_logprobs.append([float("-inf")] * self.main_model_max_tokens)
+        #         padded_classmate_prompt_logprobs_mask.append([0] * self.main_model_max_tokens)
+        #     else:
+        #         logprobs = logprobs[cls_input_len:cls_input_and_main_cot_len]
+        #         if cls_input_mask is None:
+        #             tmp_padded_classmate_prompt_logprobs = logprobs
+        #             tmp_padded_classmate_prompt_logprobs_mask = [1] * len(logprobs)
+        #         else:
+        #             # try:
+        #             #     assert len(logprobs) == int(np.sum(cls_input_mask)), f"Length of logprobs after slicing should match sum of cls_input_mask; got {len(logprobs)} vs {int(np.sum(cls_input_mask))}; cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}"
+        #             # except Exception as e:
+        #                 # with open("debug.txt", "a") as f:
+        #                 #     f.write(f"❌ Assertion error when slicing logprobs for classmate prompt: {e}\n")
+        #                 #     f.write(f"cls_input_len={cls_input_len}, cls_input_and_main_cot_len={cls_input_and_main_cot_len}, original_logprobs_len={len(logprobs)}, cls_input_mask={cls_input_mask}\n")
+        #                 #     f.write(f"resp_token_ids={resp_token_ids}\n")
+        #                 #     f.write(f"debug_user_only_token_ids={debug_user_only_token_ids[idx]}\n")
+        #                 #     f.write(f"debug_user_only_prompt_strs={debug_user_only_prompt_strs[idx]}\n")
+        #                 #     f.write(f"debug_cls_input_token_ids={debug_cls_input_token_ids[idx]}\n")
+        #                 #     f.write(f"debug_cls_input_prompt_strs={debug_cls_input_prompt_strs[idx]}\n")
+        #                 #     f.write("-" * 50 + "\n")
+        #                 # raise
+        #
+        #             # Pre pad for tokens that got truncated in process_main_cot_helper, and then logprob of main CoT
+        #             cls_input_mask = np.array(cls_input_mask)
+        #             first_one_candidates = np.flatnonzero(cls_input_mask == 1)
+        #             first_one_idx = int(first_one_candidates[0]) if first_one_candidates.size > 0 else self.main_model_max_tokens
+        #
+        #             tmp_padded_classmate_prompt_logprobs = [float("-inf")] * first_one_idx + logprobs
+        #             tmp_padded_classmate_prompt_logprobs_mask = [0] * first_one_idx + [1] * len(logprobs)
+        #
+        #         # assert len(tmp_padded_classmate_prompt_logprobs) <= self.main_model_max_tokens, f"Length of padded logprobs should not exceed main_model_max_tokens; got {len(tmp_padded_classmate_prompt_logprobs)} vs {self.main_model_max_tokens}; first_one_idx={first_one_idx}, logprobs_len={len(logprobs)}"
+        #         # Pad the rest with -inf and 0 to main model max len
+        #         pad_len = self.main_model_max_tokens - len(tmp_padded_classmate_prompt_logprobs)
+        #         tmp_padded_classmate_prompt_logprobs += [float("-inf")] * pad_len
+        #         tmp_padded_classmate_prompt_logprobs_mask += [0] * pad_len
+        #
+        #         padded_classmate_prompt_logprobs.append(tmp_padded_classmate_prompt_logprobs)
+        #         padded_classmate_prompt_logprobs_mask.append(tmp_padded_classmate_prompt_logprobs_mask)
+        #         # padded_classmate_prompt_logprobs.append(logprobs + [float("-inf")] * max((self.main_model_max_tokens - len(logprobs), 0)))
+        #         # padded_classmate_prompt_logprobs_mask.append([1] * len(logprobs) + [0] * max((self.main_model_max_tokens - len(logprobs), 0)))
 
         # TODO need to fix this to support num_return_sequences > 1
         classmate_outputs = [[output] for output in classmate_outputs]  # Wrap each output in a list
         classmate_output_lens = [[length] for length in classmate_output_lens]
-        padded_classmate_prompt_logprobs = [[logprobs] for logprobs in padded_classmate_prompt_logprobs]
-        padded_classmate_prompt_logprobs_mask = [[mask] for mask in padded_classmate_prompt_logprobs_mask]
+        # padded_classmate_prompt_logprobs = [[logprobs] for logprobs in padded_classmate_prompt_logprobs]
+        # padded_classmate_prompt_logprobs_mask = [[mask] for mask in padded_classmate_prompt_logprobs_mask]
 
         result_non_tensor_batch = {
             "classmate_prompts": np.array(classmate_prompts),    # Should have shape (bsz,)
             "classmate_outputs": np.array(classmate_outputs),      # Should have shape (bsz, num_return_sequences)
             "classmate_output_lens": np.array(classmate_output_lens),  # Should have shape (bsz, num_return_sequences)
-            "classmate_prompt_logprobs": np.array(padded_classmate_prompt_logprobs),  # Should have shape (bsz, num_return_sequences, input_seq_len)
-            "classmate_prompt_logprobs_mask": np.array(padded_classmate_prompt_logprobs_mask),  # Should have shape (bsz, num_return_sequences, input_seq_len)
+            # "classmate_prompt_logprobs": np.array(padded_classmate_prompt_logprobs),  # Should have shape (bsz, num_return_sequences, input_seq_len)
+            # "classmate_prompt_logprobs_mask": np.array(padded_classmate_prompt_logprobs_mask),  # Should have shape (bsz, num_return_sequences, input_seq_len)
         }
 
         # print(f"🐛 From classmateWorker {self.model_index} classmate_output", result_non_tensor_batch["classmate_outputs"])
