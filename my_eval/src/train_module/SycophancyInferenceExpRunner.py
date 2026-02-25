@@ -78,6 +78,8 @@ class SycophancyInferenceExpRunner:
         judge_score_key = f"{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_score"
         judge_expl_key = f"{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_explanation"
 
+        verifier = get_verifier(data_source=self.data_source)
+
         output_fn = os.path.join(self.output_dir, "preds.jsonl")
         dataset_size = len(self.data_loader)
         if os.path.exists(output_fn):
@@ -99,7 +101,7 @@ class SycophancyInferenceExpRunner:
                     judge_val = result_dict.get(judge_score_key)
                     assert judge_val is not None, "main_score is None given we are using llm judge; but getting llm judge score to be None"
                     all_main_model_rewards.append(float(judge_val))
-                all_monitor_scores.append(result_dict.get(monitor_score_key) or result_dict.get("monitor_score") or 0)
+                all_monitor_scores.append(result_dict.get(monitor_score_key) if result_dict.get(monitor_score_key) is not None else result_dict.get("monitor_score") if result_dict.get("monitor_score") is not None else verifier.invalid_score)
             result_f.close()
         else:
             ckpt_idx = 0
@@ -224,13 +226,12 @@ class SycophancyInferenceExpRunner:
             monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_model_rewards)
 
-            monitor_valid_mask = monitor_scores != 0
-            main_reward_valid_mask = main_model_reward != 0
+            monitor_valid_mask = monitor_scores != verifier.invalid_score
+            main_reward_valid_mask = main_model_reward != verifier.invalid_score
             valid_mask = monitor_valid_mask & main_reward_valid_mask
             monitor_scores = monitor_scores[valid_mask].astype(float)
             main_model_reward = main_model_reward[valid_mask].astype(float)
 
-            verifier = get_verifier(data_source=self.data_source)
             monitor_metrics = verifier.compute_metrics(
                 predictions=monitor_scores.tolist(),
                 ground_truths=main_model_reward.tolist(),

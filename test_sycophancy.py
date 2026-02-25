@@ -753,7 +753,7 @@ def recompute():
             for pred in preds:
                 # dict_keys(['main_query', 'question', 'main_full_output', 'truncated_main_CoT', 'main_output', 'main_extracted_solution', 'main_score', 'gt', 'monitor_score', 'monitor_explanation', 'llm_judge_score', 'llm_judge_explanation'])
                 if pred["main_output"] is None:
-                    pred["llm_judge_score"] = 0
+                    pred["llm_judge_score"] = verifier.invalid_score
 
                 # if pred["monitor_score"] == 0:
                 #     breakpoint()
@@ -767,8 +767,8 @@ def recompute():
             monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_llm_judge_scores)
 
-            monitor_valid_mask = monitor_scores != 0
-            main_reward_valid_mask = main_model_reward != 0
+            monitor_valid_mask = monitor_scores != verifier.invalid_score
+            main_reward_valid_mask = main_model_reward != verifier.invalid_score
             valid_mask = monitor_valid_mask & main_reward_valid_mask
             monitor_scores = monitor_scores[valid_mask].astype(float)
             main_model_reward = main_model_reward[valid_mask].astype(float)

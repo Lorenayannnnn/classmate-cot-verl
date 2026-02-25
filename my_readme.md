@@ -200,11 +200,18 @@
     - When you do not have gt and need llm judge:
       - Judge prompt and output parsings are handled by specific verifier you implemented (that inherits the base class)
     - When you have gt: ```compute_score``` is from [BaseVerifier.py](verl/utils/reward_score/cot_monitor/BaseVerifier.py)
+    - Specific verifiers:
+      - [SycophancyVerifier.py](verl/utils/reward_score/cot_monitor/SycophancyVerifier.py)
+      - [GSM8KVerifier.py](verl/utils/reward_score/cot_monitor/GSM8KVerifier.py)
 - What to do when adding new tasks and verifiers:
   - Data preprocessing script:
     - Sycophancy: [h4_helpful_instructions.py](verl/data_preprocessing/h4_helpful_instructions.py)
   - Implement BaseVerifier subclass
   - Update ```get_verifier```
+- Using Dr.GRPO:
+  - `actor_rollout_ref.actor.loss_agg_mode`: "seq-mean-token-sum-norm", which turns off seq-dim averaging
+  - `actor_rollout_ref.actor.use_kl_loss`: set to False
+  - `algorithm.norm_adv_by_std_in_grpo`: False, which turns off standard deviation norm
 
 # Hosting Sandbox for coding tasks
 - Dolci code/code_stdio:

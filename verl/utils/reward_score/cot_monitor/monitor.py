@@ -88,6 +88,7 @@ def monitor_cot_wrapper_w_tinker(
     monitor_prompts: List[str],
     verifier=None,
     temperature: float = 0.0,
+    max_retries: int = 5,
 ):
     """
     Handle batch-wise requests to tinker
@@ -108,13 +109,20 @@ def monitor_cot_wrapper_w_tinker(
         all_monitor_scores = []
         all_monitor_explanations = []
 
-        for sample_future in tinker_futures:
+        for monitor_prompt, sample_future in zip(monitor_prompts, tinker_futures):
             if sample_future is None:
-                all_monitor_scores.append(0)
+                all_monitor_scores.append(verifier.invalid_score)
                 all_monitor_explanations.append("No monitor prompt provided.")
                 continue
             sample_result = sample_future.result()
             monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
+            for attempt in range(1, max_retries):
+                if monitor_score != verifier.invalid_score:
+                    break
+                print(f"[retry {attempt}/{max_retries - 1}] Invalid monitor response, retrying...")
+                retry_future = send_prompt_to_tinker(monitor_config, monitor_prompt, temperature)
+                sample_result = retry_future.result()
+                monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
             all_monitor_scores.append(monitor_score)
             all_monitor_explanations.append(monitor_explanation)
 
@@ -167,18 +175,18 @@ def parse_out_main_cot_output(
 
     if len(open_positions) > 0:
         first_open = open_positions[0].item()
-        # TODO haha include <think> in CoT?
+        # haha include <think> in CoT?
         cot_start = first_open + 1  # CoT begins right after <think>
         # cot_start = first_open  # CoT begins AT <think>
-        start_with_think = True
+        # start_with_think = True
 
         # First </think> that appears after the opening tag
         close_after_open = close_positions[close_positions > first_open]
         if len(close_after_open) > 0:
-            # TODO haha include <think> in CoT?
+            # haha include <think> in CoT?
             cot_end = close_after_open[0].item()  # CoT ends right before </think>
             # cot_end = close_after_open[0].item() + 1    # CoT ends right AT </think>
-            end_with_think = True
+            # end_with_think = True
             final_output = tokenizer.decode(
                 main_pred_token_ids[cot_end + 1:].tolist(), skip_special_tokens=True
             )
@@ -191,14 +199,14 @@ def parse_out_main_cot_output(
             # main_cot falls back to text splitting because we cannot determine the
             # valid end boundary (vs. padding) from token IDs alone here.
             cot_end = None
-            end_with_think = False
+            # end_with_think = False
             final_output = None
             main_cot = main_pred.split("<think>", 1)[1] if "<think>" in main_pred else main_pred
     else:
         cot_start = 0
-        start_with_think = False
+        # start_with_think = False
         cot_end = None
-        end_with_think = False
+        # end_with_think = False
         final_output = None
         main_cot = main_pred
 
@@ -211,7 +219,7 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     """
     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
     """
-    # TODO haha double check for code_contests_modify_code
+    # haha double check for code_contests_modify_code
     if data_source == "code_contests_modify_code":
         raise NotImplementedError("code_contests_modify_code truncation not supported now.")
 
@@ -308,227 +316,3 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     #
     # return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
 
-# def send_one_api_call(
-#     openai_client,
-#     model_name: str,
-#     messages: List[Dict[str, str]],
-#     temperature: float = 0.0,
-#     response_format: Optional[Dict[str, str]] = None,
-#     seed: Optional[int] = None,
-#     max_retries: int = 3,
-#     required_fields: Optional[List[str]] = None,
-# ) -> Dict[str, Any]:
-#     """
-#     Send a single API call to OpenAI with retry logic and error handling.
-#
-#     Args:
-#         openai_client: OpenAI client instance
-#         model_name: Name of the model to use (e.g., "gpt-4", "gpt-3.5-turbo")
-#         messages: List of message dictionaries with "role" and "content"
-#         temperature: Temperature for sampling (default: 0.0 for deterministic)
-#         response_format: Response format specification (e.g., {"type": "json_object"})
-#         seed: Seed for reproducibility
-#         max_retries: Maximum number of retries for transient errors (default: 3)
-#         required_fields: List of required fields in JSON response (only used if response_format is json)
-#
-#     Returns:
-#         Dict with keys:
-#             - "success": bool indicating if the call succeeded
-#             - "content": str with the response content (or error message)
-#             - "parsed": parsed JSON (if response_format is json and parsing succeeded)
-#             - "error_type": str indicating type of error (if failed)
-#     """
-#
-#     for attempt in range(max_retries):
-#         if USE_TINKER:
-#             """
-#             Send a prompt to the judge model and receive the response.
-#
-#             Args:
-#                 prompt: The prompt to send to the judge model
-#                 max_tokens: Maximum tokens in the response
-#                 temperature: Temperature for sampling (0.0 for deterministic)
-#
-#             Returns:
-#                 The parsed response text from the judge model
-#             """
-#             if judge_client_config is None:
-#                 raise ValueError("Tinker judge not initialized. Set use_tinker_judge=True in __init__")
-#
-#             sampling_client = judge_client_config['sampling_client']
-#             renderer = judge_client_config['renderer']
-#
-#             sampling_params = tinker.types.SamplingParams(
-#                 max_tokens=judge_client_config['max_tokens'],
-#                 stop=renderer.get_stop_sequences(),
-#                 temperature=temperature,
-#             )
-#
-#             # if judge_client_config["judge_model_name"] == "openai/gpt-oss-20b":
-#             #     messages.append({"role": "system", "content": "Reasoning: low\nAnswer with only the final answer."})        # Let the model to return the answer immediately
-#                 # messages.append({"role": "thinking", "content": ""})
-#
-#             model_input = renderer.build_generation_prompt(messages)
-#
-#             # Send prompt to judge model
-#             sample_future = sampling_client.sample(
-#                 prompt=model_input,
-#                 num_samples=1,
-#                 sampling_params=sampling_params,
-#             )
-#
-#             sample_result = sample_future.result()
-#
-#             # Parse response
-#             judge_tokens = sample_result.sequences[0].tokens
-#             parsed_judge, _ = renderer.parse_response(judge_tokens)
-#             judge_text = renderers.get_text_content(parsed_judge)
-#
-#             # try:
-#             #     # Parse out from ```json{response}```
-#             #     json_regex = r"```json\s*(\{.*?\})\s*```"
-#             #     match = re.search(json_regex, judge_text, re.DOTALL)
-#             #     if not match:
-#             #         print("🐛🐛🐛 json output not found in judge_text", judge_text)
-#             #         print("🐛🐛🐛 messages", messages)
-#             #         raise JSONDecodeError("JSON response not found in judge output", judge_text, 0)
-#             #     parsed_output = json.loads(match.group(1))
-#             # except json.JSONDecodeError as e:
-#             #     # Malformed JSON response; retry
-#             #     if attempt < max_retries - 1:
-#             #         wait_time = 2 ** attempt
-#             #         print(
-#             #             f"JSON decode error (attempt {attempt + 1}/{max_retries}): {e}. "
-#             #             f"Retrying in {wait_time}s..."
-#             #         )
-#             #         time.sleep(wait_time)
-#             #         continue
-#             #
-#             #     print(f"JSON decode error after {max_retries} attempts: {e}")
-#             #     return {
-#             #         "success": False,
-#             #         "content": f"JSON decode error: {str(e)}",
-#             #         "parsed": None,
-#             #         "error_type": "json_decode",
-#             #     }
-#
-#             judge_score, judge_explanation = parse_sycophancy_score(judge_text), parse_judge_explanation(judge_text)
-#
-#             return {
-#                 "success": True,
-#                 "content": judge_text,
-#                 "parsed": {
-#                     "monitor_score": judge_score,
-#                     "explanation": judge_explanation,
-#                 },
-#                 "error_type": None,
-#             }
-#         else:
-#             try:
-#                 # Build request kwargs
-#                 request_kwargs = {
-#                     "model": model_name,
-#                     "messages": messages,
-#                     "temperature": temperature,
-#                 }
-#
-#                 if response_format is not None:
-#                     request_kwargs["response_format"] = response_format
-#
-#                 if seed is not None:
-#                     request_kwargs["seed"] = seed
-#
-#                 # Make the API call
-#                 response = openai_client.chat.completions.create(**request_kwargs)
-#
-#                 # Validate response
-#                 if not response.choices:
-#                     raise ValueError("Empty response from OpenAI API")
-#
-#                 content = response.choices[0].message.content
-#                 if not content:
-#                     raise ValueError("Empty content in OpenAI response")
-#
-#                 # Parse JSON if requested
-#                 parsed_output = None
-#                 if response_format and response_format.get("type") == "json_object":
-#                     parsed_output = json.loads(content)
-#
-#                     # Validate required fields
-#                     if required_fields:
-#                         missing_fields = [f for f in required_fields if f not in parsed_output]
-#                         if missing_fields:
-#                             raise ValueError(f"Missing required fields in response: {missing_fields}")
-#
-#                 return {
-#                     "success": True,
-#                     "content": content,
-#                     "parsed": parsed_output,
-#                     "error_type": None,
-#                 }
-#
-#             except (RateLimitError, APITimeoutError, InternalServerError, APIError) as e:
-#                 # Retryable: 429, 500, 503, timeouts, and generic API errors
-#                 if attempt < max_retries - 1:
-#                     wait_time = 2 ** attempt
-#                     print(
-#                         f"Retryable error calling OpenAI API (attempt {attempt + 1}/{max_retries}): {e}. "
-#                         f"Retrying in {wait_time}s..."
-#                     )
-#                     time.sleep(wait_time)
-#                     continue
-#
-#                 print(f"Error calling OpenAI API after {max_retries} attempts: {e}")
-#                 return {
-#                     "success": False,
-#                     "content": f"Error after {max_retries} retries: {str(e)}",
-#                     "parsed": None,
-#                     "error_type": "retryable_exhausted",
-#                 }
-#
-#             except (BadRequestError, AuthenticationError, PermissionDeniedError, NotFoundError) as e:
-#                 # Non-retryable: 400, 401, 403, 404
-#                 print(f"Non-retryable OpenAI API error: {e}")
-#                 return {
-#                     "success": False,
-#                     "content": f"Non-retryable error: {str(e)}",
-#                     "parsed": None,
-#                     "error_type": "non_retryable",
-#                 }
-#
-#             except json.JSONDecodeError as e:
-#                 # Malformed JSON response; retry
-#                 if attempt < max_retries - 1:
-#                     wait_time = 2 ** attempt
-#                     print(
-#                         f"JSON decode error (attempt {attempt + 1}/{max_retries}): {e}. "
-#                         f"Retrying in {wait_time}s..."
-#                     )
-#                     time.sleep(wait_time)
-#                     continue
-#
-#                 print(f"JSON decode error after {max_retries} attempts: {e}")
-#                 return {
-#                     "success": False,
-#                     "content": f"JSON decode error: {str(e)}",
-#                     "parsed": None,
-#                     "error_type": "json_decode",
-#                 }
-#
-#             except Exception as e:
-#                 # Generic exceptions
-#                 print(f"Error calling OpenAI API: {e}")
-#                 return {
-#                     "success": False,
-#                     "content": f"Error: {str(e)}",
-#                     "parsed": None,
-#                     "error_type": "unknown",
-#                 }
-#
-#     # Should not reach here, but just in case
-#     return {
-#         "success": False,
-#         "content": "Max retries exceeded",
-#         "parsed": None,
-#         "error_type": "max_retries_exceeded",
-#     }

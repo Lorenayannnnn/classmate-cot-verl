@@ -280,14 +280,13 @@ class NaiveRewardManager(AbstractRewardManager):
                     for key, value in score.items():
                         print(f"🐛[{key}]", value)
 
-                if "monitor_use_hint" in ctx["data_item"].non_tensor_batch:
-                    print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
-                    print("🐛[monitor_use_hint]", ctx["data_item"].non_tensor_batch["monitor_use_hint"])
-                    print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
-                    print("🐛[main_monitor_consistent]", (score == 1) == (ctx["data_item"].non_tensor_batch["monitor_use_hint"] == True))
-
                 if "monitor_score" in ctx["data_item"].non_tensor_batch:
-                    print("🐛[truncated_main_cot]", ctx["data_item"].non_tensor_batch["truncated_main_cot"])
+                    _verifier = get_verifier(data_source=ctx["data_source"])
+                    _monitor_prompt = _verifier.create_monitor_message({
+                        "raw_question_for_monitor": ctx["data_item"].non_tensor_batch["reward_model"]["raw_question_for_monitor"],
+                        "truncated_main_CoT": ctx["data_item"].non_tensor_batch["truncated_main_cot"],
+                    })
+                    print("🐛[monitor_prompt]", _monitor_prompt)
                     print("🐛[monitor_score]", ctx["data_item"].non_tensor_batch["monitor_score"])
                     print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
                     monitor_reward_type = ctx["data_item"].non_tensor_batch["monitor_reward_type"]

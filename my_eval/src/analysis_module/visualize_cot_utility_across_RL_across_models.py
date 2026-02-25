@@ -308,7 +308,7 @@ def visualize_cot_utility_across_RL_for_each_model_dataset(main_model_name_or_pa
                             for line in lines:
                                 data = json.loads(line)
 
-                                # TODO haha double check
+                                # haha double check
                                 if dataset_object.compare_pred_and_gt(data["classmate_continuation"], data["gt"]):
                                     total_utility += 1
                                 #     if step_idx != "wo_cot":

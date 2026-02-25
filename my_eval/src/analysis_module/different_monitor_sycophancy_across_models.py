@@ -18,7 +18,7 @@ def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_")
 
 
-def _call_openai_sync(openai_client: OpenAI, model_name: str, prompt: str, verifier, max_retries: int = 10) -> str:
+def _call_openai_sync(openai_client: OpenAI, model_name: str, prompt: str, verifier, max_retries: int = 5) -> str:
     """Send a prompt to OpenAI, retrying until the response parses to a valid score."""
     text = ""
     for attempt in range(max_retries):
@@ -314,12 +314,10 @@ def run_different_monitor_and_judge(
                 # continue
 
                 # An entry needs processing if either key is missing or its value is None.
-                # TODO haha overwrite
                 pending_entry_indices = [
                     entry_idx for entry_idx, entry in enumerate(entries)
                     if entry.get(monitor_key) is None or entry.get(judge_key) is None
                 ]
-                # pending_entry_indices = []
                 num_already_annotated = len(entries) - len(pending_entry_indices)
                 run_label = f"{main_model_name_or_path} / step_{step_idx} / {dataset_name}"
 
@@ -351,14 +349,14 @@ def run_different_monitor_and_judge(
                         if entry.get(monitor_key) is None:
                             monitor_future = dispatch_monitor(monitor_prompt, verifier)
                             if monitor_future is None:
-                                monitor_future = {"score": 0, "explanation": "CoT is empty"}
+                                monitor_future = {"score": verifier.invalid_score, "explanation": "CoT is empty"}
                         else:
                             monitor_future = None
 
                         if entry.get(judge_key) is None:
                             judge_future = dispatch_judge(judge_prompt, verifier)
                             if judge_future is None:
-                                judge_future = {"score": 0, "explanation": "Output is empty"}
+                                judge_future = {"score": verifier.invalid_score, "explanation": "Output is empty"}
                         else:
                             judge_future = None
 
@@ -426,8 +424,8 @@ def run_different_monitor_and_judge(
                 monitor_scores = np.array(monitor_scores)
                 judge_scores = np.array(judge_scores)
 
-                monitor_valid_mask = monitor_scores != 0
-                judge_valid_mask = judge_scores != 0
+                monitor_valid_mask = monitor_scores != verifier.invalid_score
+                judge_valid_mask = judge_scores != verifier.invalid_score
                 valid_mask = monitor_valid_mask & judge_valid_mask
 
                 monitor_metrics = verifier.compute_metrics(

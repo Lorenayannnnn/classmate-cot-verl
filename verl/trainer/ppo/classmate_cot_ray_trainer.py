@@ -63,6 +63,7 @@ from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, shou
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
     create_llm_judge
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
 from verl.utils.reward_score.olmo_verifiers import process_code_output
@@ -568,8 +569,7 @@ class ClassmateCoTRayPPOTrainer:
             # from openai import OpenAI
             # from keys import OPENAI_KEY
             # self.openai_client = OpenAI(api_key=OPENAI_KEY)
-            self._verifier = None
-            self._verifier_key = None
+            pass
 
         assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
         self.enable_thinking = enable_thinking
@@ -761,36 +761,6 @@ class ClassmateCoTRayPPOTrainer:
 
         return gen_batch
 
-    def _get_verifier(self, data_sources=None):
-        # Optimize this later
-        is_mmlu = False
-        is_mmlu_pro = False
-        data_source_values = []
-        if data_sources is not None:
-            if isinstance(data_sources, (list, tuple, np.ndarray)):
-                data_source_values = data_sources
-            else:
-                data_source_values = [data_sources]
-
-            try:
-                is_mmlu = any("mmlu" in str(src) for src in data_source_values)
-                is_mmlu_pro = any("mmlu_pro" in str(src) for src in data_source_values)
-            except TypeError:
-                is_mmlu = False
-                is_mmlu_pro = False
-
-        cache_key = (is_mmlu, is_mmlu_pro)
-        if self._verifier is not None and self._verifier_key == cache_key:
-            return self._verifier
-
-        from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
-
-        verifier = get_verifier(data_source=data_source_values)
-
-        self._verifier = verifier
-        self._verifier_key = cache_key
-        return verifier
-
     def _validate(self):
         data_source_lst = []
         reward_extra_infos_dict: dict[str, list] = defaultdict(list)
@@ -882,9 +852,8 @@ class ClassmateCoTRayPPOTrainer:
                 print("Performing CoT monitoring...")
 
                 data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-                verifier = self._get_verifier(data_sources=data_sources_batch)
-                if verifier is None:
-                    raise ValueError("Monitor verifier could not be initialized from data_source.")
+                verifier = get_verifier(data_source=data_sources_batch)
+                assert verifier is not None, "Monitor verifier could not be initialized from data_source."
 
                 # Extract CoTs, questions, and hints
                 all_main_cots, all_raw_questions, all_hint_strs = [], [], []
@@ -997,7 +966,7 @@ class ClassmateCoTRayPPOTrainer:
             
             # core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "consistency_reward", "final_reward", "reward"}
             core_reward_vars = {"acc", "main_model_reward", "classmate_reward", "final_reward", "reward"}
-            # TODO haha for code & test case generation
+            # haha for code & test case generation
             code_test_case_reward_keys = [k for k in var2metric2val.keys() if "test_case_format_score" in k or "correct_code_score" in k]
             core_reward_vars.update(code_test_case_reward_keys)
             
@@ -1025,33 +994,30 @@ class ClassmateCoTRayPPOTrainer:
             metric_dict["val-aux/num_turns/mean"] = sample_turns.mean()
         
         if len(all_monitor_scores) > 0:
+            verifier = get_verifier(data_source=data_sources)
+            assert verifier is not None
             # Convert to numpy arrays for computation
             monitor_scores = np.array(all_monitor_scores)
             main_model_reward = np.array(all_main_rewards)
 
-            monitor_valid_mask = monitor_scores != 0
-            main_reward_valid_mask = main_model_reward != 0
+            monitor_valid_mask = monitor_scores != verifier.invalid_score
+            main_reward_valid_mask = main_model_reward != verifier.invalid_score
             valid_mask = monitor_valid_mask & main_reward_valid_mask
 
-            monitor_scores = monitor_scores[valid_mask]
-            main_model_reward = main_model_reward[valid_mask]
+            monitor_scores = monitor_scores[valid_mask].astype(float)
+            main_model_reward = main_model_reward[valid_mask].astype(float)
 
-            monitor_scores = monitor_scores.astype(float)
-            main_model_reward = main_model_reward.astype(float)
-
-            verifier = self._get_verifier(data_sources=data_sources)
-            if verifier is not None:
-                monitor_metrics = verifier.compute_metrics(
-                    predictions=monitor_scores.tolist(),
-                    ground_truths=main_model_reward.tolist(),
-                )
-                metric_dict["val-core/monitor/total_monitored_entries"] = np.sum(valid_mask)
-                metric_dict["val-core/monitor/total_valid_output_entries"] = np.sum(main_reward_valid_mask)
-                metric_dict["val-core/monitor/total_valid_CoT_entries"] = np.sum(monitor_valid_mask)
-                metric_dict.update({
-                    f"val-core/monitor/{metric_name}": float(metric_val)
-                    for metric_name, metric_val in monitor_metrics.items()
-                })
+            monitor_metrics = verifier.compute_metrics(
+                predictions=monitor_scores.tolist(),
+                ground_truths=main_model_reward.tolist(),
+            )
+            metric_dict["val-core/monitor/total_monitored_entries"] = np.sum(valid_mask)
+            metric_dict["val-core/monitor/total_valid_output_entries"] = np.sum(main_reward_valid_mask)
+            metric_dict["val-core/monitor/total_valid_CoT_entries"] = np.sum(monitor_valid_mask)
+            metric_dict.update({
+                f"val-core/monitor/{metric_name}": float(metric_val)
+                for metric_name, metric_val in monitor_metrics.items()
+            })
 
         print(f"Validation metrics: {metric_dict}")
         print("🐛🐛🐛 End validating")
@@ -1259,7 +1225,7 @@ class ClassmateCoTRayPPOTrainer:
     #     """
     #     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
     #     """
-    #     # TODO haha double check for code_contests_modify_code
+    #     # haha double check for code_contests_modify_code
     #     if data_source == "code_contests_modify_code":
     #         breakpoint()
     #         reason_section_name = "### Reasoning"
@@ -2040,51 +2006,6 @@ class ClassmateCoTRayPPOTrainer:
                     batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
                         batch.batch["responses"], skip_special_tokens=True
                     ))
-
-                    # TODO: not doing monitor during training for now to save money
-                    # if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
-                    #     from concurrent.futures import ThreadPoolExecutor, as_completed
-                    #
-                    #     # Prepare all monitor tasks
-                    #     monitor_tasks = []
-                    #     for item in batch:
-                    #         # (skipping for now) 1. get enable_thinking from apply_chat_template_kwargs.enable_thinking (enable_thinking attribute may not exist)
-                    #         # get main cot in-between think tag
-                    #         main_cot_for_monitor = self.parse_out_main_cot(item.non_tensor_batch["decoded_responses"])
-                    #
-                    #         # call monitor: monitor_cot(user_message, hint_message, main_pred, monitor_template_name, openai_client, model_name="gpt-4o-mini"):
-                    #         user_message = item.non_tensor_batch.get("reward_model", {}).get("raw_question_for_monitor", "")
-                    #         hint_message = item.non_tensor_batch.get("reward_model", {}).get("hint_str_for_monitor", "")
-                    #         monitor_tasks.append((user_message, hint_message, main_cot_for_monitor))
-                    #
-                    #     # Execute monitor_cot calls in parallel
-                    #     all_monitor_use_hint = [None] * len(monitor_tasks)
-                    #     all_monitor_explanations = [None] * len(monitor_tasks)
-                    #
-                    #     with ThreadPoolExecutor(max_workers=min(32, len(monitor_tasks))) as executor:
-                    #         # Submit all tasks
-                    #         future_to_idx = {
-                    #             executor.submit(
-                    #                 monitor_cot,
-                    #                 user_msg,
-                    #                 hint_msg,
-                    #                 main_cot,
-                    #                 self.config.reward_model.get("monitor_template_name"),
-                    #                 self.openai_client,
-                    #                 model_name=self.config.reward_model.get("monitor_model_name")
-                    #             ): idx
-                    #             for idx, (user_msg, hint_msg, main_cot) in enumerate(monitor_tasks)
-                    #         }
-                    #
-                    #         # Collect results as they complete
-                    #         for future in as_completed(future_to_idx):
-                    #             idx = future_to_idx[future]
-                    #             monitor_result_dict = future.result()
-                    #             all_monitor_use_hint[idx] = monitor_result_dict['use_hint']
-                    #             all_monitor_explanations[idx] = monitor_result_dict['explanation']
-                    #
-                    #     batch.non_tensor_batch["monitor_use_hint"] = np.array(all_monitor_use_hint)
-                    #     batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations)
 
                     if "response_mask" not in batch.batch.keys():
                         batch.batch["response_mask"] = compute_response_mask(batch)

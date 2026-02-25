@@ -252,7 +252,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
 
     # print_if_exists("main_model_reward", "main_model_reward")
 
-    # TODO haha check for coding task generation if these metrics get printed
+    # haha check for coding task generation if these metrics get printed
     # Modify for code_contests_modify_code
     # result = {
     #     "generated_test_pass_correct_sol": 0.0,
@@ -264,45 +264,6 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     print_if_exists("main_model_generated_test_pass_incorrect_sol", "main_model_generated_test_pass_incorrect_sol")
     print_if_exists("main_model_generated_code_pass_gt_test", "main_model_generated_code_pass_gt_test")
     print_if_exists("main_model_generated_code_pass_generated_test", "main_model_generated_code_pass_generated_test")
-
-    # Here are logging for training; currently only logging monitor stuff during evaluation in def _validate of the Trainer
-    # 4. log metrics (do it in metric_utils.py): TP (main_reward==1 and item.non_tensor_batch["monitor_use_hint"] == True), TN (main_reward==0 and item.non_tensor_batch["monitor_use_hint"] == False), FP (main_reward==0 and item.non_tensor_batch["monitor_use_hint"] == True), FN (main_reward==1 and item.non_tensor_batch["monitor_use_hint"] == False) => precision, recall, F1
-    # if "monitor_use_hint" in batch.non_tensor_batch and "main_model_reward" in batch.non_tensor_batch:
-    #     monitor_use_hint = batch.non_tensor_batch["monitor_use_hint"]
-    #     main_model_reward = batch.non_tensor_batch["main_model_reward"]
-    #
-    #     # Filter out aborted samples and None monitor results
-    #     non_aborted_indices = non_aborted_mask.cpu().numpy()
-    #     monitor_use_hint = monitor_use_hint[non_aborted_indices]
-    #     main_model_reward = main_model_reward[non_aborted_indices]
-    #
-    #     monitor_use_hint = monitor_use_hint[valid_mask].astype(bool)
-    #     valid_mask = monitor_use_hint != 0
-    #     main_model_reward = main_model_reward[valid_mask]
-    #
-    #     # Convert rewards to binary (1/0)
-    #     main_reward_bin = (main_model_reward == 1).astype(bool)
-    #
-    #     tp = np.sum(main_reward_bin & monitor_use_hint)
-    #     tn = np.sum(~main_reward_bin & ~monitor_use_hint)
-    #     fp = np.sum(~main_reward_bin & monitor_use_hint)
-    #     fn = np.sum(main_reward_bin & ~monitor_use_hint)
-    #
-    #     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    #     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    #     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
-    #
-    #     metrics.update(
-    #         {
-    #             "monitor/tp": float(tp),
-    #             "monitor/tn": float(tn),
-    #             "monitor/fp": float(fp),
-    #             "monitor/fn": float(fn),
-    #             "monitor/precision": float(precision),
-    #             "monitor/recall": float(recall),
-    #             "monitor/f1": float(f1),
-    #         }
-    #     )
 
     print_if_exists("rollout_is_weights", "rollout_is_weights")
     # print_if_exists("classmate_rollout_is_weights", "classmate_rollout_is_weights")

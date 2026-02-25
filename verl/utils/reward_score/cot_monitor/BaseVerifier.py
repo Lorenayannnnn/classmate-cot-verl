@@ -16,7 +16,7 @@ class BaseVerifier(ABC):
     - Non-binary rewards: reports MSE
     """
 
-    def __init__(self, reward_type: str = "binary"):
+    def __init__(self, reward_type):
         """
         Initialize the verifier with a reward type.
 
@@ -26,6 +26,14 @@ class BaseVerifier(ABC):
         if reward_type not in ["binary", "non_binary"]:
             raise ValueError(f"reward_type must be 'binary' or 'non_binary', got {reward_type}")
         self.reward_type = reward_type
+
+    @property
+    def invalid_score(self) -> float:
+        """Sentinel value for a failed/unparseable score (when model fails to generate close thinking tag and thus an output), excluded from metrics.
+        Binary: -1 (valid scores are 0 and 1, so -1 is unambiguous).
+        Non-binary: 0 (valid scores are 1-10, so 0 is unambiguous).
+        """
+        return -1.0 if self.reward_type == "binary" else 0.0
 
     @abstractmethod
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
@@ -98,6 +106,12 @@ class BaseVerifier(ABC):
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
+        total = tp + tn + fp + fn
+        accuracy = (tp + tn) / total if total > 0 else 0.0
+        # Per-class accuracy: fraction of each true class predicted correctly
+        accuracy_class1 = tp / (tp + fn) if (tp + fn) > 0 else 0.0  # true-positive rate (sensitivity)
+        accuracy_class0 = tn / (tn + fp) if (tn + fp) > 0 else 0.0  # true-negative rate (specificity)
+
         return {
             "tp": float(tp),
             "tn": float(tn),
@@ -105,7 +119,10 @@ class BaseVerifier(ABC):
             "fn": float(fn),
             "precision": precision,
             "recall": recall,
-            "f1": f1
+            "f1": f1,
+            "accuracy": float(accuracy),
+            "accuracy_class_pos": float(accuracy_class1),
+            "accuracy_class_neg": float(accuracy_class0),
         }
 
     @staticmethod
@@ -208,24 +225,28 @@ def get_verifier(data_source=None) -> BaseVerifier:
         BaseVerifier instance appropriate for the data source
     """
     data_sources = _normalize_data_sources(data_source)
-    data_source_joined = " ".join(data_sources)
+    # data_source_joined = " ".join(data_sources)
 
-    is_mmlu = "mmlu" in data_source_joined
-    is_mmlu_pro = "mmlu_pro" in data_source_joined
-    is_helpful = any("helpful_instructions" in source for source in data_sources)
-    is_anthropic_hh_rlhf = any("anthropic_hh_rlhf" in source for source in data_sources)
-
-    if is_mmlu:
-        from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
-        return MMLUSycophancyVerifier(do_pro=is_mmlu_pro, reward_type="binary")
-    elif is_helpful:
+    if any("monitor_gsm8k" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.GSM8KVerifier import GSM8KVerifier
+        return GSM8KVerifier()
+    elif any("monitor_natural_questions" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.NaturalQuestionVerifier import NaturalQuestionVerifier
+        return NaturalQuestionVerifier()
+    elif any("monitor_hotpotqa" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.HotpotQAVerifier import HotpotQAVerifier
+        return HotpotQAVerifier()
+    elif any("helpful_instructions" in source for source in data_sources):
         # from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
         # return GeneralSycophancyVerifier(reward_type="non_binary")
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
-        return SycophancyVerifier(reward_type="non_binary")
-    elif is_anthropic_hh_rlhf:
-        from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
-        return SycophancyVerifier(reward_type="non_binary")
+        return SycophancyVerifier()
+    # elif "mmlu" in data_source_joined:
+    #     from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
+    #     return MMLUSycophancyVerifier(do_pro="mmlu_pro" in data_source_joined, reward_type="binary")
+    # elif any("anthropic_hh_rlhf" in source for source in data_sources):
+    #     from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
+    #     return SycophancyVerifier(reward_type="non_binary")
     else:
         raise ValueError(f"Unsupported data_source for verifier: {data_source}")
 

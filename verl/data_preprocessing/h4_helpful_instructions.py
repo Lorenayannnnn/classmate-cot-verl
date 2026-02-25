@@ -11,9 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Preprocess the GSM8k dataset to parquet format
-"""
 
 import argparse
 import os
@@ -25,52 +22,37 @@ from verl.utils.hdfs_io import copy, makedirs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--local_dir", default=None, help="The save directory for the preprocessed dataset.")
     parser.add_argument("--hdfs_dir", default=None)
-    parser.add_argument("--local_dataset_path", default=None, help="The local path to the raw dataset, if it exists.")
     parser.add_argument("--seed", default=42)
     parser.add_argument(
         "--local_save_dir", default="./data/helpful_instructions", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
-    local_dataset_path = args.local_dataset_path
 
     data_source = "HuggingFaceH4/helpful-instructions"
 
-    if local_dataset_path is not None:
-        dataset = datasets.load_dataset(local_dataset_path, "main")
-    else:
-        dataset = datasets.load_dataset(data_source)
+    dataset = datasets.load_dataset(data_source)
 
     original_dataset = dataset["train"]
 
-    import random
-    rng = random.Random(args.seed)
-
-    max_test_sample_num = 1000
-    train_ratio, dev_ratio = 0.8, 0.1
-    test_ratio = 0.1
-    total_sample_num = max_test_sample_num / test_ratio
-
-    # TODO change dev set num
-    max_dev_set_num = 200
-
+    train_num = 8000
+    dev_num = 200
+    test_num = 1000
     warmup_train_num = 1000
     warmup_dev_num = 200
 
-    assert total_sample_num <= len(original_dataset)
+    total_num = train_num + dev_num + test_num + warmup_train_num + warmup_dev_num
+    assert total_num <= len(original_dataset)
 
-    train_dataset = original_dataset.select(range(int(total_sample_num * train_ratio)))
-    dev_dataset = original_dataset.select(range(int(total_sample_num * train_ratio), int(total_sample_num * (train_ratio + dev_ratio))))
+    # Select test first (from the end), then shuffle the rest for train/dev/warmup
+    test_dataset = original_dataset.select(range(len(original_dataset) - test_num, len(original_dataset)))
+    remaining_dataset = original_dataset.select(range(len(original_dataset) - test_num)).shuffle(seed=int(args.seed))
 
-    if max_dev_set_num is not None:
-        dev_dataset = dev_dataset.select(range(max_dev_set_num))
-
-    test_dataset = original_dataset.select(range(int(total_sample_num * (train_ratio + dev_ratio)), int(total_sample_num)))
-
-    warmup_train_dataset = original_dataset.select(range(int(total_sample_num), int(total_sample_num) + warmup_train_num))
-    warmup_dev_dataset = original_dataset.select(range(int(total_sample_num) + warmup_train_num, int(total_sample_num) + warmup_train_num + warmup_dev_num))
+    train_dataset = remaining_dataset.select(range(train_num))
+    dev_dataset = remaining_dataset.select(range(train_num, train_num + dev_num))
+    warmup_train_dataset = remaining_dataset.select(range(train_num + dev_num, train_num + dev_num + warmup_train_num))
+    warmup_dev_dataset = remaining_dataset.select(range(train_num + dev_num + warmup_train_num, train_num + dev_num + warmup_train_num + warmup_dev_num))
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -111,17 +93,21 @@ if __name__ == "__main__":
     warmup_dev_dataset = warmup_dev_dataset.map(function=make_map_fn("warmup"), with_indices=True)
 
     hdfs_dir = args.hdfs_dir
-    local_save_dir = args.local_dir
-    if local_save_dir is not None:
-        print("Warning: Argument 'local_dir' is deprecated. Please use 'local_save_dir' instead.")
-    else:
-        local_save_dir = args.local_save_dir
+    base_save_dir = args.local_save_dir
+    seed_save_dir = args.local_save_dir + f"/seed_{args.seed}"
+    os.makedirs(base_save_dir, exist_ok=True)
+    os.makedirs(seed_save_dir, exist_ok=True)
 
-    train_dataset.to_parquet(os.path.join(local_save_dir, "train.parquet"))
-    dev_dataset.to_parquet(os.path.join(local_save_dir, "dev.parquet"))
-    test_dataset.to_parquet(os.path.join(local_save_dir, "test.parquet"))
-    warmup_train_dataset.to_parquet(os.path.join(local_save_dir, "warmup_train.parquet"))
-    warmup_dev_dataset.to_parquet(os.path.join(local_save_dir, "warmup_dev.parquet"))
+    test_parquet_path = os.path.join(base_save_dir, "test.parquet")
+    if os.path.exists(test_parquet_path):
+        print(f"Warning: test set already exists at {test_parquet_path}, skipping.")
+    else:
+        test_dataset.to_parquet(test_parquet_path)
+
+    train_dataset.to_parquet(os.path.join(seed_save_dir, "train.parquet"))
+    dev_dataset.to_parquet(os.path.join(seed_save_dir, "dev.parquet"))
+    warmup_train_dataset.to_parquet(os.path.join(seed_save_dir, "warmup_train.parquet"))
+    warmup_dev_dataset.to_parquet(os.path.join(seed_save_dir, "warmup_dev.parquet"))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
