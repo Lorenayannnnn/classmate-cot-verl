@@ -22,10 +22,9 @@ from verl.utils.hdfs_io import copy, makedirs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--seed", default=42)
     parser.add_argument(
-        "--local_save_dir", default="./data/helpful_instructions", help="The save directory for the preprocessed dataset."
+        "--local_save_dir", default="./data/sycophancy_helpful_instructions", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
@@ -45,14 +44,18 @@ if __name__ == "__main__":
     total_num = train_num + dev_num + test_num + warmup_train_num + warmup_dev_num
     assert total_num <= len(original_dataset)
 
-    # Select test first (from the end), then shuffle the rest for train/dev/warmup
-    test_dataset = original_dataset.select(range(len(original_dataset) - test_num, len(original_dataset)))
-    remaining_dataset = original_dataset.select(range(len(original_dataset) - test_num)).shuffle(seed=int(args.seed))
+    # Fixed splits (seed-independent): test, dev, warmup_dev carved from the tail
+    fixed_num = test_num + dev_num + warmup_dev_num
+    shuffleable_num = train_num + warmup_train_num
+    fixed_pool = original_dataset.select(range(shuffleable_num, shuffleable_num + fixed_num))
+    test_dataset = fixed_pool.select(range(test_num))
+    dev_dataset = fixed_pool.select(range(test_num, test_num + dev_num))
+    warmup_dev_dataset = fixed_pool.select(range(test_num + dev_num, fixed_num))
 
-    train_dataset = remaining_dataset.select(range(train_num))
-    dev_dataset = remaining_dataset.select(range(train_num, train_num + dev_num))
-    warmup_train_dataset = remaining_dataset.select(range(train_num + dev_num, train_num + dev_num + warmup_train_num))
-    warmup_dev_dataset = remaining_dataset.select(range(train_num + dev_num + warmup_train_num, train_num + dev_num + warmup_train_num + warmup_dev_num))
+    # Shuffled splits: train and warmup_train
+    shuffled_pool = original_dataset.select(range(shuffleable_num)).shuffle(seed=int(args.seed))
+    train_dataset = shuffled_pool.select(range(train_num))
+    warmup_train_dataset = shuffled_pool.select(range(train_num, train_num + warmup_train_num))
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -92,24 +95,19 @@ if __name__ == "__main__":
     warmup_train_dataset = warmup_train_dataset.map(function=make_map_fn("warmup"), with_indices=True)
     warmup_dev_dataset = warmup_dev_dataset.map(function=make_map_fn("warmup"), with_indices=True)
 
-    hdfs_dir = args.hdfs_dir
     base_save_dir = args.local_save_dir
     seed_save_dir = args.local_save_dir + f"/seed_{args.seed}"
     os.makedirs(base_save_dir, exist_ok=True)
     os.makedirs(seed_save_dir, exist_ok=True)
 
-    test_parquet_path = os.path.join(base_save_dir, "test.parquet")
-    if os.path.exists(test_parquet_path):
-        print(f"Warning: test set already exists at {test_parquet_path}, skipping.")
-    else:
-        test_dataset.to_parquet(test_parquet_path)
+    # Fixed splits saved directly under base_save_dir
+    for name, ds in [("test", test_dataset), ("dev", dev_dataset), ("warmup_dev", warmup_dev_dataset)]:
+        path = os.path.join(base_save_dir, f"{name}.parquet")
+        if os.path.exists(path):
+            print(f"Warning: {name} set already exists at {path}, skipping.")
+        else:
+            ds.to_parquet(path)
 
+    # Shuffled splits saved under seed_save_dir
     train_dataset.to_parquet(os.path.join(seed_save_dir, "train.parquet"))
-    dev_dataset.to_parquet(os.path.join(seed_save_dir, "dev.parquet"))
     warmup_train_dataset.to_parquet(os.path.join(seed_save_dir, "warmup_train.parquet"))
-    warmup_dev_dataset.to_parquet(os.path.join(seed_save_dir, "warmup_dev.parquet"))
-
-    if hdfs_dir is not None:
-        makedirs(hdfs_dir)
-
-        copy(src=local_save_dir, dst=hdfs_dir)

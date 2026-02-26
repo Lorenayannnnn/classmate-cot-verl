@@ -227,7 +227,13 @@ def get_verifier(data_source=None) -> BaseVerifier:
     data_sources = _normalize_data_sources(data_source)
     # data_source_joined = " ".join(data_sources)
 
-    if any("monitor_gsm8k" in source for source in data_sources):
+    if any("helpful_instructions" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
+        return SycophancyVerifier()
+    elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
+        return AnthropicHHRLHFVerifier()
+    elif any("monitor_gsm8k" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.GSM8KVerifier import GSM8KVerifier
         return GSM8KVerifier()
     elif any("monitor_natural_questions" in source for source in data_sources):
@@ -236,11 +242,6 @@ def get_verifier(data_source=None) -> BaseVerifier:
     elif any("monitor_hotpotqa" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.HotpotQAVerifier import HotpotQAVerifier
         return HotpotQAVerifier()
-    elif any("helpful_instructions" in source for source in data_sources):
-        # from verl.utils.reward_score.cot_monitor.HelpfulInstructionVerifier import GeneralSycophancyVerifier
-        # return GeneralSycophancyVerifier(reward_type="non_binary")
-        from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
-        return SycophancyVerifier()
     # elif "mmlu" in data_source_joined:
     #     from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
     #     return MMLUSycophancyVerifier(do_pro="mmlu_pro" in data_source_joined, reward_type="binary")
