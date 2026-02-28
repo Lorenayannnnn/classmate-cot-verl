@@ -1,16 +1,10 @@
 set -x
 
-#export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
-
-# Classmate model: Change url and port number in classmate-cot-verl/outputs/host_classmate_models/classmate_model_mapping.json
-#CUDA_VISIBLE_DEVICES=0,1 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 2 --gpu-memory-utilization 0.9 --port 8003
-#CUDA_VISIBLE_DEVICES=0 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 1 --gpu-memory-utilization 0.9 --port 8003
-# Now using Together AI
-
 data_dir=./data   # run on lambda
-dataset_name="helpful_instructions"
-#dataset_name="anthropic_hh_rlhf"
-train_path=${data_dir}/${dataset_name}/train.parquet
+dataset_name="anthropic_hh_rlhf"
+seed=42
+
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
@@ -18,38 +12,37 @@ eval_files="['$eval_path']"
 # TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
 #TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
 #base_model_name_path=Qwen/Qwen3-1.7B
-#base_model_name_path=Qwen/Qwen3-0.6B
-base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
+base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=LorenaYannnnn/20260226-hh_rlhf_compliance-grpo_warmup_16000_episodes_seed_42
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
-classmate_model_name_or_path_list='["LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"]'
+classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
 classmate_reward_weight=1
-#classmate_reward_type=random_truncate
 classmate_reward_type=vanilla_reward
 use_classmate_main_cond=always  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
-#adv_estimator=grpo
-#adv_estimator=grpo_main_classmate_separated
-adv_estimator=gdpo
-#adv_estimator=grpo_main_classmate_separated_non_neg_cl
+adv_estimator=grpo_w_classmate
+#adv_estimator=gdpo
+#adv_estimator=gdpo_wo_bn
 token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 #main_cot_keep_rate=0.7
 # add_consistency_reward=False
 
 gpu_num=4
-seed=42
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=25
-total_test_times=50
+#total_ckpts=25
+#total_test_times=50
 #save_freq=$((train_steps / total_ckpts))
 #test_freq=$((train_steps / total_test_times))
+#save_freq=10
+#test_freq=10
 save_freq=10
 test_freq=10
 
@@ -61,7 +54,8 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -91,7 +85,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_${classmate_reward_type}_${use_classmate_main_cond}_cl_SELF_${token_level_classmate_reward_mode}_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_${classmate_reward_type}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_${total_episodes}_episodes_seed_${seed}_helpfulness_wo_warmup" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -119,4 +113,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/self_qwen3_classmate_general_sycophancy.sh
+#bash my_scripts/qwen3_classmate_anthropic_hh_rlhf_wo_warmup.sh

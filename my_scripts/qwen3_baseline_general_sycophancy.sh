@@ -7,10 +7,10 @@ set -x
 #export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
 
 data_dir=./data   # run on lambda
-dataset_name="helpful_instructions"
-#dataset_name="anthropic_hh_rlhf"
+dataset_name="sycophancy_helpful_instructions"
+seed=42
 
-train_path=${data_dir}/${dataset_name}/train.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
@@ -28,12 +28,11 @@ train_size=8000   # After filtering out too long prompts
 max_response_length=3072
 
 gpu_num=4
-seed=42
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=25
-total_test_times=50
+#total_ckpts=25
+#total_test_times=50
 #save_freq=$((train_steps / total_ckpts))
 #test_freq=$((train_steps / total_test_times))
 save_freq=10

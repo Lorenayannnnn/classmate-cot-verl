@@ -18,8 +18,8 @@ eval_files="['$eval_path']"
 # TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
 #TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
 #base_model_name_path=Qwen/Qwen3-1.7B
-#base_model_name_path=Qwen/Qwen3-0.6B
-base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
+base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
@@ -91,7 +91,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_${classmate_reward_type}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_${classmate_reward_type}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_${total_episodes}_episodes_seed_${seed}_wo_warmup" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -119,4 +119,4 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_general_sycophancy.sh
+#bash my_scripts/qwen3_classmate_general_sycophancy_wo_warmup.sh

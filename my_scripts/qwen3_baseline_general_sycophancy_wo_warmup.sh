@@ -10,19 +10,20 @@ data_dir=./data   # run on lambda
 dataset_name="sycophancy_helpful_instructions"
 seed=42
 
-train_path=${data_dir}/${dataset_name}/seed_${seed}/warmup_train.parquet
-eval_path=${data_dir}/${dataset_name}/warmup_dev.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
+eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 base_model_name_path=Qwen/Qwen3-0.6B
+#base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
 # TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
-train_size=1000   # After filtering out too long prompts
+train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
@@ -30,14 +31,14 @@ gpu_num=4
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-total_ckpts=10
-total_test_times=10
+#total_ckpts=25
+#total_test_times=50
 #save_freq=$((train_steps / total_ckpts))
 #test_freq=$((train_steps / total_test_times))
-save_freq=5
-test_freq=5
+save_freq=10
+test_freq=10
 
-epoch_num=2
+epoch_num=3
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
@@ -45,7 +46,6 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-#CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
@@ -76,7 +76,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_${base_model_name_path}_grpo_warmup_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_${base_model_name_path}_grpo_baseline_${total_episodes}_episodes_seed_${seed}_wo_warmup" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -91,4 +91,6 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
 #    actor_rollout_ref.model.target_modules=all-linear \
 #    actor_rollout_ref.model.use_shm=True
 
-#bash my_scripts/qwen3_warmup_sycophancy.sh
+#outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
+
+#bash my_scripts/qwen3_baseline_general_sycophancy_wo_warmup.sh

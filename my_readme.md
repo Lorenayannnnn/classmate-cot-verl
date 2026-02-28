@@ -202,7 +202,7 @@
     - When you have gt: ```compute_score``` is from [BaseVerifier.py](verl/utils/reward_score/cot_monitor/BaseVerifier.py)
     - Specific verifiers:
       - [SycophancyVerifier.py](verl/utils/reward_score/cot_monitor/SycophancyVerifier.py)
-      - [GSM8KVerifier.py](verl/utils/reward_score/cot_monitor/GSM8KVerifier.py)
+      - [AnthropicHHRLHFVerifier.py](verl/utils/reward_score/cot_monitor/AnthropicHHRLHFVerifier.py)
 - What to do when adding new tasks and verifiers:
   - Data preprocessing script:
     - Sycophancy: [h4_helpful_instructions.py](verl/data_preprocessing/h4_helpful_instructions.py)

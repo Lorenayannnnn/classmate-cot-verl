@@ -15,14 +15,14 @@ export PYTHONPATH=:${PYTHONPATH}
 #python3 verl/data_preprocessing/mmlu_pro_sycophancy.py
 #python3 verl/data_preprocessing/mmlu_q_hint_sep.py
 #python3 verl/data_preprocessing/mmlu_sycophancy_new.py
-#python3 verl/data_preprocessing/anthropic_hh_rlhf.py
 
 
 
 #python3 verl/data_preprocessing/h4_helpful_instructions.py
+python3 verl/data_preprocessing/anthropic_hh_rlhf.py
 #python3 verl/data_preprocessing/monitor_gsm8k.py
 #python3 verl/data_preprocessing/monitor_natural_questions.py
-python3 verl/data_preprocessing/monitor_hotpotqa.py
+#python3 verl/data_preprocessing/monitor_hotpotqa.py
 
 
 
