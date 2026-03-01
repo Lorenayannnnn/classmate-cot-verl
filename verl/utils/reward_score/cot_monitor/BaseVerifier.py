@@ -148,7 +148,7 @@ class BaseVerifier(ABC):
         }
 
     @abstractmethod
-    def compute_score(self, continuation: str, doc: Any) -> Dict[str, Any]:
+    def compute_score(self, continuation: str, gt: Any, **kwargs) -> Dict[str, Any]:
         if self.reward_type == "binary":
             raise NotImplementedError("Should be implemented in subclass.")
         else:
@@ -233,6 +233,12 @@ def get_verifier(data_source=None) -> BaseVerifier:
     elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
         return AnthropicHHRLHFVerifier()
+    elif any("code_contests_pass_wrong_sol" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
+        return CodeContestsPassWrongSolVerifier()
+    elif any("impossible_livecodebench" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
+        return ImpossibleLivecodeVerifier()
     elif any("monitor_gsm8k" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.GSM8KVerifier import GSM8KVerifier
         return GSM8KVerifier()
@@ -277,7 +283,9 @@ def compute_score(
     #     score = ground_truth
     #     extracted_sol = solution_str
     # else:
-    res = verifier.compute_score(solution_str, ground_truth)
+    # res = verifier.compute_score(solution_str, ground_truth)
+    res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", sandbox_fusion_url=sandbox_fusion_url)
+    # res = verifier.compute_score(solution_str, ground_truth, sandbox_type="nsjail", sandbox_fusion_url=None)
     score = res["score"]
     extracted_sol = res["extracted_solution"]
 
@@ -288,3 +296,4 @@ def compute_score(
         }
     else:
         return score
+

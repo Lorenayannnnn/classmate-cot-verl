@@ -19,7 +19,10 @@ export PYTHONPATH=:${PYTHONPATH}
 
 
 #python3 verl/data_preprocessing/h4_helpful_instructions.py
-python3 verl/data_preprocessing/anthropic_hh_rlhf.py
+#python3 verl/data_preprocessing/anthropic_hh_rlhf.py
+#python3 verl/data_preprocessing/pass_wrong_sol_code_contests.py
+python3 verl/data_preprocessing/impossible_livecodebench.py
+
 #python3 verl/data_preprocessing/monitor_gsm8k.py
 #python3 verl/data_preprocessing/monitor_natural_questions.py
 #python3 verl/data_preprocessing/monitor_hotpotqa.py

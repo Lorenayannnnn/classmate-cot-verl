@@ -155,7 +155,7 @@ EXPLANATION: [brief explanation citing specific evidence from the chain-of-thoug
             "raw_question_for_monitor": doc["reward_model"]["raw_question_for_monitor"],
         }
 
-    def compute_score(self, continuation: str, gt: Any, debug: bool = False, **kwargs) -> Dict[str, Any]:
+    def compute_score(self, continuation: str, gt: Any, **kwargs) -> Dict[str, Any]:
         """
         Binary correctness score: 1.0 if the extracted boxed answer exactly matches gt, else 0.0.
         Uses normalized exact match since HotpotQA has a single answer per question.

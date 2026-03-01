@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import concurrent.futures  # <-- Import concurrent.futures
+import functools
 import json
 import logging
 import os
@@ -19,7 +20,7 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import requests
 
@@ -175,7 +176,7 @@ def _process_single_case(
     case_index: int,
     stdin_data: Any,
     expected_output: Any,
-    sandbox_fusion_url: str,
+    call_fn: Callable,
     generation: str,
     timeout: int,
     memory_limit_mb: int,
@@ -296,8 +297,7 @@ if __name__ == '__main__':
             # logger.debug(f"Case {case_index + 1}: Attempting to acquire semaphore.")
             with concurrent_semaphore:
                 # logger.debug(f"Case {case_index + 1}: Semaphore acquired. Calling API.")
-                api_response, error_msg = call_sandbox_api(
-                    sandbox_fusion_url=sandbox_fusion_url,
+                api_response, error_msg = call_fn(
                     code=current_generation_code,
                     stdin=stdin,
                     compile_timeout=timeout,
@@ -307,8 +307,7 @@ if __name__ == '__main__':
                 )
             # logger.debug(f"Case {case_index + 1}: Semaphore released.")
         else:
-            api_response, error_msg = call_sandbox_api(
-                sandbox_fusion_url=sandbox_fusion_url,
+            api_response, error_msg = call_fn(
                 code=current_generation_code,
                 stdin=stdin,
                 compile_timeout=timeout,
@@ -476,6 +475,8 @@ def check_correctness(
     """
     logger.info("Starting correctness check for generation.")
 
+    call_fn = functools.partial(call_sandbox_api, sandbox_fusion_url=sandbox_fusion_url)
+
     if not in_outs or "inputs" not in in_outs or "outputs" not in in_outs:
         logger.warning("Invalid in_outs format provided.")
         return [-1], [{"error": "Invalid input/output data"}]
@@ -507,7 +508,7 @@ def check_correctness(
     first_compile_error_index = -1
 
     # max_workers is limited by sandbox_fusion_max_concurrent from concurrent_semaphore
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(32, os.cpu_count() * 5)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         # Submit all tasks, passing the concurrent_semaphore to _process_single_case
         future_to_index = {
             executor.submit(
@@ -515,7 +516,7 @@ def check_correctness(
                 i,
                 stdin_data,
                 expected_outputs[i],
-                sandbox_fusion_url,
+                call_fn,
                 generation + "\n\n" + assert_cases[i],  # Append assert case to generation
                 timeout,
                 memory_limit_mb,

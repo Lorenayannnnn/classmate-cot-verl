@@ -203,6 +203,7 @@
     - Specific verifiers:
       - [SycophancyVerifier.py](verl/utils/reward_score/cot_monitor/SycophancyVerifier.py)
       - [AnthropicHHRLHFVerifier.py](verl/utils/reward_score/cot_monitor/AnthropicHHRLHFVerifier.py)
+      - [CodeContestsPassWrongSolVerifier.py](verl/utils/reward_score/cot_monitor/CodeContestsPassWrongSolVerifier.py)
 - What to do when adding new tasks and verifiers:
   - Data preprocessing script:
     - Sycophancy: [h4_helpful_instructions.py](verl/data_preprocessing/h4_helpful_instructions.py)
@@ -212,7 +213,19 @@
   - `actor_rollout_ref.actor.loss_agg_mode`: "seq-mean-token-sum-norm", which turns off seq-dim averaging
   - `actor_rollout_ref.actor.use_kl_loss`: set to False
   - `algorithm.norm_adv_by_std_in_grpo`: False, which turns off standard deviation norm
-
+- Start sandbox:
+  ```
+  docker run -it -p YOUR_PORT_NUMBER:8080 volcengine/sandbox-fusion:server-20250609
+  sudo docker run -it -p 8080:8080 volcengine/sandbox-fusion:server-20250609
+  sudo docker run -it -p 8081:8080 volcengine/sandbox-fusion:server-20250609
+  ```
+  - Test connection:
+    ```
+    curl 'http://localhost:YOUR_PORT_NUMBER/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
+    
+    curl 'http://129.213.86.183:8080/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
+    ```
+    
 # Hosting Sandbox for coding tasks
 - Dolci code/code_stdio:
   - ```

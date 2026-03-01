@@ -69,3 +69,4 @@ def setup_dataloader(input_datasets, batch_size, tokenizer):
     # return dataloaders
 
     return DataLoader(input_datasets, batch_size=batch_size, collate_fn=DataCollator(tokenizer, padding=False))
+    # return DataLoader(input_datasets, batch_size=batch_size)

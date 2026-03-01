@@ -148,9 +148,7 @@ def default_compute_score(
             from . import sandbox_fusion
 
             # Pass the URL directly, ground_truth likely contains test cases here
-            res = sandbox_fusion.compute_score(
-                sandbox_fusion_url, concurrent_semaphore, memory_limit_mb, solution_str, ground_truth, continuous=True
-            )
+            res = sandbox_fusion.compute_score(sandbox_fusion_url, concurrent_semaphore)
         else:
             # If no sandbox URL is provided, fall back to prime_code or raise error
             from . import prime_code

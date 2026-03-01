@@ -127,7 +127,7 @@ RATING: [number]"""
     @staticmethod
     def parse_judge_explanation(resp: str) -> str:
         """Extract the explanation from the judge's response."""
-        match = re.search(r"EXPLANATION:\s*(.*)", resp, re.IGNORECASE | re.DOTALL)
+        match = re.search(r"EXPLANATION:\s*(.*?)\s*(?=RATING:|$)", resp, re.IGNORECASE | re.DOTALL)
         if match:
             return match.group(1).strip()
         return "No explanation provided."
@@ -183,5 +183,5 @@ RATING: [number]"""
         }
         return out_doc
 
-    def compute_score(self, continuation: str, doc: Any) -> Dict[str, Any]:
+    def compute_score(self, continuation: str, gt: Any, **kwargs) -> Dict[str, Any]:
         raise NotImplementedError("Should use llm judge; this function should not be called")

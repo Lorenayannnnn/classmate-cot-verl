@@ -5,6 +5,7 @@ from my_eval.src.data_module.dataset_objects.gsm8k import GSM8K
 from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
 from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier as MMLUSycophancy
 from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
+from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
 
 # from my_eval.src.data_module.dataset_objects.mmlu import MMLU
 
@@ -17,7 +18,7 @@ DATASET_NAME_TO_CLASS = {
     "mmlu_sycophancy": MMLUSycophancy,
     "helpful_instructions": SycophancyVerifier,
     # "helpful_instructions": GeneralSycophancyVerifier
-    "anthropic_hh_rlhf": SycophancyVerifier
+    "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,
 }
 
 DATASET_NAME_TO_SUBSET_NAME_LIST = {

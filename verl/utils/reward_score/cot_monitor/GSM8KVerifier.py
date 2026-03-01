@@ -130,7 +130,7 @@ EXPLANATION: [your explanation]"""
             "raw_question_for_monitor": doc["reward_model"]["raw_question_for_monitor"],
         }
 
-    def compute_score(self, continuation: str, gt: Any, debug: bool = False, **kwargs) -> Dict[str, Any]:
+    def compute_score(self, continuation: str, gt: Any, **kwargs) -> Dict[str, Any]:
         """
         Binary correctness score: 1.0 if the extracted boxed answer matches gt, else 0.0.
         Uses regex to extract the answer, then math_verify.verify() for numeric equivalence.

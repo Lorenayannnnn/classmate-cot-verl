@@ -154,9 +154,7 @@ def test_continuous_score_consistency():
     expected_continuous_score = 0.9
 
     # 1. Calculate score using prime_code (default) with continuous=True
-    prime_score, _ = sandbox_fusion.compute_score(
-        os.environ.get("SANDBOX_FUSION_URL"), None, completion, ground_truth, continuous=True
-    )
+    prime_score, _ = sandbox_fusion.compute_score(os.environ.get("SANDBOX_FUSION_URL"), None)
 
     # 2. Calculate score using sandbox_fusion with continuous=True
     # Ensure the extra_info key triggers the sandbox_fusion path in default_compute_score

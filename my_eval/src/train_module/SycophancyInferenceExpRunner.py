@@ -143,13 +143,13 @@ class SycophancyInferenceExpRunner:
                 #     final_output = decoded_output
 
                 monitor_doc = {
-                    "raw_question_for_monitor": batch["raw_question_for_monitor"],
-                    "hint_str_for_monitor": batch.get("hint_str_for_monitor", ""),
+                    "raw_question_for_monitor": batch["raw_question_for_monitor"][batch_entry_idx],
+                    # "hint_str_for_monitor": batch.get("hint_str_for_monitor", [None])[batch_entry_idx],
                     "truncated_main_CoT": truncated_main_cot,
                     "main_response": truncated_main_cot,
                 }
                 monitor_prompt = verifier.create_monitor_message(monitor_doc)
-                llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"], final_output)
+                llm_judge_prompt = dataset_object.format_llm_judge_prompt(batch["raw_question_for_monitor"][batch_entry_idx], final_output)
 
                 if monitor_prompt is not None:
                     monitor_future = send_prompt_to_tinker(self.monitor_config, monitor_prompt)
@@ -166,9 +166,10 @@ class SycophancyInferenceExpRunner:
                 else:
                     compute_score_input_dict = {
                         "gt": batch['gt'][batch_entry_idx],
-                        "raw_question_for_monitor": batch["raw_question_for_monitor"],
+                        "raw_question_for_monitor": batch["raw_question_for_monitor"][batch_entry_idx],
                     }
-                    process_result_dict = dataset_object.compute_score(continuation=final_output, doc=compute_score_input_dict, judge_client_config=None)
+                    process_result_dict = dataset_object.compute_score(continuation=final_output,
+                                                                       doc=compute_score_input_dict)
                     main_score = process_result_dict["score"]
                     all_main_model_rewards.append(main_score)
                     main_extracted_solution = process_result_dict["extracted_solution"]
@@ -237,8 +238,8 @@ class SycophancyInferenceExpRunner:
                 ground_truths=main_model_reward.tolist(),
             )
 
-            monitor_metrics["total_monitor_valid_entries"] = np.sum(monitor_valid_mask).item()
-            monitor_metrics["total_output_valid_entries"] = np.sum(main_reward_valid_mask).item()
+            monitor_metrics["total_valid_CoT_entries"] = np.sum(monitor_valid_mask).item()
+            monitor_metrics["total_valid_output_entries"] = np.sum(main_reward_valid_mask).item()
             monitor_metrics["total_monitored_entries"] = np.sum(valid_mask).item()
 
             # Print metrics

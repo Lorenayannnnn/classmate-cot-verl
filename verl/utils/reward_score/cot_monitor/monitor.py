@@ -116,6 +116,9 @@ def monitor_cot_wrapper_w_tinker(
                 continue
             sample_result = sample_future.result()
             monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
+            # TODO haha
+            # print("🐛🐛🐛 monitor_prompt", monitor_prompt)
+            # print("🐛🐛🐛 monitor_explanation", monitor_explanation)
             for attempt in range(1, max_retries):
                 if monitor_score != verifier.invalid_score:
                     break

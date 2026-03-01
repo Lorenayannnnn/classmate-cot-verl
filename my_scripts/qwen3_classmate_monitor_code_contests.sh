@@ -1,7 +1,15 @@
 set -x
 
+#export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
+
+# Classmate model: Change url and port number in classmate-cot-verl/outputs/host_classmate_models/classmate_model_mapping.json
+#CUDA_VISIBLE_DEVICES=0,1 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 2 --gpu-memory-utilization 0.9 --port 8003
+#CUDA_VISIBLE_DEVICES=0 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 1 --gpu-memory-utilization 0.9 --port 8003
+# Now using Together AI
+
 data_dir=./data   # run on lambda
-dataset_name="anthropic_hh_rlhf"
+dataset_name="code_contests_pass_wrong_sol"
+sandbox_fusion_url="http://129.213.86.183:8081/run_code"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -13,13 +21,12 @@ eval_files="['$eval_path']"
 #TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
 #base_model_name_path=Qwen/Qwen3-1.7B
 base_model_name_path=Qwen/Qwen3-0.6B
-#base_model_name_path=LorenaYannnnn/20260226-hh_rlhf_compliance-grpo_warmup_16000_episodes_seed_42
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
 classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 
-train_size=8000   # After filtering out too long prompts
+#train_size=7000   # After filtering out too long prompts
 
 max_response_length=3072
 
@@ -48,8 +55,8 @@ test_freq=10
 
 epoch_num=3
 rollout_n=8
-train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
-total_episodes=$((train_size * epoch_num * rollout_n))
+#train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
+#total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
@@ -85,7 +92,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_unsafe_compliance_${base_model_name_path}_${adv_estimator}_${classmate_reward_type}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -93,6 +100,7 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True \
+    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
     reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
@@ -105,7 +113,6 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
 #    trainer.save_freq=$((train_steps / total_ckpts)) \
 #    trainer.test_freq=$((train_steps / total_test_times)) \
 #    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
-#    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model}
 #    actor_rollout_ref.model.lora_rank=32 \
 #    actor_rollout_ref.model.lora_alpha=32 \
@@ -113,4 +120,4 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_anthropic_hh_rlhf_wo_warmup.sh
+#bash my_scripts/qwen3_classmate_monitor_code_contests.sh

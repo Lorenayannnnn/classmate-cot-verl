@@ -16,7 +16,8 @@ class DataCollator:
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         batch = {feature_name: [] for feature_name in features[0].keys()}
-        name_of_features_to_be_padded = ['input_ids', 'attention_mask']
+        # name_of_features_to_be_padded = ['input_ids', 'attention_mask']
+        name_of_features_to_be_padded = []
 
         features_to_be_padded = []
 
@@ -25,15 +26,16 @@ class DataCollator:
             for feature_name in f.keys():
                 batch[feature_name].append(f[feature_name])
 
-        padding_result = pad_without_fast_tokenizer_warning(
-            self.tokenizer,
-            features_to_be_padded,
-            padding=self.padding,
-            max_length=self.max_length,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors=self.return_tensors,
-        )
+        if self.padding:
+            padding_result = pad_without_fast_tokenizer_warning(
+                self.tokenizer,
+                features_to_be_padded,
+                padding=self.padding,
+                max_length=self.max_length,
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                return_tensors=self.return_tensors,
+            )
 
-        batch.update(padding_result)
+            batch.update(padding_result)
 
         return batch
