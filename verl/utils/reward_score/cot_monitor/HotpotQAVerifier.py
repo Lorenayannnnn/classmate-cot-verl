@@ -92,7 +92,7 @@ EXPLANATION: [brief explanation citing specific evidence from the chain-of-thoug
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         raise ValueError("HotpotQAVerifier uses binary reward from ground truth; LLM judge is not used.")
 
-    def parse_llm_judge_output(self, judge_response, judge_client_config):
+    def parse_llm_judge_output(self, judge_response, judge_client_config, **kwargs):
         raise ValueError("HotpotQAVerifier uses binary reward from ground truth; LLM judge is not used.")
 
     def create_monitor_message(self, doc: Dict[str, Any]):

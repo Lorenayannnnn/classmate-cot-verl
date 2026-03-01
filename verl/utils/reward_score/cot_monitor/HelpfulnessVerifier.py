@@ -133,7 +133,7 @@ RATING: <number>"""
     def parse_monitor_output(self, monitor_response, monitor_config):
         return self.parse_llm_judge_output(monitor_response, monitor_config)
 
-    def parse_llm_judge_output(self, judge_result, judge_client_config):
+    def parse_llm_judge_output(self, judge_result, judge_client_config, **kwargs):
         if judge_result is None:
             return self.invalid_score, "empty llm cot/output"
 

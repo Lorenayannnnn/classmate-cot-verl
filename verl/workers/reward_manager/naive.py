@@ -155,6 +155,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 main_output = response_str
 
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
+            ground_truth_for_llm_judge = data_item.non_tensor_batch["reward_model"].get("ground_truth_for_llm_judge", ground_truth)
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
             num_turns = data_item.non_tensor_batch.get("__num_turns__", None)
@@ -207,6 +208,7 @@ class NaiveRewardManager(AbstractRewardManager):
                     "ground_truth": ground_truth,
                     "data_source": data_source,
                     "valid_response_length": valid_response_length,
+                    "ground_truth_for_llm_judge": ground_truth_for_llm_judge,
                 }
             )
 
@@ -219,7 +221,9 @@ class NaiveRewardManager(AbstractRewardManager):
                     pass
                 else:
                     verifier = get_verifier(data_source=ctx["data_source"])
-                    judge_score, judge_explanation = verifier.parse_llm_judge_output(score, self.judge_client_config)
+                    judge_score, judge_explanation = verifier.parse_llm_judge_output(
+                        score, self.judge_client_config,
+                        continuation=ctx["main_output"], gt=ctx["ground_truth_for_llm_judge"])
                     score = {
                         "score": judge_score,
                         "extracted_solution": ctx["main_output"],
@@ -268,6 +272,8 @@ class NaiveRewardManager(AbstractRewardManager):
                     print("🐛[main_output]", ctx["main_output"])
                 if ctx["ground_truth"] is None:
                     # for open-ended generation
+                    if ctx["ground_truth_for_llm_judge"] is not None:
+                        print("🐛[ground_truth_for_llm_judge]", ctx["ground_truth_for_llm_judge"])
                     if isinstance(score, dict):
                         print("🐛[llm judge score]", reward)
                         print("🐛[judge_explanation]", judge_explanation)

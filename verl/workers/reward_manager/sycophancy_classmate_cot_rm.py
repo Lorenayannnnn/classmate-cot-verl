@@ -170,6 +170,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 main_output = response_str
 
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
+            ground_truth_for_llm_judge = data_item.non_tensor_batch["reward_model"].get("ground_truth_for_llm_judge", ground_truth)
 
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
@@ -226,6 +227,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     "main_cot": main_cot,
                     "main_output": main_output,
                     "ground_truth": ground_truth,
+                    "ground_truth_for_llm_judge": ground_truth_for_llm_judge,
                     "data_source": data_source,
                     "extra_info": extra_info,
                     "valid_response_length": valid_response_length,
@@ -233,6 +235,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     "classmate_outputs": classmate_outputs,
                     "main_keep_rate": main_keep_rate,
                     "classmate_ground_truth": classmate_ground_truth,
+                    "classmate_ground_truth_for_llm_judge": ground_truth_for_llm_judge,
                 }
             )
 
@@ -247,7 +250,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 pass
             else:
                 verifier = get_verifier(data_source=ctx["data_source"])
-                judge_score, judge_explanation = verifier.parse_llm_judge_output(actor_score, self.judge_client_config)
+                judge_score, judge_explanation = verifier.parse_llm_judge_output(
+                    actor_score, self.judge_client_config,
+                    continuation=ctx["main_output"], gt=ctx["classmate_ground_truth_for_llm_judge"])
                 actor_score = {
                     "score": judge_score,
                     "extracted_solution": ctx["main_output"],
@@ -340,8 +345,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     else:
                         verifier = get_verifier(data_source=ctx["data_source"])
                         # Parse response
-                        judge_score, judge_explanation = verifier.parse_llm_judge_output(tmp_classmate_result,
-                                                                                         self.judge_client_config)
+                        judge_score, judge_explanation = verifier.parse_llm_judge_output(
+                            tmp_classmate_result, self.judge_client_config,
+                            continuation=classmate_outputs[classmate_idx][0], gt=ctx["ground_truth_for_llm_judge"])
                         tmp_classmate_result = {
                             "score": judge_score,
                             "extracted_solution": classmate_outputs[classmate_idx][0],
@@ -417,6 +423,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 extracted_solution = ctx["extracted_solution"]
                 if ground_truth is None:
                     # for open-ended generation
+                    if ctx["ground_truth_for_llm_judge"] is not None:
+                        print("🐛[main_ground_truth_for_llm_judge]", ctx["ground_truth_for_llm_judge"])
                     print("🐛[llm judge score]", actor_score.get("score", None) if isinstance(actor_score, dict) else None)
                     if isinstance(actor_score, dict):
                         print("🐛[llm judge explanation]", actor_score.get("judge_explanation", None))
@@ -435,6 +443,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 if ground_truth is not None:
                     print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)
                 else:
+                    if ctx["classmate_ground_truth_for_llm_judge"] is not None:
+                        print("🐛[classmate_ground_truth_for_llm_judge]", ctx["classmate_ground_truth_for_llm_judge"])
                     print("🐛[cl_judge_explanation_list]", cl_judge_explanation_list[0][0])   # 0th classmate model, 0th sample
                 print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
                 print("🐛[final_reward]", final_reward)

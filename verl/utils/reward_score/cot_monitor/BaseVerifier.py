@@ -16,7 +16,7 @@ class BaseVerifier(ABC):
     - Non-binary rewards: reports MSE
     """
 
-    def __init__(self, reward_type):
+    def __init__(self, reward_type, invalid_score=None):
         """
         Initialize the verifier with a reward type.
 
@@ -27,13 +27,18 @@ class BaseVerifier(ABC):
             raise ValueError(f"reward_type must be 'binary' or 'non_binary', got {reward_type}")
         self.reward_type = reward_type
 
+        if invalid_score is not None:
+            self._invalid_score = invalid_score
+        else:
+            self._invalid_score = -1.0 if reward_type == "binary" else 0.0
+
     @property
     def invalid_score(self) -> float:
         """Sentinel value for a failed/unparseable score (when model fails to generate close thinking tag and thus an output), excluded from metrics.
         Binary: -1 (valid scores are 0 and 1, so -1 is unambiguous).
         Non-binary: 0 (valid scores are 1-10, so 0 is unambiguous).
         """
-        return -1.0 if self.reward_type == "binary" else 0.0
+        return self._invalid_score
 
     @abstractmethod
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
@@ -43,7 +48,7 @@ class BaseVerifier(ABC):
             raise NotImplementedError("LLM judge prompt formatting not implemented for this verifier. If you want to use LLM judge evaluation, please implement format_llm_judge_prompt in your verifier subclass.")
 
     @abstractmethod
-    def parse_llm_judge_output(self, judge_response, judge_client_config):
+    def parse_llm_judge_output(self, judge_response, judge_client_config, **kwargs):
         if self.reward_type == "binary":
             raise ValueError("Reward is binary; gt should be provided; should not use llm judge")
         else:
@@ -230,6 +235,12 @@ def get_verifier(data_source=None) -> BaseVerifier:
     if any("sycophancy_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier()
+    elif any("mmlu_no_numerical_confidence" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.MMLUNoNumericalConfidenceVerifier import MMLUNoNumericalConfidenceVerifier
+        return MMLUNoNumericalConfidenceVerifier()
+    elif any("mmlu_confidence" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.MMLUConfidenceVerifier import MMLUConfidenceVerifier
+        return MMLUConfidenceVerifier()
     elif any("helpful_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
         return HelpfulnessVerifier()

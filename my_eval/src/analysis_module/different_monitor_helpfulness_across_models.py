@@ -171,8 +171,8 @@ def _make_tinker_judge_backend(model_name: str):
             return None
         return send_prompt_to_tinker(tinker_config, prompt)
 
-    def parse(future_result, verifier):
-        return verifier.parse_llm_judge_output(future_result, tinker_config)
+    def parse(future_result, verifier, continuation=None, gt=None):
+        return verifier.parse_llm_judge_output(future_result, tinker_config, continuation=continuation, gt=gt)
 
     return dispatch, parse, None
 
@@ -390,7 +390,8 @@ def run_different_monitor_and_judge(
                                     entry[judge_expl_key] = judge_future["explanation"]
                                 else:
                                     judge_score, judge_explanation = parse_judge(
-                                        judge_future.result(), verifier
+                                        judge_future.result(), verifier,
+                                        continuation=entry.get("main_output"), gt=entry.get("ground_truth_for_llm_judge")
                                     )
                                     entry[judge_key] = judge_score
                                     entry[judge_expl_key] = judge_explanation

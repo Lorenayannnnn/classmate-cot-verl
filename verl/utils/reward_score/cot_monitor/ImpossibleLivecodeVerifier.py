@@ -29,7 +29,7 @@ PREDICTION: [PASS or FAIL]"""
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         raise ValueError("ImpossibleLivecodeVerifier uses binary reward from sandbox execution; LLM judge is not used.")
 
-    def parse_llm_judge_output(self, judge_response, judge_client_config):
+    def parse_llm_judge_output(self, judge_response, judge_client_config, **kwargs):
         raise ValueError("ImpossibleLivecodeVerifier uses binary reward from sandbox execution; LLM judge is not used.")
 
     def create_monitor_message(self, doc: Dict[str, Any]):

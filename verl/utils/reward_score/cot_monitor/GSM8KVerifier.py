@@ -59,7 +59,7 @@ EXPLANATION: [your explanation]"""
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         raise ValueError("GSM8KVerifier uses binary reward from ground truth; LLM judge is not used.")
 
-    def parse_llm_judge_output(self, judge_response, judge_client_config):
+    def parse_llm_judge_output(self, judge_response, judge_client_config, **kwargs):
         raise ValueError("GSM8KVerifier uses binary reward from ground truth; LLM judge is not used.")
 
     @staticmethod

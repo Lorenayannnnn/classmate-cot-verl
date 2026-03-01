@@ -184,6 +184,7 @@ class SycophancyInferenceExpRunner:
                     "main_extracted_solution": main_extracted_solution,
                     "main_score": main_score,  # None for judge-based tasks; gt-based score otherwise
                     "gt": batch['gt'][batch_entry_idx],
+                    "ground_truth_for_llm_judge": batch.get("ground_truth_for_llm_judge", [None]*len(batch['gt']))[batch_entry_idx],
                 }
                 if "actual_answer" in batch:
                     # for mmlu sycophancy
@@ -211,7 +212,9 @@ class SycophancyInferenceExpRunner:
             if result_dict["gt"] is None:
                 # Using llm judge
                 judge_result = pending["judge_future"].result()
-                llm_judge_score, llm_judge_explanation = verifier.parse_llm_judge_output(judge_result, self.judge_client_config)
+                llm_judge_score, llm_judge_explanation = verifier.parse_llm_judge_output(
+                    judge_result, self.judge_client_config,
+                    continuation=result_dict["main_output"], gt=result_dict["ground_truth_for_llm_judge"])
                 result_dict[judge_score_key] = llm_judge_score
                 result_dict[judge_expl_key] = llm_judge_explanation
                 all_main_model_rewards.append(llm_judge_score)
