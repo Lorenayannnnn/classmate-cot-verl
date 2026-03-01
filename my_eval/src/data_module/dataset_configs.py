@@ -3,6 +3,7 @@
 from my_eval.src.data_module.dataset_objects.aime import AIME
 from my_eval.src.data_module.dataset_objects.gsm8k import GSM8K
 from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
+from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
 from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier as MMLUSycophancy
 from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
 from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
@@ -16,8 +17,8 @@ DATASET_NAME_TO_CLASS = {
     # "gpqa": GPQA,
     # "mmlu": MMLU
     "mmlu_sycophancy": MMLUSycophancy,
-    "helpful_instructions": SycophancyVerifier,
-    # "helpful_instructions": GeneralSycophancyVerifier
+    "sycophancy_instructions": SycophancyVerifier,
+    "helpful_instructions": HelpfulnessVerifier,
     "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,
 }
 

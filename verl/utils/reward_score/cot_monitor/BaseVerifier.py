@@ -227,9 +227,12 @@ def get_verifier(data_source=None) -> BaseVerifier:
     data_sources = _normalize_data_sources(data_source)
     # data_source_joined = " ".join(data_sources)
 
-    if any("helpful_instructions" in source for source in data_sources):
+    if any("sycophancy_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier()
+    elif any("helpful_instructions" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
+        return HelpfulnessVerifier()
     elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
         return AnthropicHHRLHFVerifier()
