@@ -223,7 +223,8 @@
     ```
     curl 'http://localhost:YOUR_PORT_NUMBER/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
     
-    curl 'http://129.213.86.183:8080/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
+    curl 'http://147.224.36.58:8080/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
+    curl 'http://147.224.36.58:8081/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
     ```
     
 # Hosting Sandbox for coding tasks

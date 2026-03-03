@@ -1,15 +1,8 @@
 set -x
 
-#export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
-
-# Classmate model: Change url and port number in classmate-cot-verl/outputs/host_classmate_models/classmate_model_mapping.json
-#CUDA_VISIBLE_DEVICES=0,1 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 2 --gpu-memory-utilization 0.9 --port 8003
-#CUDA_VISIBLE_DEVICES=0 vllm serve "meta-llama/Llama-3.2-1B-Instruct" --served-model-name "meta-llama/Llama-3.2-1B-Instruct" --tensor_parallel_size 1 --gpu-memory-utilization 0.9 --port 8003
-# Now using Together AI
-
 data_dir=./data   # run on lambda
 dataset_name="code_contests_pass_wrong_sol"
-sandbox_fusion_url="http://129.213.86.183:8081/run_code"
+sandbox_fusion_url="http://147.224.36.58:8081/run_code"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -17,14 +10,23 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
-#TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
-#base_model_name_path=Qwen/Qwen3-1.7B
-base_model_name_path=Qwen/Qwen3-0.6B
-#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
-#base_model_name_path=Qwen/Qwen3-0.6B-Base
-classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
+#base_model_name_path=Qwen/Qwen2.5-Coder-0.5B
+#classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-0.5B"]'
+#base_model_name_path=Qwen/Qwen2.5-Coder-1.5B
+#classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-1.5B"]'
+
+#base_model_name_path=Qwen/Qwen2.5-Coder-0.5B-Instruct
+#classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-0.5B-Instruct"]'
+#base_model_name_path=Qwen/Qwen2.5-Coder-1.5B-Instruct
+#classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-1.5B-Instruct"]'
+base_model_name_path=Qwen/Qwen2.5-Coder-3B-Instruct
+classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-3B-Instruct"]'
+think_start_str="### Reasoning"
+think_end_str="### Test Case"
+
+#base_model_name_path=Qwen/Qwen2.5-Coder-1.5B
+#classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-1.5B"]'
+
 
 #train_size=7000   # After filtering out too long prompts
 
@@ -101,6 +103,8 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo
     data.seed=${seed} \
     data.return_raw_chat=True \
     reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
+    "reward_model.think_start_str='${think_start_str}'" \
+    "reward_model.think_end_str='${think_end_str}'" \
     reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \

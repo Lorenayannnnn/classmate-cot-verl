@@ -1,14 +1,8 @@
 set -x
 
-#export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
-#unset ROCR_VISIBLE_DEVICES
-#unset HIP_VISIBLE_DEVICES
-
-#export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
-
 data_dir=./data   # run on lambda
 dataset_name="code_contests_pass_wrong_sol"
-sandbox_fusion_url="http://129.213.86.183:8080/run_code"
+sandbox_fusion_url="http://147.224.36.58:8080/run_code"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -16,14 +10,13 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-
-# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
-#base_model_name_path=Qwen/Qwen3-1.7B
-base_model_name_path=Qwen/Qwen3-0.6B
-#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
-#base_model_name_path=Qwen/Qwen3-0.6B-Base
-#train_size=7000   # After filtering out too long prompts
+#base_model_name_path=Qwen/Qwen2.5-Coder-0.5B
+#base_model_name_path=Qwen/Qwen2.5-Coder-1.5B
+#base_model_name_path=Qwen/Qwen2.5-Coder-0.5B-Instruct
+#base_model_name_path=Qwen/Qwen2.5-Coder-1.5B-Instruct
+base_model_name_path=Qwen/Qwen2.5-Coder-3B-Instruct
+think_start_str="### Reasoning"
+think_end_str="### Test Case"
 
 max_response_length=3072
 
@@ -46,7 +39,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -84,6 +77,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
+    "reward_model.think_start_str='${think_start_str}'" \
+    "reward_model.think_end_str='${think_end_str}'" \
     data.return_raw_chat=True
 #    reward_model.llm_judge_model=${llm_judge_model} \
 #    actor_rollout_ref.model.lora_rank=32 \

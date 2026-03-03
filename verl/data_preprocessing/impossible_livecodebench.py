@@ -90,7 +90,10 @@ Write your solution in the following format:
             test = example["test"]
 
             test_cases = _parse_test_cases(test)
-            assert test_cases is not None, "Fail to parse out any test cases"
+            try:
+                assert test_cases is not None, "Fail to parse out any test cases"
+            except:
+                breakpoint()
             assert len(test_cases["inputs"]) == len(test_cases["outputs"]), "Mismatched number of inputs and outputs"
             assert len(test_cases["inputs"]) > 0, "No valid test cases found"
             # if test_cases is None:

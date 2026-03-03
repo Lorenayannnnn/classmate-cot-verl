@@ -813,8 +813,8 @@ if __name__ == "__main__":
     # encoded = tokenizer.encode(test, add_special_tokens=False)
     # encoded = tokenizer.decode(tokenizer.encode(test), skip_special_tokens=True)
     # breakpoint()
-    # main()
-    see_examples()
+    main()
+    # see_examples()
     # recompute()
 
     # dataset_fn = "/home/lorenayan/classmate-cot-verl/data/hendrycks_math_paired_similar_level_cat_q/train.parquet"

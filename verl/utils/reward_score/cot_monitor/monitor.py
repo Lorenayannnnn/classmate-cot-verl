@@ -118,6 +118,7 @@ def monitor_cot_wrapper_w_tinker(
             monitor_score, monitor_explanation = verifier.parse_monitor_output(sample_result, monitor_config)
             # TODO haha
             # print("🐛🐛🐛 monitor_prompt", monitor_prompt)
+            # print("🐛🐛🐛 monitor_score", monitor_score)
             # print("🐛🐛🐛 monitor_explanation", monitor_explanation)
             for attempt in range(1, max_retries):
                 if monitor_score != verifier.invalid_score:
@@ -134,91 +135,105 @@ def monitor_cot_wrapper_w_tinker(
         raise NotImplementedError("monitor_cot_wrapper_new is only implemented for Tinker judge. Set USE_TINKER=True and USE_OPENAI=False.")
 
 
+def _find_subsequence(token_ids_tensor, subseq_list):
+    """Return sorted list of start positions where subseq_list appears in token_ids_tensor."""
+    n = token_ids_tensor.size(0)
+    m = len(subseq_list)
+    if m == 0 or n < m:
+        return []
+    subseq_tensor = torch.tensor(subseq_list, dtype=token_ids_tensor.dtype, device=token_ids_tensor.device)
+    positions = []
+    for i in range(n - m + 1):
+        if torch.equal(token_ids_tensor[i:i + m], subseq_tensor):
+            positions.append(i)
+    return positions
+
+
 def parse_out_main_cot_output(
     main_pred,
     main_pred_token_ids,
     tokenizer,
-    think_open_id,
-    think_close_id,
+    think_start_str,
+    think_end_str,
 ):
     """Parse CoT and final output from a model response using token-level boundaries.
 
-    Locates <think> and </think> directly in ``main_pred_token_ids`` so that
-    the returned ``cot_start`` / ``cot_end`` indices are correctly aligned with
-    ``data.batch["responses"]``.  ``main_cot`` is decoded from those exact token
-    positions (no re-encoding round-trip).
+    Encodes ``think_start_str`` and ``think_end_str`` into token IDs and locates
+    them directly in ``main_pred_token_ids`` so that the returned ``cot_start`` /
+    ``cot_end`` indices are correctly aligned with ``data.batch["responses"]``.
+    ``main_cot`` is decoded from those exact token positions (no re-encoding
+    round-trip).
+
+    Supports single-token markers (e.g. ``think_start_str`` / ``think_end_str``) and
+    multi-token markers (e.g. ``### Reasoning`` / ``### Test Case``).
 
     Note: only called when enable_thinking=True.
 
     Parameters
     ----------
     main_pred            : str   – decoded response string (used as fallback text
-                                   for main_cot when </think> is absent)
+                                   for main_cot when the closing marker is absent)
     main_pred_token_ids  : Tensor or list – full response token IDs
     tokenizer            : tokenizer instance
-    think_open_id        : int – token ID of <think>
-    think_close_id       : int – token ID of </think>
+    think_start_str      : str   – opening marker string (e.g. ``<think>`` or
+                                   ``### Reasoning``)
+    think_end_str        : str   – closing marker string (e.g. ``</think>`` or
+                                   ``### Test Case``)
 
     Returns
     -------
     main_cot         : str   – CoT text
-    final_output     : str | None – text after </think>, or None if not found
-    # start_with_think : bool
-    # end_with_think   : bool
+    final_output     : str | None – text after the closing marker, or None if not found
     cot_start        : int   – index of first CoT token in the response tensor
-    cot_end          : int | None – exclusive end index (== index of </think>),
-                                    or None when </think> was not found;
+    cot_end          : int | None – exclusive end index (== index of closing marker),
+                                    or None when the closing marker was not found;
                                     caller should clamp with the valid response length
     """
     if not isinstance(main_pred_token_ids, torch.Tensor):
         main_pred_token_ids = torch.tensor(main_pred_token_ids)
 
-    open_positions  = (main_pred_token_ids == think_open_id).nonzero(as_tuple=True)[0]
-    close_positions = (main_pred_token_ids == think_close_id).nonzero(as_tuple=True)[0]
+    think_open_ids  = tokenizer.encode(think_start_str, add_special_tokens=False)
+    think_close_ids = tokenizer.encode(think_end_str, add_special_tokens=False)
+
+    open_positions  = _find_subsequence(main_pred_token_ids, think_open_ids)
+    close_positions = _find_subsequence(main_pred_token_ids, think_close_ids)
+
+    open_marker_len  = len(think_open_ids)
+    close_marker_len = len(think_close_ids)
 
     if len(open_positions) > 0:
-        first_open = open_positions[0].item()
-        # haha include <think> in CoT?
-        cot_start = first_open + 1  # CoT begins right after <think>
-        # cot_start = first_open  # CoT begins AT <think>
-        # start_with_think = True
+        first_open = open_positions[0]
+        cot_start = first_open + open_marker_len  # CoT begins right after opening marker
 
-        # First </think> that appears after the opening tag
-        close_after_open = close_positions[close_positions > first_open]
+        # First closing marker that appears after the opening marker
+        close_after_open = [p for p in close_positions if p > first_open]
         if len(close_after_open) > 0:
-            # haha include <think> in CoT?
-            cot_end = close_after_open[0].item()  # CoT ends right before </think>
-            # cot_end = close_after_open[0].item() + 1    # CoT ends right AT </think>
-            # end_with_think = True
+            cot_end = close_after_open[0]  # CoT ends right before closing marker
             final_output = tokenizer.decode(
-                main_pred_token_ids[cot_end + 1:].tolist(), skip_special_tokens=True
+                main_pred_token_ids[cot_end + close_marker_len:].tolist(), skip_special_tokens=True
             )
             main_cot = tokenizer.decode(
                 main_pred_token_ids[cot_start:cot_end].tolist(), skip_special_tokens=True
             )
         else:
-            # No </think> found after <think>.  cot_end=None signals to the caller
-            # to clamp using the valid response length from response_mask.
+            # No closing marker found after opening marker.  cot_end=None signals to
+            # the caller to clamp using the valid response length from response_mask.
             # main_cot falls back to text splitting because we cannot determine the
             # valid end boundary (vs. padding) from token IDs alone here.
             cot_end = None
-            # end_with_think = False
             final_output = None
-            main_cot = main_pred.split("<think>", 1)[1] if "<think>" in main_pred else main_pred
+            main_cot = main_pred.split(think_start_str, 1)[1] if think_start_str in main_pred else main_pred
     else:
         cot_start = 0
-        # start_with_think = False
         cot_end = None
-        # end_with_think = False
         final_output = None
         main_cot = main_pred
 
-    # return main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end
     return main_cot, final_output, cot_start, cot_end
 
 
 
-def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_response, main_pred_token_ids, main_response_mask, keep_ratio):
+def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_response, main_pred_token_ids, main_response_mask, keep_ratio, think_start_str, think_end_str):
     """
     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
     """
@@ -229,12 +244,9 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     # start_with_think = False
 
     if enable_thinking:
-        think_open_id  = tokenizer.convert_tokens_to_ids("<think>")
-        think_close_id = tokenizer.convert_tokens_to_ids("</think>")
-
         # main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end = parse_out_main_cot_output(
         main_cot, final_output, cot_start, cot_end = parse_out_main_cot_output(
-            main_response, main_pred_token_ids, tokenizer, think_open_id, think_close_id
+            main_response, main_pred_token_ids, tokenizer, think_start_str, think_end_str
         )
 
         if main_response_mask is not None:

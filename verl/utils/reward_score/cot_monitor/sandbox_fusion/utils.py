@@ -191,6 +191,11 @@ def _process_single_case(
 
     current_generation_code = generation
 
+    if language == "java":
+        # Sandbox saves code as Main.java, so the public class must be named Main.
+        import re as _re
+        current_generation_code = _re.sub(r'public\s+class\s+\w+', 'public class Main', current_generation_code)
+
     if fn_name and language == "python":
         # Wrapper assumes stdin_data is a JSON string for function arguments.
         wrapper_code = f"""
@@ -442,6 +447,17 @@ if __name__ == '__main__':
         metadata["status"] = "unknown_api_state"
         result_status = -1
         logger.error(f"Case {case_index}: Unknown API state (no response and no error message).")
+
+    # TODO haha
+    print("🐛🐛 ======= Start =======")
+    print("🐛🐛 language:", language)
+    print("🐛🐛 inputs:", stdin_data)
+    print("🐛🐛 expected_outputs:", expected_output)
+    print("🐛🐛 generation:", current_generation_code)
+    print("🐛🐛 result_status:", result_status)
+    print("🐛🐛 metadata:", metadata)
+    print("🐛🐛 ======= End =======")
+
     return result_status, metadata
 
 
@@ -449,9 +465,9 @@ def check_correctness(
     sandbox_fusion_url: str,
     in_outs: Optional[dict],
     generation: str,
+    language: str,
     timeout: int = DEFAULT_TIMEOUT,
     memory_limit_mb: int = 1024,
-    language: str = "python",
     concurrent_semaphore: Optional[threading.Semaphore] = None,
 ) -> tuple[list[Any], list[dict[str, Any]]]:
     """

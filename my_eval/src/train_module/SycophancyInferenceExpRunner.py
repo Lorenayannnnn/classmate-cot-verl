@@ -25,7 +25,7 @@ def _as_future(result):
 
 
 class SycophancyInferenceExpRunner:
-    def __init__(self, model, tokenizer, data_loader, inference_backend, args, enable_thinking, main_cot_keep_rate, data_source):
+    def __init__(self, model, tokenizer, data_loader, inference_backend, args, enable_thinking, main_cot_keep_rate, data_source, think_start_str, think_end_str):
         self.model = model
         self.tokenizer = tokenizer
         self.data_loader = data_loader
@@ -41,6 +41,8 @@ class SycophancyInferenceExpRunner:
         # self.openai_client = OpenAI(api_key=OPENAI_KEY)
         self.main_cot_keep_rate = main_cot_keep_rate
         self.data_source = data_source
+        self.think_start_str = think_start_str
+        self.think_end_str = think_end_str
 
         self.monitor_config = create_llm_judge(  # Now use the same model as monitor and judge
             # judge_model_name="openai/gpt-oss-20b",
@@ -128,7 +130,7 @@ class SycophancyInferenceExpRunner:
                 # Truncate output_token_ids and decode
                 output_token_ids = outputs[batch_entry_idx].outputs[0].token_ids
 
-                # Parse out cot in between <think> and </think>
+                # Parse out cot in between think_start_str and think_end_str
                 truncated_main_cot, _, final_output, _ = process_main_cot_helper(
                     tokenizer=self.tokenizer,
                     enable_thinking=self.enable_thinking,
@@ -137,6 +139,8 @@ class SycophancyInferenceExpRunner:
                     main_pred_token_ids=output_token_ids,
                     main_response_mask=None,
                     keep_ratio=self.main_cot_keep_rate,
+                    think_start_str=self.think_start_str,
+                    think_end_str=self.think_end_str,
                 )
                 # else:
                 #     truncated_main_cot = decoded_output
@@ -169,7 +173,8 @@ class SycophancyInferenceExpRunner:
                         "raw_question_for_monitor": batch["raw_question_for_monitor"][batch_entry_idx],
                     }
                     process_result_dict = dataset_object.compute_score(continuation=final_output,
-                                                                       doc=compute_score_input_dict)
+                                                                       doc=compute_score_input_dict,
+                                                                       sandbox_fusion_url=self.args.sandbox_fusion_url)
                     main_score = process_result_dict["score"]
                     all_main_model_rewards.append(main_score)
                     main_extracted_solution = process_result_dict["extracted_solution"]

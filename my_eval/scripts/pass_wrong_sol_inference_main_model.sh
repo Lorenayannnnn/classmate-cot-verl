@@ -12,8 +12,10 @@ main_model_name_or_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_sycophancy_warmup
 
 base_model_name_or_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
 
-think_start_str="<think>"
-think_end_str="</think>"
+think_start_str="### Reasoning"
+think_end_str="### Test Case"
+
+sandbox_fusion_url=
 
 main_cot_keep_rate=1
 
@@ -70,7 +72,7 @@ gpu_idx=2
         model_args.think_start_str=${think_start_str} \
         model_args.think_end_str=${think_end_str} \
         running_args.generation_args.max_tokens=3072 \
-        data_args.dataset_name=helpful_instructions \
+        data_args.dataset_name=code_contests_pass_wrong_sol \
         data_args.max_predict_samples=1000
     echo "Finished inference main model at step ${step_idx}"
   )

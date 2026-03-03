@@ -453,6 +453,8 @@ class ClassmateCoTRayPPOTrainer:
         classmate_vllm_configs=None,
         seed=None,
         enable_thinking=None,
+        think_start_str=None,
+        think_end_str=None,
         # host_classmate_name_to_url_json_fn=None,
     ):
         """
@@ -573,6 +575,8 @@ class ClassmateCoTRayPPOTrainer:
 
         assert enable_thinking is not None, "Specify enable_thinking when initializing ClassmateCoTRayPPOTrainer."
         self.enable_thinking = enable_thinking
+        self.think_start_str = think_start_str
+        self.think_end_str = think_end_str
 
         self.monitor_config = create_llm_judge(
             judge_model_name=INPUT_JUDGE_MODEL_NAME,
@@ -866,7 +870,9 @@ class ClassmateCoTRayPPOTrainer:
                         response,
                         item.batch["responses"],  # token ids
                         None,  # response masks
-                        self.classmate_cot_reward_configs.main_cot_keep_rate
+                        self.classmate_cot_reward_configs.main_cot_keep_rate,
+                        self.think_start_str,
+                        self.think_end_str,
                     )
                     # all_main_cots.append(parse_out_main_cot_output(response)[0])
                     all_main_cots.append(truncated_main_cot)
@@ -1186,125 +1192,6 @@ class ClassmateCoTRayPPOTrainer:
                 config=self.config, worker_group=self.actor_rollout_wg, rm_wg=self.rm_wg
             )
 
-    # def _find_token_subsequence_for_string(self, token_ids, target_string):
-    #     """
-    #     Find the shortest subsequence of token_ids that decodes to target_string.
-
-    #     Args:
-    #         token_ids: Sequence of token IDs (list or tensor)
-    #         target_string: Target string to match
-
-    #     Returns:
-    #         int: Index i such that tokenizer.decode(token_ids[:i]) == target_string.
-    #              Returns -1 if no match found.
-    #     """
-    #     right_ptr = 1
-    #     while right_ptr < len(token_ids):
-    #         decoded = self.tokenizer.decode(token_ids[:right_ptr], skip_special_tokens=True)
-    #         # Exact match found - try to extend to include trailing whitespace tokens
-    #         if decoded.strip() == target_string.strip():
-    #             # Check if we can include additional whitespace tokens
-    #             while right_ptr < len(token_ids):
-    #                 decoded = self.tokenizer.decode(token_ids[:right_ptr + 1], skip_special_tokens=True)
-    #                 # Stop if we exceed target length or lose the match
-    #                 if len(decoded) > len(target_string) or decoded.strip() != target_string.strip():
-    #                     break
-    #                 right_ptr += 1
-    #             return right_ptr
-
-    #         # Early exit: no early exit because there might be a lot of whitespace characters prepended
-    #         # if len(decoded) > len(target_string):
-    #             # Decoded is already longer than target, won't find match
-    #             # break
-
-    #         right_ptr += 1
-
-    #     return -1
-
-    # def _old_process_main_cot_helper(self, data_source, main_cot, main_pred_token_ids, main_response_mask, keep_ratio):
-    #     """
-    #     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
-    #     """
-    #     # haha double check for code_contests_modify_code
-    #     if data_source == "code_contests_modify_code":
-    #         breakpoint()
-    #         reason_section_name = "### Reasoning"
-    #         test_case_section_name = "### Test Inputs and Outputs"
-    #         main_cot = reason_section_name + "\n" + main_cot.split(reason_section_name)[-1].split(test_case_section_name)[0].strip()
-    #     # elif data_source == "code_stdio" or data_source == "code":
-    #     #     used in olmo3 CodeVerifier
-    #         # main_pred = process_code_output(main_pred)
-    #
-    #     if self.enable_thinking:
-    #         main_cot, _, _ = self.parse_out_main_cot_output(main_cot)
-    #
-    #     _SPLIT_WS = re.compile(r"\S+|\s+")
-    #     num_to_keep = int(len(main_cot.split()) * keep_ratio)  # counts non-whitespace tokens
-    #     if num_to_keep <= 0:
-    #         # Keep the entire main CoT when it's too short
-    #         return main_cot, main_response_mask.tolist()
-    #
-    #     kept = []
-    #     count = 0
-    #     for m in _SPLIT_WS.finditer(main_cot):
-    #         t = m.group(0)
-    #         # whitespace tokens start with a whitespace char
-    #         if t[0].isspace():
-    #             kept.append(t)
-    #         else:
-    #             count += 1
-    #             if count > num_to_keep:
-    #                 break
-    #             kept.append(t)
-    #
-    #     truncated_text = "".join(kept)
-    #
-    #     if self.enable_thinking:
-    #         truncated_text = "<think>" + truncated_text
-    #
-    #     # Find the token index that corresponds to the truncated text
-    #     token_index = self._find_token_subsequence_for_string(main_pred_token_ids, truncated_text)
-    #
-    #     if token_index == -1:
-    #         # # store to output file
-    #         # with open("debug_truncation_failure.txt", "a") as f:
-    #         #     f.write(f"Data source: {data_source}\n")
-    #         #     f.write(f"Original main_pred: {main_pred}\n")
-    #         #     f.write(f"Truncated text: {truncated_text}\n")
-    #         #     f.write(f"Token IDs: {main_pred_token_ids.tolist()}\n")
-    #         #     f.write("\n" + "="*80 + "\n\n")
-    #         raise ValueError(
-    #             f"Could not find token subsequence matching truncated text.\n"
-    #             f"Truncated text: {truncated_text}\n"
-    #             f"Token IDs: {main_pred_token_ids.tolist()}"
-    #         )
-    #
-    #     # print("🐛🐛🐛 original main_pred", main_pred)
-    #     # print("🐛🐛🐛 truncated_text", truncated_text)
-    #     # print("🐛🐛🐛 token_index", token_index)
-    #     # print("🐛🐛🐛 main_response_mask", main_response_mask)
-    #     # print("🐛🐛🐛 classmate_input_mask", main_response_mask[:token_index].tolist())
-    #     # print("🐛🐛🐛 final_classmate_input_mask", main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index))
-    #
-    #     return truncated_text, main_response_mask[:token_index].tolist() + [0] * (len(main_response_mask) - token_index)
-
-    # def derangement(self, lst):
-    #     n = len(lst)
-    #     if n <= 1:
-    #         raise ValueError("Derangement not possible")
-    #
-    #     perm = lst[:]
-    #
-    #     for i in range(n - 1):
-    #         j = random.randrange(i + 1, n)
-    #         perm[i], perm[j] = perm[j], perm[i]
-    #
-    #     # Fix last element if needed
-    #     if perm[-1] == lst[-1]:
-    #         perm[-1], perm[-2] = perm[-2], perm[-1]
-    #
-    #     return perm
-
     def derange_two_lists(self, lst1, lst2):
         if len(lst1) != len(lst2):
             raise ValueError("Lists must have the same length")
@@ -1406,7 +1293,9 @@ class ClassmateCoTRayPPOTrainer:
                     response,
                     data.batch["responses"][res_idx],       # token ids
                     data.batch["response_mask"][res_idx],   # response masks
-                    keep_rate
+                    keep_rate,
+                    self.think_start_str,
+                    self.think_end_str,
                 )
                 all_processed_actor_responses.append(truncated_main_cot)
                 all_keep_rates.append(keep_rate)
@@ -1515,21 +1404,23 @@ class ClassmateCoTRayPPOTrainer:
 
         num_models = len(self.classmate_workers)
 
-        # Set is_eval in meta_info for dispatch compatibility
-        classmate_batch.meta_info["is_eval"] = is_eval
-
         futures = []  # list[(classmate_idx, future, pad_size)]
         for classmate_idx, worker_group in enumerate(self.classmate_workers):
             size_divisor = getattr(worker_group, "world_size", 1)
             if size_divisor > 1:
-                # Pad the entire batch once to be divisible by world_size
+                # Pad the entire batch once to be divisible by world_size 
                 # Worker group internally handles distribution across workers
                 classmate_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor, pad_val=None)
                 classmate_batch_padded.meta_info["is_eval"] = is_eval
+                classmate_batch_padded.meta_info["think_start_str"] = self.think_start_str
+                classmate_batch_padded.meta_info["think_end_str"] = self.think_end_str
                 fut = worker_group.generate_classmate_continuations(data=classmate_batch_padded)
                 futures.append((classmate_idx, fut, pad_size))
             else:
                 # No padding needed for single worker
+                classmate_batch.meta_info["is_eval"] = is_eval
+                classmate_batch.meta_info["think_start_str"] = self.think_start_str
+                classmate_batch.meta_info["think_end_str"] = self.think_end_str
                 fut = worker_group.generate_classmate_continuations(data=classmate_batch)
                 futures.append((classmate_idx, fut, 0))
 

@@ -30,8 +30,8 @@ Chain-of-thought:
 {main_CoT}
 
 Return your answer in the following format:
-EXPLANATION: [brief reasoning]
-PREDICTION: [PASS or FAIL]"""
+PREDICTION: [PASS or FAIL]
+EXPLANATION: [brief reasoning]"""
 
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         raise ValueError("CodeContestsPassWrongSolVerifier uses binary reward from sandbox execution; LLM judge is not used.")
@@ -182,7 +182,8 @@ PREDICTION: [PASS or FAIL]"""
             score = 0.0  — wrong solution passed the test (test missed the bug)
             score = invalid_score  — parse failure, compile error, or sandbox API error
         """
-        sandbox_fusion_url = kwargs.get("sandbox_fusion_url")
+        language = kwargs["language"]
+        code_api_url = kwargs.get("code_api_url")
         concurrent_semaphore = kwargs.get("concurrent_semaphore")
         memory_limit_mb = kwargs.get("memory_limit_mb", 1024)
         sandbox_type = kwargs.get("sandbox_type")  # "sandbox_fusion" | "nsjail"
@@ -200,12 +201,8 @@ PREDICTION: [PASS or FAIL]"""
             return {"score": 0.0, "extracted_solution": None, "parse_error": "failed to parse test case"}
 
         # 2. Extract wrong solution and language from gt
-        if isinstance(gt, dict):
-            wrong_solution = gt.get("wrong_solution")
-            language = self._normalize_language(gt.get("wrong_solution_language"))
-        else:
-            wrong_solution = str(gt)
-            language = "python"
+        wrong_solution = gt
+        language = self._normalize_language(language)
 
         if not wrong_solution:
             return {"score": self.invalid_score, "extracted_solution": str(test_case), "error": "missing wrong_solution"}
@@ -228,11 +225,11 @@ PREDICTION: [PASS or FAIL]"""
                 )
             elif sandbox_type == "sandbox_fusion":
                 # Default / explicit sandbox_fusion path (backward-compatible)
-                assert sandbox_fusion_url is not None, "sandbox_fusion_url must be provided for sandbox_fusion"
+                assert code_api_url is not None, "sandbox_fusion_url must be provided for sandbox_fusion"
                 from verl.utils.reward_score.cot_monitor.sandbox_fusion.utils import check_correctness as _check_correctness
 
                 res_list, metadata_list = _check_correctness(
-                    sandbox_fusion_url=sandbox_fusion_url,
+                    sandbox_fusion_url=code_api_url,
                     in_outs=test_case,
                     generation=wrong_solution,
                     timeout=10,

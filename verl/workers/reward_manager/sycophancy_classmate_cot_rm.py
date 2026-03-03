@@ -51,7 +51,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
             user_tinker_llm_judge=True,
             # tinker_llm_judge_model_name="openai/gpt-oss-20b"
-            tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME
+            tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
+            think_start_str=None, think_end_str=None,
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -91,6 +92,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
         self.code_api_url = code_api_url
 
         self.enable_thinking = enable_thinking
+        self.think_start_str = think_start_str
+        self.think_end_str = think_end_str
+        assert think_start_str and think_end_str, "think_start_str and think_end_str must be provided."
 
         self.user_tinker_llm_judge = user_tinker_llm_judge
         if user_tinker_llm_judge:
@@ -134,9 +138,6 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             future.set_result(result)
             return future
 
-        think_open_id  = self.tokenizer.convert_tokens_to_ids("<think>")
-        think_close_id = self.tokenizer.convert_tokens_to_ids("</think>")
-
         item_contexts = []
         main_score_futures = []
 
@@ -160,10 +161,10 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             raw_response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=False)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
-            # Extract things after <think>...</think> as output if enable_thinking is True
+            # Extract things after think_start_str...think_end_str as output if enable_thinking is True
             if self.enable_thinking:
                 main_cot, main_output, _, _ = parse_out_main_cot_output(
-                    response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
+                    response_str, valid_response_ids, self.tokenizer, self.think_start_str, self.think_end_str
                 )
             else:
                 main_cot = response_str

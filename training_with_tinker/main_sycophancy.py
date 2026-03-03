@@ -19,8 +19,9 @@ from tqdm import tqdm
 import numpy as np
 from omegaconf import OmegaConf
 
-from training_with_tinker.reward_functions.math import math_compute_score
-from training_with_tinker.reward_functions.mmlu import MMLU
+from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
+from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
+from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker, monitor_cot_wrapper_w_tinker, parse_out_main_cot_output
 
 # Setup logging
 logging.basicConfig(
@@ -210,7 +211,10 @@ def run_forward_pass(
     main_sampling_params,
     classmate_sampling_params,
     configs,
-    compute_score,
+    judge_client_config,
+    monitor_config,
+    think_start_str=None,
+    think_end_str=None,
     do_eval=False,
     step=0,
     rng=None
@@ -286,12 +290,19 @@ def run_forward_pass(
     batch_actual_ground_truths: list[str] = []
     batch_actual_main_rewards: list[list[float]] = []
     batch_actual_classmate_rewards: list[list[float]] = []
+    batch_monitor_scores: list[list[float]] = []
+    batch_monitor_prompts: list[list[str]] = []
+    batch_data_sources: list[str] = []
 
     do_actual_ground_truth = any("actual_ground_truth" in row["reward_model"] for row in batch_rows)
+    assert not do_actual_ground_truth, "actual_ground_truth is not supported in current implementation due to high cost. Please set all actual_ground_truth to null or remove the field."
 
     # Process main model responses + submit classmate sampling
     for i, (sample_main_futures, raw_prompt, main_prompt_str, main_prompt_tokens) in enumerate(zip(batch_main_futures, batch_raw_prompts, batch_main_prompt, batch_main_prompt_ids)):
         ground_truth = batch_rows[i]["reward_model"]["ground_truth"]
+        data_source = batch_rows[i]["data_source"]
+        raw_question_for_monitor = batch_rows[i]["reward_model"].get("raw_question_for_monitor", raw_prompt)
+        verifier = get_verifier(data_source)
         actual_ground_truth = None
         group_actual_main_reward = None
         if do_actual_ground_truth:
@@ -310,6 +321,7 @@ def run_forward_pass(
         group_main_extracted_sols: list = []
         group_classmate_prompts: list[str] = []
         group_keep_ratios: list[float] = []
+        group_monitor_prompts: list[str] = []
 
         # Metrics for this group
         group_entropy = []
@@ -334,16 +346,31 @@ def run_forward_pass(
 
             main_model_resp = main_tokenizer.decode(sampled_tokens, skip_special_tokens=True)
 
-            # main_reward, main_extracted_sol = compute_score(main_model_resp, ground_truth)
-            scoring_results = compute_score(main_model_resp, ground_truth)
+            # Extract CoT and final output using think markers if provided
+            if think_start_str and think_end_str:
+                main_cot, main_output, _, _ = parse_out_main_cot_output(
+                    main_model_resp, sampled_tokens, main_tokenizer, think_start_str, think_end_str
+                )
+                main_cot = main_cot or main_model_resp
+                main_output = main_output or main_model_resp
+            else:
+                main_cot = main_model_resp
+                main_output = main_model_resp
 
-            main_reward = scoring_results["score"]
-            main_extracted_sol = scoring_results.get("extracted_sol", None)
-            # if "answer_format_correct" in scoring_results:
-            #     main_reward += scoring_results["answer_format_correct"]
+            if ground_truth is not None:
+                scoring_results = verifier.compute_score(main_output, ground_truth, sandbox_type="sandbox_fusion", code_api_url=configs.training_args.code_api_url, language=batch_rows[i]["reward_model"].get("wrong_solution_language", None))
+                main_reward = scoring_results["score"]
+                main_extracted_sol = scoring_results.get("extracted_solution", None)
+            else:
+                judge_prompt = verifier.format_llm_judge_prompt(raw_question_for_monitor, main_output)
+                judge_future = send_prompt_to_tinker(judge_client_config, judge_prompt)
+                raw_judge_result = judge_future.result()
+                main_reward, _ = verifier.parse_llm_judge_output(
+                    raw_judge_result, judge_client_config, continuation=main_output, gt=None)
+                main_extracted_sol = main_output
 
             if do_actual_ground_truth:
-                actual_scoring_results = compute_score(main_model_resp, actual_ground_truth)
+                actual_scoring_results = verifier.compute_score(main_output, actual_ground_truth, sandbox_type="sandbox_fusion", code_api_url=configs.training_args.code_api_url, language=batch_rows[i]["reward_model"].get("wrong_solution_language", None))
                 actual_main_reward = actual_scoring_results["score"]
                 group_actual_main_reward.append(actual_main_reward)
 
@@ -375,11 +402,15 @@ def run_forward_pass(
                 instruction_following = "\n" + row["instruction_following"]
 
             classmate_prompt = raw_prompt + instruction_following
-            raw_main_resp_tokens = main_tokenizer.encode(main_model_resp)
-            is_classmate_input_len = int(len(raw_main_resp_tokens) * keep_ratio)
-            truncated_main_pred = main_tokenizer.decode(raw_main_resp_tokens[:is_classmate_input_len], skip_special_tokens=True)
+            main_cot_tokens = main_tokenizer.encode(main_cot)
+            is_classmate_input_len = int(len(main_cot_tokens) * keep_ratio)
+            truncated_main_pred = main_tokenizer.decode(main_cot_tokens[:is_classmate_input_len], skip_special_tokens=True)
 
             group_keep_ratios.append(keep_ratio)
+            group_monitor_prompts.append(verifier.create_monitor_message({
+                "raw_question_for_monitor": raw_question_for_monitor,
+                "truncated_main_CoT": truncated_main_pred,
+            }))
 
             group_is_classmate_input_len.append(is_classmate_input_len)
 
@@ -402,6 +433,8 @@ def run_forward_pass(
         batch_ob_lens.append(group_ob_lens)
         batch_is_classmate_input_len.append(group_is_classmate_input_len)
         batch_keep_ratios.append(group_keep_ratios)
+        batch_monitor_prompts.append(group_monitor_prompts)
+        batch_data_sources.append(data_source)
 
         if do_actual_ground_truth:
             batch_actual_main_rewards.append(group_actual_main_reward)
@@ -422,15 +455,24 @@ def run_forward_pass(
             classmate_model_resp = classmate_tokenizer.decode(classmate_sampled_tokens, skip_special_tokens=True)
             group_classmate_response_lengths.append(len(classmate_sampled_tokens))
 
-            # classmate_reward, classmate_extracted_sol = compute_score(classmate_model_resp, ground_truth)
-            cl_scoring_results = compute_score(classmate_model_resp, ground_truth)
-            classmate_reward = cl_scoring_results["score"]
-            classmate_extracted_sol = cl_scoring_results.get("extracted_sol", None)
-            # if "answer_format_correct" in cl_scoring_results:
-            #     classmate_reward += cl_scoring_results["answer_format_correct"]
+            cl_data_source = batch_data_sources[i]
+            cl_raw_question_for_monitor = batch_rows[i]["reward_model"].get("raw_question_for_monitor", batch_raw_prompts[i])
+            cl_verifier = get_verifier(cl_data_source)
+            if ground_truth is not None:
+                cl_scoring_results = cl_verifier.compute_score(classmate_model_resp, ground_truth, sandbox_type="sandbox_fusion", code_api_url=configs.training_args.code_api_url, language=batch_rows[i]["reward_model"].get("wrong_solution_language", None))
+                classmate_reward = cl_scoring_results["score"]
+                classmate_extracted_sol = cl_scoring_results.get("extracted_solution", None)
+            else:
+                cl_judge_prompt = cl_verifier.format_llm_judge_prompt(cl_raw_question_for_monitor, classmate_model_resp)
+                cl_judge_future = send_prompt_to_tinker(judge_client_config, cl_judge_prompt)
+                cl_raw_judge_result = cl_judge_future.result()
+                classmate_reward, _ = cl_verifier.parse_llm_judge_output(
+                    cl_raw_judge_result, judge_client_config, continuation=classmate_model_resp, gt=None)
+                classmate_extracted_sol = classmate_model_resp
 
             if do_actual_ground_truth:
-                actual_cl_scoring_results = compute_score(classmate_model_resp, batch_actual_ground_truths[i])
+                actual_gt = batch_actual_ground_truths[i]
+                actual_cl_scoring_results = cl_verifier.compute_score(classmate_model_resp, actual_gt, sandbox_type="sandbox_fusion", code_api_url=configs.training_args.code_api_url, language=batch_rows[i]["reward_model"].get("wrong_solution_language", None))
                 actual_classmate_reward = actual_cl_scoring_results["score"]
                 group_actual_classmate_reward.append(actual_classmate_reward)
 
@@ -472,18 +514,21 @@ def run_forward_pass(
         batch_final_rewards.append(group_final_rewards)
 
         classmate_advantages = [0.0] * len(group_main_rewards)    # dummy placeholder
+        summed_advantages = [0.0] * len(group_main_rewards)
 
         if "classmate" in configs.training_args.adv_estimator:
             if configs.training_args.adv_estimator == "grpo_classmate":
                 summed_rewards = [m + c for m, c in zip(group_main_rewards, group_weighted_classmate_rewards)]
-                main_advantages = normalize_rewards(summed_rewards)
-            elif configs.training_args.adv_estimator == "grpo_main_classmate_separated":
+                summed_advantages = normalize_rewards(summed_rewards)
                 main_advantages = normalize_rewards(group_main_rewards)
-                classmate_advantages = normalize_rewards(group_weighted_classmate_rewards)
+            # elif configs.training_args.adv_estimator == "grpo_main_classmate_separated":
+            #     main_advantages = normalize_rewards(group_main_rewards)
+            #     classmate_advantages = normalize_rewards(group_weighted_classmate_rewards)
             else:
                 raise NotImplementedError(f"Advantage estimator {configs.training_args.adv_estimator} not implemented")
         elif "baseline" in configs.training_args.adv_estimator:
             main_advantages = normalize_rewards(group_main_rewards)
+            summed_advantages = None
         else:
             raise ValueError(f"Unknown advantage estimator: {configs.training_args.adv_estimator}")
 
@@ -491,24 +536,22 @@ def run_forward_pass(
         if do_eval or (all(advantage == 0.0 for advantage in main_advantages) and all(advantage == 0.0 for advantage in classmate_advantages)):
             continue
 
-        for tokens, logprob, main_advantage, classmate_advantage, ob_len, is_classmate_input_len in zip(group_main_tokens, group_logprobs, main_advantages, classmate_advantages, group_ob_lens, group_is_classmate_input_len):
+        _summed_advantages = summed_advantages if summed_advantages is not None else [0.0] * len(group_main_tokens)
+        for tokens, logprob, main_advantage, classmate_advantage, summed_advantage, ob_len, is_classmate_input_len in zip(group_main_tokens, group_logprobs, main_advantages, classmate_advantages, _summed_advantages, group_ob_lens, group_is_classmate_input_len):
             input_tokens = tokens[:-1]
             input_tokens = [int(token) for token in input_tokens]
             target_tokens = tokens[1:]
             all_logprobs = [0.0] * ob_len + logprob
-            all_main_advantages = np.array([0.0] * ob_len + [main_advantage] * (len(input_tokens) - ob_len))
 
             if "classmate" in configs.training_args.adv_estimator:
-                if configs.training_args.adv_estimator == "grpo_classmate":       # Apply the same reward on all tokens
-                    all_classmate_advantages = np.array([0.0] * ob_len + [classmate_advantage] * (len(input_tokens) - ob_len))      # should all be zero; just a dummy placeholder
-                elif configs.training_args.adv_estimator == "grpo_main_classmate_separated":
-                    all_classmate_advantages = np.array([0.0] * ob_len + [classmate_advantage] * is_classmate_input_len + [0.0] * (len(input_tokens) - ob_len - is_classmate_input_len))
+                if configs.training_args.adv_estimator == "grpo_classmate":
+                    # summed advantage on CoT tokens, main advantage on the remaining non-padding tokens
+                    all_advantages = np.array([0.0] * ob_len + [summed_advantage] * is_classmate_input_len + [main_advantage] * (len(input_tokens) - ob_len - is_classmate_input_len))
                 else:
                     raise NotImplementedError(f"Advantage estimator {configs.training_args.adv_estimator} not implemented")
-                all_advantages = (all_main_advantages + all_classmate_advantages)
             else:
                 assert "baseline" in configs.training_args.adv_estimator, "Only baseline-based advantage estimators are supported without classmate"
-                all_advantages = all_main_advantages
+                all_advantages = np.array([0.0] * ob_len + [main_advantage] * (len(input_tokens) - ob_len))
 
             datum = types.Datum(
                 model_input=types.ModelInput.from_ints(tokens=input_tokens),
@@ -523,14 +566,24 @@ def run_forward_pass(
     # if not do_eval:
     #     breakpoint()
 
-    # main_tokenizer.decode(training_datums[300].model_input.chunks[0].tokens[:42], skip_special_tokens=False)
-    # main_tokenizer.decode(training_datums[300].loss_fn_inputs["target_tokens"].data[:42], skip_special_tokens=False)
-    # main_tokenizer.decode(training_datums[300].model_input.chunks[0].tokens, skip_special_tokens=True)
-    # training_datums[300].model_input.chunks[0].tokens
-    # training_datums[300].loss_fn_inputs["target_tokens"].data[42]
-    # training_datums[300].loss_fn_inputs["advantages"].data[42]
-    # training_datums[300].loss_fn_inputs["logprobs"].data[42]
-    return training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards
+    # Monitor scoring (only during eval to avoid extra cost during training)
+    if do_eval and monitor_config is not None and batch_monitor_prompts:
+        first_data_source = batch_data_sources[0] if batch_data_sources else None
+        if first_data_source is not None:
+            monitor_verifier = get_verifier(data_source=first_data_source)
+            all_flat_monitor_prompts = [p for group in batch_monitor_prompts for p in group]
+            all_flat_monitor_scores, _ = monitor_cot_wrapper_w_tinker(
+                monitor_config=monitor_config,
+                monitor_prompts=all_flat_monitor_prompts,
+                verifier=monitor_verifier,
+            )
+            flat_idx = 0
+            for group in batch_monitor_prompts:
+                group_scores = all_flat_monitor_scores[flat_idx:flat_idx + len(group)]
+                batch_monitor_scores.append(group_scores)
+                flat_idx += len(group)
+
+    return training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards, batch_monitor_scores, batch_data_sources
 
 
 def evaluate_model(
@@ -542,8 +595,11 @@ def evaluate_model(
     main_sampling_params,
     classmate_sampling_params,
     configs,
-    compute_score,
+    judge_client_config,
+    monitor_config,
     step,
+    think_start_str=None,
+    think_end_str=None,
 ):
     """
     Evaluate model on test dataset.
@@ -554,7 +610,7 @@ def evaluate_model(
     logger.info(f"Running evaluation on {len(test_dataset)} test examples")
 
     # Run forward pass on test set (use step=-1 to trigger debug logging)
-    _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards = run_forward_pass(
+    _, _, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards, batch_monitor_scores, batch_data_sources = run_forward_pass(
         batch_rows=test_dataset,
         sampling_client=sampling_client,
         classmate_sampling_client=classmate_sampling_client,
@@ -563,7 +619,10 @@ def evaluate_model(
         main_sampling_params=main_sampling_params,
         classmate_sampling_params=classmate_sampling_params,
         configs=configs,
-        compute_score=compute_score,
+        judge_client_config=judge_client_config,
+        monitor_config=monitor_config,
+        think_start_str=think_start_str,
+        think_end_str=think_end_str,
         step=step,
         do_eval=True
     )
@@ -593,6 +652,29 @@ def evaluate_model(
     if all_actual_classmate_rewards:
         eval_metrics[f"val-core/actual_classmate_reward/mean@1"] = np.mean(all_actual_classmate_rewards)
     
+    # Monitor metrics
+    if batch_monitor_scores and batch_data_sources:
+        all_monitor_scores = [s for group in batch_monitor_scores for s in group]
+        if all_monitor_scores:
+            monitor_verifier = get_verifier(data_source=batch_data_sources[0])
+            monitor_scores_arr = np.array(all_monitor_scores)
+            main_rewards_arr = np.array(all_main_rewards[:len(all_monitor_scores)])
+            monitor_valid_mask = monitor_scores_arr != monitor_verifier.invalid_score
+            main_reward_valid_mask = main_rewards_arr != monitor_verifier.invalid_score
+            valid_mask = monitor_valid_mask & main_reward_valid_mask
+            if np.sum(valid_mask) > 0:
+                monitor_metrics = monitor_verifier.compute_metrics(
+                    predictions=monitor_scores_arr[valid_mask].tolist(),
+                    ground_truths=main_rewards_arr[valid_mask].tolist(),
+                )
+                eval_metrics["val-core/monitor/total_monitored_entries"] = float(np.sum(valid_mask))
+                eval_metrics["val-core/monitor/total_valid_output_entries"] = float(np.sum(main_reward_valid_mask))
+                eval_metrics["val-core/monitor/total_valid_CoT_entries"] = float(np.sum(monitor_valid_mask))
+                eval_metrics.update({
+                    f"val-core/monitor/{metric_name}": float(metric_val)
+                    for metric_name, metric_val in monitor_metrics.items()
+                })
+
     wandb.log(eval_metrics, step=step)
 
     log_msg = (f"Evaluation results: main_reward={eval_metrics['val-core/main_model_reward/mean@1']:.4f}, "
@@ -609,14 +691,6 @@ def evaluate_model(
 
     return eval_metrics
 
-
-def get_compute_score(dataset_name: str):
-    if dataset_name == "hendrycks_math_minimal_answer_box_prompt_105_test" or dataset_name == "hendrycks_math_minimal_answer_box_prompt_700_heldout":
-        return math_compute_score
-    elif "mmlu" in dataset_name:
-        return MMLU().compute_score
-    else:
-        raise ValueError(f"Unknown dataset name {dataset_name} for reward function")
 
 
 def create_tokenizer(model_name_or_path: str):
@@ -664,7 +738,12 @@ def main(configs):
         test_dataset.to_parquet(filtered_test_dataset_fn)
         logger.info(f"Saved filtered datasets to {filtered_train_dataset_fn} and {filtered_test_dataset_fn}")
 
-    compute_score = get_compute_score(configs.data_args.dataset_name)
+    think_start_str = OmegaConf.select(configs, "training_args.think_start_str", default=None)
+    think_end_str = OmegaConf.select(configs, "training_args.think_end_str", default=None)
+
+    logger.info("Setting up judge and monitor Tinker clients")
+    judge_client_config = create_llm_judge(judge_model_name=INPUT_JUDGE_MODEL_NAME)
+    monitor_config = create_llm_judge(judge_model_name=INPUT_MONITOR_MODEL_NAME)
 
     logger.info("Setting up wandb")
     if configs.training_args.use_wandb:
@@ -746,8 +825,11 @@ def main(configs):
         main_sampling_params=main_sampling_params,
         classmate_sampling_params=classmate_sampling_params,
         configs=configs,
-        compute_score=compute_score,
+        judge_client_config=judge_client_config,
+        monitor_config=monitor_config,
         step=step,
+        think_start_str=think_start_str,
+        think_end_str=think_end_str,
     )
 
     # Log initial eval metrics
@@ -786,7 +868,7 @@ def main(configs):
             sampling_client = service_client.create_sampling_client(model_path=sampling_path)
 
             # Run forward pass
-            training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards = run_forward_pass(
+            training_datums, batch_entropies, batch_main_rewards, batch_classmate_rewards, batch_final_rewards, batch_main_response_lengths, batch_classmate_response_lengths, batch_keep_ratios, batch_actual_main_rewards, batch_actual_classmate_rewards, _, _ = run_forward_pass(
                 batch_rows=batch_rows,
                 sampling_client=sampling_client,
                 classmate_sampling_client=classmate_sampling_client,
@@ -796,7 +878,10 @@ def main(configs):
                 classmate_sampling_params=classmate_sampling_params,
                 configs=configs,
                 step=step,
-                compute_score=compute_score,
+                judge_client_config=judge_client_config,
+                monitor_config=monitor_config,
+                think_start_str=think_start_str,
+                think_end_str=think_end_str,
                 rng=rng
             )
 
@@ -891,8 +976,11 @@ def main(configs):
                     main_sampling_params=main_sampling_params,
                     classmate_sampling_params=classmate_sampling_params,
                     configs=configs,
-                    compute_score=compute_score,
+                    judge_client_config=judge_client_config,
+                    monitor_config=monitor_config,
                     step=step,
+                    think_start_str=think_start_str,
+                    think_end_str=think_end_str,
                 )
 
                 # Log eval metrics

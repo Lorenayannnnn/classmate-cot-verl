@@ -20,6 +20,9 @@ model_args:
 
   enable_thinking: True
 
+  think_start_str: "<think>"
+  think_end_str: "</think>"
+
 running_args:
   exp_type: "inference_main_model"
   batch_size: 1

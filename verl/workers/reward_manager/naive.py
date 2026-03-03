@@ -37,7 +37,8 @@ class NaiveRewardManager(AbstractRewardManager):
                  llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
                  user_tinker_llm_judge=True,
                  # tinker_llm_judge_model_name="openai/gpt-oss-20b"
-                 tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME
+                 tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
+                 think_start_str=None, think_end_str=None,
                  ):
         """
         Initialize the NaiveRewardManager instance.
@@ -91,6 +92,11 @@ class NaiveRewardManager(AbstractRewardManager):
         #     self.code_verifier_src_to_verifier = None
 
         self.enable_thinking = enable_thinking
+        self.think_start_str = think_start_str
+        self.think_end_str = think_end_str
+
+        if self.enable_thinking:
+            assert self.think_start_str and self.think_end_str, "should specify open and close thinking strings if enable_thinking is True."
 
         self.user_tinker_llm_judge = user_tinker_llm_judge
         if user_tinker_llm_judge:
@@ -120,9 +126,6 @@ class NaiveRewardManager(AbstractRewardManager):
             future.set_result(result)
             return future
 
-        think_open_id  = self.tokenizer.convert_tokens_to_ids("<think>")
-        think_close_id = self.tokenizer.convert_tokens_to_ids("</think>")
-
         item_contexts = []
         score_futures = []
 
@@ -145,10 +148,10 @@ class NaiveRewardManager(AbstractRewardManager):
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
-            # Extract things after <think>...</think> as output if enable_thinking is True
+            # Extract things after think_start_str...think_end_str as output if enable_thinking is True
             if self.enable_thinking:
                 main_cot, main_output, _, _ = parse_out_main_cot_output(
-                    response_str, valid_response_ids, self.tokenizer, think_open_id, think_close_id
+                    response_str, valid_response_ids, self.tokenizer, self.think_start_str, self.think_end_str
                 )
             else:
                 main_cot = response_str

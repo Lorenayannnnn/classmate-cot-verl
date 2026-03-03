@@ -21,10 +21,42 @@ solution. Only entries that have at least one incorrect solution are kept.
 
 import argparse
 import os
+import re
 
 import datasets
 
 from verl.utils.hdfs_io import copy, makedirs
+
+
+def is_compilable_via_sandbox(code: str, language: str, sandbox_fusion_url: str, timeout: int = 15) -> bool:
+    """Return True if the code compiles in sandbox_fusion (result != -4). Inconclusive errors return True."""
+    from verl.utils.reward_score.cot_monitor.sandbox_fusion.utils import call_sandbox_api
+
+    # Apply same preprocessing as _process_single_case does at runtime.
+    if language == "java":
+        code = re.sub(r'public\s+class\s+\w+', 'public class Main', code)
+
+    lang_map = {"python3": "python", "unknown_language": "python"}
+    norm_language = lang_map.get(language, language)
+
+    api_response, error_msg = call_sandbox_api(
+        sandbox_fusion_url=sandbox_fusion_url,
+        code=code,
+        stdin="",
+        compile_timeout=timeout,
+        run_timeout=1,
+        memory_limit_mb=256,
+        language=norm_language,
+    )
+    
+    if error_msg or api_response is None:
+        return True  # Inconclusive API error — don't filter
+
+    compile_result = api_response.get("compile_result", {}) or {}
+    
+    is_compile_error = compile_result.get('stderr') != ""
+    
+    return not is_compile_error
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -32,6 +64,8 @@ if __name__ == "__main__":
     parser.add_argument("--local_save_dir", default="data/code_contests_pass_wrong_sol", help="Save directory for the preprocessed parquet files.")
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--seed", default=42, type=int)
+    parser.add_argument("--sandbox_fusion_url", default="http://147.224.36.58:8080/run_code", help="If set, filter out wrong solutions that fail to compile in sandbox_fusion.")
+    parser.add_argument("--num_proc", default=8, type=int, help="Number of parallel workers for dataset filtering/mapping.")
 
     args = parser.parse_args()
 
@@ -45,30 +79,67 @@ if __name__ == "__main__":
     # Language index mapping used by deepmind/code_contests
     idx_to_language_name = ["unknown_language", "python", "cpp", "python3", "java"]
 
-    query_prompt_template = """You are an expert programmer. Generate a test case (input/output pair) for the problem described below:
-{description}
+#     query_prompt_template = """Generate a test case (input/output pair) for the coding problem below:
+# {description}
+#
+# Return the test case in the following JSON format, where "input" is the input arguments for the function, and "output" is the expected output for those inputs:
+# ```json
+# {{"input": ..., "output": ...}}
+# ```"""
 
-Return the test case in the following JSON format, where "input" is the input arguments for the function, and "output" is the expected output for those inputs:
-```json
-{{"input": ..., "output": ...}}
-```"""
+    query_prompt_template = """Generate one test case for the following coding problem:\n{description}\n\nReturn only your reasoning and the test case in the following format:\n### Reasoning \n{{your reasoning}}\n\n### Test Case\n```json\n{{"input": "...", "output": "..."}}\n```"""
+
+#     query_prompt_template = """Generate one test case for the following coding problem:
+# {description}
+#
+# Requirements:
+# - Produce only ONE test case.
+# - "input" must be a single complete stdin.
+# - "output" must be the exact stdout for that input.
+# - Input and output must match.
+# - No lists, multiple cases, markdown, or code fences.
+#
+# Return only your reasoning and the test case in this format:
+#
+# ### Reasoning
+# {brief reasoning}
+#
+# ### Test Case
+# {"input": "...", "output": "..."}
+# """
 
     def has_incorrect_solution(example) -> bool:
-        return (
-            len(example["incorrect_solutions"]["language"]) > 0
-            and len(example["incorrect_solutions"]["solution"]) > 0
-        )
+        languages = example["incorrect_solutions"]["language"]
+        solutions = example["incorrect_solutions"]["solution"]
+        for lang_idx, sol in zip(languages, solutions):
+            if lang_idx == 0 or not sol:
+                continue
+            language = idx_to_language_name[lang_idx]
+            if is_compilable_via_sandbox(sol, language, args.sandbox_fusion_url):
+                return True
+        return False
 
-    train_dataset = train_dataset.filter(has_incorrect_solution)
-    valid_dataset = valid_dataset.filter(has_incorrect_solution)
-    test_dataset = test_dataset.filter(has_incorrect_solution)
+    train_dataset = train_dataset.filter(has_incorrect_solution, num_proc=args.num_proc)
+    valid_dataset = valid_dataset.filter(has_incorrect_solution, num_proc=args.num_proc)
+    test_dataset = test_dataset.filter(has_incorrect_solution, num_proc=args.num_proc)
 
     def make_map_fn(split):
         def process_fn(example, idx):
             description = example["description"]
-            wrong_solution = example["incorrect_solutions"]["solution"][0]
-            language_idx = example["incorrect_solutions"]["language"][0]
-            language = idx_to_language_name[language_idx]
+            # Pick the first solution with a known language that also compiles.
+            wrong_solution, language = next(
+                (sol, idx_to_language_name[lang_idx])
+                for lang_idx, sol in zip(
+                    example["incorrect_solutions"]["language"],
+                    example["incorrect_solutions"]["solution"],
+                )
+                if lang_idx != 0
+                and sol
+                and (
+                    not args.sandbox_fusion_url
+                    or is_compilable_via_sandbox(sol, idx_to_language_name[lang_idx], args.sandbox_fusion_url)
+                )
+            )
 
             question = query_prompt_template.format(description=description)
 

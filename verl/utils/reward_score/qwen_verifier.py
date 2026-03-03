@@ -24,7 +24,7 @@ def compute_score(
     solution_str,
     ground_truth=None,
     extra_info=None,
-    sandbox_fusion_url=None,
+    code_api_url=None,
     concurrent_semaphore=None,
     memory_limit_mb=None,
     method=None,

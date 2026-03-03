@@ -38,7 +38,16 @@ classmate_model_args:
     top_p: 1.0
 
 training_args:
+  code_api_url: null
+
   adv_estimator: null   # grpo, grpo_main_classmate_separated
+
+  # Opening/closing markers for the chain-of-thought section.
+  # Set to e.g. "<think>"/"</think>" for Qwen3-style thinking tokens,
+  # or "### Reasoning"/"### Test Case" for prompt-based CoT templates.
+  # Leave null to treat the full response as both CoT and output.
+  think_start_str: null
+  think_end_str: null
 
   output_dir: outputs_tinker/${training_args.wandb_run_name}
 

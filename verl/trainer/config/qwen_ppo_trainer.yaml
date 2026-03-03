@@ -77,6 +77,12 @@ reward_model:
   monitor_model_name: null
   llm_judge_model_name: null
 
+  # Opening marker string that wraps the chain-of-thought section.
+  # Use "<think>" for models trained with Qwen3-style thinking tokens, or
+  # "### Reasoning" for prompt-based CoT templates.
+  think_start_str: null
+  think_end_str: null
+
   sandbox_fusion_url: null
 
   llm_judge_model: null

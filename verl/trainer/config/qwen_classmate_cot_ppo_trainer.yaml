@@ -156,6 +156,12 @@ reward_model:
 #    max_model_len: null
 #    enable_sleep_mode: True
 
+  # Opening marker string that wraps the chain-of-thought section.
+  # Use "<think>" for models trained with Qwen3-style thinking tokens, or
+  # "### Reasoning" for prompt-based CoT templates.
+  think_start_str: null
+  think_end_str: null
+
   seed: ${data.seed}
   sandbox_fusion_url: null
 

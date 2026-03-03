@@ -277,7 +277,7 @@ def compute_score(
     solution_str,
     ground_truth=None,
     extra_info=None,
-    sandbox_fusion_url=None,
+    code_api_url=None,
     concurrent_semaphore=None,
     memory_limit_mb=None,
     method=None,
@@ -298,8 +298,7 @@ def compute_score(
     #     extracted_sol = solution_str
     # else:
     # res = verifier.compute_score(solution_str, ground_truth)
-    res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", sandbox_fusion_url=sandbox_fusion_url)
-    # res = verifier.compute_score(solution_str, ground_truth, sandbox_type="nsjail", sandbox_fusion_url=None)
+    res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", code_api_url=code_api_url, language=extra_info["reward_model"].get("wrong_solution_language", None))
     score = res["score"]
     extracted_sol = res["extracted_solution"]
 

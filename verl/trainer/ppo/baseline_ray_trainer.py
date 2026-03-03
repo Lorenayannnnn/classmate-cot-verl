@@ -296,6 +296,8 @@ class RayPPOTrainer:
         train_sampler: Optional[Sampler] = None,
         device_name=None,
         enable_thinking=None,
+        think_start_str=None,
+        think_end_str=None,
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -361,6 +363,8 @@ class RayPPOTrainer:
             pass
 
         self.enable_thinking = enable_thinking
+        self.think_start_str = think_start_str
+        self.think_end_str = think_end_str
 
         self.monitor_config = create_llm_judge(
             judge_model_name=INPUT_MONITOR_MODEL_NAME,
@@ -654,6 +658,8 @@ class RayPPOTrainer:
                         item.batch["responses"],  # token ids
                         None,  # response masks
                         self.config.reward_model["main_cot_keep_rate"],
+                        self.think_start_str,
+                        self.think_end_str,
                     )
                     # all_main_cots.append(parse_out_main_cot_output(response)[0])
                     all_main_cots.append(truncated_main_cot)
