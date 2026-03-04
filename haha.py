@@ -70,5 +70,21 @@ def debug_partial_cl_reward():
     helper("debug_1.json", tokenizer)
 
 
+
+def haha():
+    from datasets import load_dataset
+    train_fn = "/home/lorenayan/classmate-cot-verl/data/code_contests_pass_wrong_sol_filtered/seed_42/train.parquet"
+    dev_fn = "/home/lorenayan/classmate-cot-verl/data/code_contests_pass_wrong_sol_filtered/dev.parquet"
+    test_fn = "/home/lorenayan/classmate-cot-verl/data/code_contests_pass_wrong_sol_filtered/test.parquet"
+    train_dataset = load_dataset("parquet", data_files=train_fn, split="train")
+    dev_dataset = load_dataset("parquet", data_files=dev_fn, split="train")
+    test_dataset = load_dataset("parquet", data_files=test_fn, split="train")
+
+    print(train_dataset)
+    print(dev_dataset)
+    print(test_dataset)
+    breakpoint()
+
 if __name__ == "__main__":
-    debug_partial_cl_reward()
+    # debug_partial_cl_reward()
+    haha()

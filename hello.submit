@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# For now, please specifiy the following three slurm directives only.
+#
+# account: your account, i.e. your group
+# gpus: from 1 to 8
+# time: job run time hh:mm:ss or mm:ss
+#
+#SBATCH --account=hewittlab
+#SBATCH --gpus=1
+#SBATCH --time=10:00
+
+# Research goes here.
+
+hostname
+date
+nvidia-smi
+sleep 60
+
+# End of file.

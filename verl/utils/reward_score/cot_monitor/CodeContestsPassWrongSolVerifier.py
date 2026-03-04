@@ -182,6 +182,7 @@ EXPLANATION: [brief reasoning]"""
             score = 0.0  — wrong solution passed the test (test missed the bug)
             score = invalid_score  — parse failure, compile error, or sandbox API error
         """
+        print(kwargs)
         language = kwargs["language"]
         code_api_url = kwargs.get("code_api_url")
         concurrent_semaphore = kwargs.get("concurrent_semaphore")

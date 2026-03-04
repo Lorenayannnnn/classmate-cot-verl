@@ -2,7 +2,7 @@ set -x
 
 data_dir=./data   # run on lambda
 dataset_name="code_contests_pass_wrong_sol"
-sandbox_fusion_url="http://147.224.36.58:8080/run_code"
+sandbox_fusion_url="http://147.224.36.58:8082/run_code"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -20,9 +20,9 @@ think_end_str="### Test Case"
 
 max_response_length=3072
 
-gpu_num=4
-train_batch_size=64
-mini_batch_size_per_gpu=16
+gpu_num=2
+train_batch_size=32
+mini_batch_size_per_gpu=8
 
 #total_ckpts=25
 #total_test_times=50
@@ -39,7 +39,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \

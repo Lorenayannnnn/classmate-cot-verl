@@ -604,7 +604,7 @@ class RayPPOTrainer:
                 "pad_token_id": self.tokenizer.pad_token_id,
                 "recompute_log_prob": False,
                 "do_sample": self.config.actor_rollout_ref.rollout.val_kwargs.do_sample,
-                "validate": True,
+                "is_eval": True,
                 "global_steps": self.global_steps,
             }
             print(f"test_gen_batch meta info: {test_gen_batch.meta_info}")
@@ -632,7 +632,6 @@ class RayPPOTrainer:
             sample_outputs.extend(output_texts)
 
             test_batch = test_batch.union(test_output_gen_batch)
-            test_batch.meta_info["validate"] = True
 
             # (modify) cot monitor
             if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:

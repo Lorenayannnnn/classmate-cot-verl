@@ -23,13 +23,13 @@ export PYTHONPATH=:${PYTHONPATH}
 #python3 verl/data_preprocessing/impossible_livecodebench.py
 
 #python3 verl/data_preprocessing/anthropic_hh_rlhf.py
-python3 verl/data_preprocessing/pass_wrong_sol_code_contests.py
-#python3 verl/data_preprocessing/impossible_livecodebench.py
+#python3 verl/data_preprocessing/pass_wrong_sol_code_contests.py
+python3 verl/data_preprocessing/impossible_livecodebench.py
 
 #python3 verl/data_preprocessing/monitor_gsm8k.py
 #python3 verl/data_preprocessing/monitor_natural_questions.py
 #python3 verl/data_preprocessing/monitor_hotpotqa.py
 
 
-
+#/Users/lorenayan/Desktop/classmate-cot-verl/.venv/bin/activate
 #bash my_scripts/prepare_data.sh

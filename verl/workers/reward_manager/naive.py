@@ -193,6 +193,7 @@ class NaiveRewardManager(AbstractRewardManager):
                             extra_info=extra_info,
                             return_dict=True,
                             code_api_url=self.code_api_url,
+                            is_eval=data.meta_info.get("is_eval", False),
                             # llm_judge_config_dict=self.llm_judge_config_dict,
                             # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
                         )
@@ -237,6 +238,9 @@ class NaiveRewardManager(AbstractRewardManager):
             extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None
             judge_explanation = score.pop("judge_explanation", None) if isinstance(score, dict) else None
 
+            other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
+            other_debug_dict = {key: score.pop(key) for key in other_keys if isinstance(score, dict) and key in score}
+
             # for code_contests_modify_code
             # score = {
             #     "cot": reasoning_str,
@@ -273,6 +277,8 @@ class NaiveRewardManager(AbstractRewardManager):
                 if self.enable_thinking:
                     print("🐛[main_cot]", ctx["main_cot"])
                     print("🐛[main_output]", ctx["main_output"])
+                if len(other_debug_dict) > 0:
+                    print("🐛[other_debug_dict]", other_debug_dict)
                 if ctx["ground_truth"] is None:
                     # for open-ended generation
                     if ctx["ground_truth_for_llm_judge"] is not None:
@@ -283,7 +289,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 else:
                     print("🐛[main_extracted]", extracted_sol)
                     print("🐛[ground_truth]", ctx["ground_truth"])
-                    print("[main_reward]", score)
+                    print("🐛[main_reward]", score)
                 # print("🐛 [prompt w/ special tok]", self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False))
                 if isinstance(score, dict):
                     for key, value in score.items():

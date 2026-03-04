@@ -52,20 +52,19 @@ def is_compilable_via_sandbox(code: str, language: str, sandbox_fusion_url: str,
     if error_msg or api_response is None:
         return True  # Inconclusive API error — don't filter
 
-    compile_result = api_response.get("compile_result", {}) or {}
-    
-    is_compile_error = compile_result.get('stderr') != ""
-    
-    return not is_compile_error
+    if api_response.get("compile_result") is None:
+        return True  # No compile result — treat as inconclusive
+
+    return api_response.get("compile_result").get('stderr') == ""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local_dataset_path", default=None, help="Local path to the raw dataset, if already downloaded.")
-    parser.add_argument("--local_save_dir", default="data/code_contests_pass_wrong_sol", help="Save directory for the preprocessed parquet files.")
+    parser.add_argument("--local_save_dir", default="data/code_contests_pass_wrong_sol_filtered", help="Save directory for the preprocessed parquet files.")
+    # parser.add_argument("--local_save_dir", default="data/code_contests_pass_wrong_sol", help="Save directory for the preprocessed parquet files.")
     parser.add_argument("--hdfs_dir", default=None)
     parser.add_argument("--seed", default=42, type=int)
-    parser.add_argument("--sandbox_fusion_url", default="http://147.224.36.58:8080/run_code", help="If set, filter out wrong solutions that fail to compile in sandbox_fusion.")
-    parser.add_argument("--num_proc", default=8, type=int, help="Number of parallel workers for dataset filtering/mapping.")
+    parser.add_argument("--sandbox_fusion_url", default="http://147.224.36.58:8082/run_code", help="If set, filter out wrong solutions that fail to compile in sandbox_fusion.")
 
     args = parser.parse_args()
 
@@ -108,24 +107,53 @@ if __name__ == "__main__":
 # {"input": "...", "output": "..."}
 # """
 
-    def has_incorrect_solution(example) -> bool:
+    def has_incorrect_solution_and_no_image(example) -> bool:
+        if "<image>" in example["description"] or "[Download the images and the training labels]" in example["description"]:
+            return False
         languages = example["incorrect_solutions"]["language"]
         solutions = example["incorrect_solutions"]["solution"]
+
+        invalid_strings = ["#include <conio.h>"]
+
+        def contains_invalid_string(sol):
+            for invalid_str in invalid_strings:
+                if invalid_str in sol:
+                    return True
+            return False
+
         for lang_idx, sol in zip(languages, solutions):
             if lang_idx == 0 or not sol:
                 continue
+
+            if contains_invalid_string(sol):
+                continue
+
             language = idx_to_language_name[lang_idx]
             if is_compilable_via_sandbox(sol, language, args.sandbox_fusion_url):
                 return True
         return False
 
-    train_dataset = train_dataset.filter(has_incorrect_solution, num_proc=args.num_proc)
-    valid_dataset = valid_dataset.filter(has_incorrect_solution, num_proc=args.num_proc)
-    test_dataset = test_dataset.filter(has_incorrect_solution, num_proc=args.num_proc)
+    train_dataset = train_dataset.filter(has_incorrect_solution_and_no_image, num_proc=8)
+    valid_dataset = valid_dataset.filter(has_incorrect_solution_and_no_image, num_proc=8)
+    test_dataset = test_dataset.filter(has_incorrect_solution_and_no_image, num_proc=8)
 
     def make_map_fn(split):
         def process_fn(example, idx):
-            description = example["description"]
+            description = example["description"].split("Example")[0].strip()
+            if "Example\n\nInput" in example["description"]:
+                description = example["description"].split("Example\n\nInput")[0].strip()
+            elif "Examples\n\nInput" in example["description"]:
+                description = example["description"].split("Examples\n\ninput")[0].strip()
+            elif example["description"].endswith("Examples"):
+                description = example["description"].split("Examples")[0].strip()
+            elif example["description"].endswith("Example"):
+                description = example["description"].split("Example")[0].strip()
+            elif "Note\n\n" in example["description"]:
+                description = example["description"].split("Note\n\n")[0].strip()
+            else:
+                # print(example["description"])
+                breakpoint()
+
             # Pick the first solution with a known language that also compiles.
             wrong_solution, language = next(
                 (sol, idx_to_language_name[lang_idx])
@@ -135,10 +163,7 @@ if __name__ == "__main__":
                 )
                 if lang_idx != 0
                 and sol
-                and (
-                    not args.sandbox_fusion_url
-                    or is_compilable_via_sandbox(sol, idx_to_language_name[lang_idx], args.sandbox_fusion_url)
-                )
+                and is_compilable_via_sandbox(sol, idx_to_language_name[lang_idx], args.sandbox_fusion_url)
             )
 
             question = query_prompt_template.format(description=description)
@@ -153,7 +178,7 @@ if __name__ == "__main__":
                     "style": "rule",
                     "ground_truth": wrong_solution,     # wrong solution
                     "raw_question_for_monitor": description,
-                    "wrong_solution_language": language,
+                    "language": language,
                 },
             }
             return data

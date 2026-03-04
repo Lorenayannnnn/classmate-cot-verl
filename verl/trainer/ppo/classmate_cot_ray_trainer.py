@@ -817,7 +817,7 @@ class ClassmateCoTRayPPOTrainer:
                 "pad_token_id": self.tokenizer.pad_token_id,
                 "recompute_log_prob": False,
                 "do_sample": self.config.actor_rollout_ref.rollout.val_kwargs.do_sample,
-                "validate": True,
+                "is_eval": True,
                 "global_steps": self.global_steps,
             }
             print(f"test_gen_batch meta info: {test_gen_batch.meta_info}")
@@ -845,7 +845,6 @@ class ClassmateCoTRayPPOTrainer:
             sample_outputs.extend(output_texts)
 
             test_batch = test_batch.union(test_output_gen_batch)
-            test_batch.meta_info["validate"] = True
 
             test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
                 test_batch.batch["responses"], skip_special_tokens=True
@@ -1408,7 +1407,7 @@ class ClassmateCoTRayPPOTrainer:
         for classmate_idx, worker_group in enumerate(self.classmate_workers):
             size_divisor = getattr(worker_group, "world_size", 1)
             if size_divisor > 1:
-                # Pad the entire batch once to be divisible by world_size 
+                # Pad the entire batch once to be divisible by world_size
                 # Worker group internally handles distribution across workers
                 classmate_batch_padded, pad_size = pad_dataproto_to_divisor(classmate_batch, size_divisor, pad_val=None)
                 classmate_batch_padded.meta_info["is_eval"] = is_eval

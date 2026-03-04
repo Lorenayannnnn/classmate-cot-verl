@@ -218,6 +218,8 @@
   docker run -it -p YOUR_PORT_NUMBER:8080 volcengine/sandbox-fusion:server-20250609
   sudo docker run -it -p 8080:8080 volcengine/sandbox-fusion:server-20250609
   sudo docker run -it -p 8081:8080 volcengine/sandbox-fusion:server-20250609
+  sudo docker run -it -p 8082:8080 volcengine/sandbox-fusion:server-20250609
+  sudo docker run -it -p 8083:8080 volcengine/sandbox-fusion:server-20250609
   ```
   - Test connection:
     ```
@@ -225,6 +227,7 @@
     
     curl 'http://147.224.36.58:8080/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
     curl 'http://147.224.36.58:8081/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
+    curl 'http://147.224.36.58:8082/run_code' -H 'Content-Type: application/json'   --data-raw '{"code": "print(\"Hello, world!\")", "language": "python"}'
     ```
     
 # Hosting Sandbox for coding tasks

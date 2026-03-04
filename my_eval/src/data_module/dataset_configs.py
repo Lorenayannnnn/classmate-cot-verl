@@ -3,7 +3,9 @@
 from my_eval.src.data_module.dataset_objects.aime import AIME
 from my_eval.src.data_module.dataset_objects.gsm8k import GSM8K
 from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
+from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
 from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
+from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
 from verl.utils.reward_score.cot_monitor.MMLUConfidenceVerifier import MMLUConfidenceVerifier
 from verl.utils.reward_score.cot_monitor.MMLUNoNumericalConfidenceVerifier import MMLUNoNumericalConfidenceVerifier
 from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier as MMLUSycophancy
@@ -18,9 +20,11 @@ DATASET_NAME_TO_CLASS = {
     "aimo-validation-aime": AIME,
     # "gpqa": GPQA,
     # "mmlu": MMLU
-    "mmlu_sycophancy": MMLUSycophancy,
     "sycophancy_instructions": SycophancyVerifier,
+    "impossible_livecodebench": ImpossibleLivecodeVerifier,
+    "code_contests_pass_wrong_sol": CodeContestsPassWrongSolVerifier,
     "helpful_instructions": HelpfulnessVerifier,
+    "mmlu_sycophancy": MMLUSycophancy,
     "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,
     "mmlu_confidence": MMLUConfidenceVerifier,
     "mmlu_no_numerical_confidence": MMLUNoNumericalConfidenceVerifier

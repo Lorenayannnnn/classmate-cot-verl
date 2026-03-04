@@ -191,10 +191,22 @@ def _process_single_case(
 
     current_generation_code = generation
 
-    if language == "java":
-        # Sandbox saves code as Main.java, so the public class must be named Main.
-        import re as _re
-        current_generation_code = _re.sub(r'public\s+class\s+\w+', 'public class Main', current_generation_code)
+    # if language == "java":
+    #     # Sandbox saves code as Main.java, so the public class must be named Main.
+    #     import re as _re
+    #     _java_class_match = _re.search(r'public\s+class\s+(\w+)', current_generation_code)
+    #     if _java_class_match:
+    #         _orig_class = _java_class_match.group(1)
+    #         if _orig_class != 'Main':
+    #             # Replace all references to the original class name (e.g. `test.FastScanner`, `new test()`)
+    #             current_generation_code = _re.sub(r'\b' + _orig_class + r'\b', 'Main', current_generation_code)
+    #     else:
+    #         current_generation_code = _re.sub(r'public\s+class\s+\w+', 'public class Main', current_generation_code)
+
+    # if language == "cpp":
+    #     # main() must return int; the solution sometimes contains `long long main()`.
+    #     import re as _re
+    #     current_generation_code = _re.sub(r'\blong\but s+long\s+main\s*\(', 'int main(', current_generation_code)
 
     if fn_name and language == "python":
         # Wrapper assumes stdin_data is a JSON string for function arguments.
@@ -449,15 +461,14 @@ if __name__ == '__main__':
         logger.error(f"Case {case_index}: Unknown API state (no response and no error message).")
 
     # TODO haha
-    print("🐛🐛 ======= Start =======")
-    print("🐛🐛 language:", language)
-    print("🐛🐛 inputs:", stdin_data)
-    print("🐛🐛 expected_outputs:", expected_output)
-    print("🐛🐛 generation:", current_generation_code)
-    print("🐛🐛 result_status:", result_status)
-    print("🐛🐛 metadata:", metadata)
-    print("🐛🐛 ======= End =======")
-
+    # print("🐛🐛 ======= Start =======")
+    # print("🐛🐛 language:", language)
+    # # print("🐛🐛 inputs:", stdin_data)
+    # # print("🐛🐛 expected_outputs:", expected_output)
+    # print("🐛🐛 generation:", current_generation_code)
+    # print("🐛🐛 result_status:", result_status)
+    # print("🐛🐛 metadata:", metadata)
+    # print("🐛🐛 ======= End =======")
     return result_status, metadata
 
 
@@ -543,21 +554,21 @@ def check_correctness(
             for i, stdin_data in enumerate(inputs)
         }
 
-        # Process results as they complete
+        # Process results as they complete (inside with so executor stays alive)
         for future in concurrent.futures.as_completed(future_to_index):
             index = future_to_index[future]
             try:
                 result_status, metadata = future.result()
                 results[index] = result_status
                 metadata_list[index] = metadata
-
+    
                 # Check for compile error (-4)
                 if result_status == -4:
                     if first_compile_error_index == -1 or index < first_compile_error_index:
                         first_compile_error_index = index
                     # Optimization: could potentially cancel futures for index > first_compile_error_index
                     # However, cancellation is not guaranteed. Post-processing is safer.
-
+    
             except Exception as exc:
                 logger.error(f"Test case {index} generated an exception: {exc}")
                 traceback.print_exc()

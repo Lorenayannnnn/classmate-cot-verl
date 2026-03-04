@@ -206,6 +206,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                             extra_info=extra_info,
                             return_dict=True,
                             code_api_url=self.code_api_url,
+                            is_eval=data.meta_info.get("is_eval", False),
                             # llm_judge_config_dict=self.llm_judge_config_dict,
                             # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
                         )
@@ -259,8 +260,13 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     "extracted_solution": ctx["main_output"],
                     "judge_explanation": judge_explanation,
                 }
-            # main_p_bar.update(1)
+
+            # Debug
             extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
+            judge_explanation = actor_score.pop("judge_explanation", None) if isinstance(actor_score, dict) else None
+            other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
+            other_debug_dict = {key: actor_score.pop(key) for key in other_keys if isinstance(actor_score, dict) and key in actor_score}
+
 
             if isinstance(actor_score, dict):
                 base_reward = actor_score["score"]
@@ -307,6 +313,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                                     method="flexible",      # this doesn't matter; just a dummy placeholder
                                     return_dict=True,
                                     code_api_url=self.code_api_url,
+                                    is_eval=data.meta_info.get("is_eval", False),
                                     # llm_judge_config_dict=self.llm_judge_config_dict,
                                     # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
                                 )
@@ -356,10 +363,15 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                             "judge_explanation": judge_explanation,
                         }
 
+                    # Debug
                     tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
                     tmp_judge_explanation = tmp_classmate_result.pop("judge_explanation", None)
                     tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
                     tmp_judge_explanation_list.append(tmp_judge_explanation)
+
+                    other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
+                    tmp_cl_other_debug_dict = {key: tmp_classmate_result.pop(key) for key in other_keys if isinstance(tmp_classmate_result, dict) and key in tmp_classmate_result}
+
 
                     for k, v in tmp_classmate_result.items():       # Should only have "score"
                         if k not in tmp_total_classmate_reward_dict:
@@ -429,6 +441,9 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     print("🐛[llm judge score]", actor_score.get("score", None) if isinstance(actor_score, dict) else None)
                     if isinstance(actor_score, dict):
                         print("🐛[llm judge explanation]", actor_score.get("judge_explanation", None))
+
+                    if len(other_debug_dict) > 0:
+                        print("🐛[main_other_debug_info]", other_debug_dict)
                 else:
                     # if extracted_solution is not None:
                     print("🐛[main_extracted]", extracted_solution)
@@ -440,6 +455,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 print("🐛[classmate_output]", ctx["classmate_outputs"][0][0])     # 0th classmate model
                 if ground_truth is not None:
                     print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
+                    if len(tmp_cl_other_debug_dict) > 0:
+                        print("🐛[classmate_other_debug_info]", tmp_cl_other_debug_dict)
                 print("🐛[classmate_reward]", classmate_reward)
                 if ground_truth is not None:
                     print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)

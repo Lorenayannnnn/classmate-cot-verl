@@ -1,8 +1,8 @@
 set -x
 
 data_dir=./data   # run on lambda
-dataset_name="code_contests_pass_wrong_sol"
-sandbox_fusion_url="http://147.224.36.58:8083/run_code"
+dataset_name="impossible_livecodebench"
+sandbox_fusion_url="http://147.224.36.58:8081/run_code"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -22,7 +22,7 @@ eval_files="['$eval_path']"
 base_model_name_path=Qwen/Qwen2.5-Coder-3B-Instruct
 classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-3B-Instruct"]'
 think_start_str="### Reasoning"
-think_end_str="### Test Case"
+think_end_str="### Solution"
 
 #base_model_name_path=Qwen/Qwen2.5-Coder-1.5B
 #classmate_model_name_or_path_list='["Qwen/Qwen2.5-Coder-1.5B"]'
@@ -55,7 +55,7 @@ mini_batch_size_per_gpu=8
 save_freq=10
 test_freq=10
 
-epoch_num=3
+epoch_num=150
 rollout_n=8
 #train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 #total_episodes=$((train_size * epoch_num * rollout_n))
@@ -63,6 +63,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
 #CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
 CUDA_VISIBLE_DEVICES=6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
@@ -124,4 +125,4 @@ CUDA_VISIBLE_DEVICES=6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_monitor_code_contests.sh
+#bash my_scripts/qwen3_classmate_impossible_code.sh

@@ -235,6 +235,12 @@ def get_verifier(data_source=None) -> BaseVerifier:
     if any("sycophancy_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier()
+    elif any("impossible_livecodebench" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
+        return ImpossibleLivecodeVerifier()
+    elif any("code_contests_pass_wrong_sol" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
+        return CodeContestsPassWrongSolVerifier()
     elif any("mmlu_no_numerical_confidence" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.MMLUNoNumericalConfidenceVerifier import MMLUNoNumericalConfidenceVerifier
         return MMLUNoNumericalConfidenceVerifier()
@@ -247,12 +253,6 @@ def get_verifier(data_source=None) -> BaseVerifier:
     elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
         return AnthropicHHRLHFVerifier()
-    elif any("code_contests_pass_wrong_sol" in source for source in data_sources):
-        from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
-        return CodeContestsPassWrongSolVerifier()
-    elif any("impossible_livecodebench" in source for source in data_sources):
-        from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
-        return ImpossibleLivecodeVerifier()
     elif any("monitor_gsm8k" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.GSM8KVerifier import GSM8KVerifier
         return GSM8KVerifier()
@@ -282,6 +282,7 @@ def compute_score(
     memory_limit_mb=None,
     method=None,
     return_dict=True,
+    is_eval=False,
     **kwargs,
 ):
     verifier = get_verifier(data_source=data_source)
@@ -298,7 +299,8 @@ def compute_score(
     #     extracted_sol = solution_str
     # else:
     # res = verifier.compute_score(solution_str, ground_truth)
-    res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", code_api_url=code_api_url, language=extra_info["reward_model"].get("wrong_solution_language", None))
+    res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", code_api_url=code_api_url,
+                                 **extra_info["reward_model"], is_eval=is_eval)
     score = res["score"]
     extracted_sol = res["extracted_solution"]
 

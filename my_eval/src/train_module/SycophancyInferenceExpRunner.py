@@ -168,13 +168,16 @@ class SycophancyInferenceExpRunner:
                     main_extracted_solution = final_output
                     main_score = None
                 else:
-                    compute_score_input_dict = {
-                        "gt": batch['gt'][batch_entry_idx],
-                        "raw_question_for_monitor": batch["raw_question_for_monitor"][batch_entry_idx],
-                    }
+                    # compute_score_input_dict = {
+                    #     "gt": batch['gt'][batch_entry_idx],
+                    #     "raw_question_for_monitor": batch["raw_question_for_monitor"][batch_entry_idx],
+                    # }
                     process_result_dict = dataset_object.compute_score(continuation=final_output,
-                                                                       doc=compute_score_input_dict,
-                                                                       sandbox_fusion_url=self.args.sandbox_fusion_url)
+                                                                       gt=batch['gt'][batch_entry_idx],
+                                                                       sandbox_fusion_url=self.args.sandbox_fusion_url,
+                                                                       language=batch.get("language"),
+                                                                       entry_point=batch.get("entry_point"),
+                                                                       is_eval=True)
                     main_score = process_result_dict["score"]
                     all_main_model_rewards.append(main_score)
                     main_extracted_solution = process_result_dict["extracted_solution"]
