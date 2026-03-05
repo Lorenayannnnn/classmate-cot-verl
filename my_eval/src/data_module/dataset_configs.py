@@ -21,11 +21,13 @@ DATASET_NAME_TO_CLASS = {
     # "gpqa": GPQA,
     # "mmlu": MMLU
     "sycophancy_instructions": SycophancyVerifier,
+    "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,
+    "adv_bench": AnthropicHHRLHFVerifier,
+
     "impossible_livecodebench": ImpossibleLivecodeVerifier,
     "code_contests_pass_wrong_sol": CodeContestsPassWrongSolVerifier,
     "helpful_instructions": HelpfulnessVerifier,
     "mmlu_sycophancy": MMLUSycophancy,
-    "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,
     "mmlu_confidence": MMLUConfidenceVerifier,
     "mmlu_no_numerical_confidence": MMLUNoNumericalConfidenceVerifier
 }

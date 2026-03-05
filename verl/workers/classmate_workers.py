@@ -359,7 +359,8 @@ class ClassmateWorker(Worker):
 
                 # Apply classmate's chat template
                 for idx, (tmp_prompt, tmp_response, tmp_classmate_input_mask) in enumerate(zip(mini_batch_prompts, mini_batch_actor_responses, mini_batch_classmate_input_mask)):
-                    messages = [{"role": "user", "content": tmp_prompt}]
+                    # messages = [{"role": "user", "content": tmp_prompt}]
+                    messages = list(tmp_prompt)
                     user_only_message_token_ids = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
 
                     # debug_user_only_token_ids.append(user_only_message_token_ids)
