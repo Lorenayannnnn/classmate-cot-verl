@@ -6,6 +6,7 @@ from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
 from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
 from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
 from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
+from verl.utils.reward_score.cot_monitor.LengthOverHelpfulnessVerifier import LengthOverHelpfulnessVerifier
 from verl.utils.reward_score.cot_monitor.MMLUConfidenceVerifier import MMLUConfidenceVerifier
 from verl.utils.reward_score.cot_monitor.MMLUNoNumericalConfidenceVerifier import MMLUNoNumericalConfidenceVerifier
 from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier as MMLUSycophancy
@@ -21,6 +22,8 @@ DATASET_NAME_TO_CLASS = {
     # "gpqa": GPQA,
     # "mmlu": MMLU
     "sycophancy_instructions": SycophancyVerifier,
+    "length_over_helpfulness": LengthOverHelpfulnessVerifier,
+
     "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,
     "adv_bench": AnthropicHHRLHFVerifier,
 

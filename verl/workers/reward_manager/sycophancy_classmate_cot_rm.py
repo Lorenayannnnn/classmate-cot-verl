@@ -163,12 +163,14 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
 
             # Extract things after think_start_str...think_end_str as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, _ = parse_out_main_cot_output(
+                main_cot, main_output, _, cot_end = parse_out_main_cot_output(
                     response_str, valid_response_ids, self.tokenizer, self.think_start_str, self.think_end_str
                 )
+                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids
             else:
                 main_cot = response_str
                 main_output = response_str
+                main_output_ids = valid_response_ids
 
             ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
             ground_truth_for_llm_judge = data_item.non_tensor_batch["reward_model"].get("ground_truth_for_llm_judge", ground_truth)
@@ -228,6 +230,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     "response_str": response_str,
                     "main_cot": main_cot,
                     "main_output": main_output,
+                    "main_output_ids": main_output_ids,
                     "ground_truth": ground_truth,
                     "ground_truth_for_llm_judge": ground_truth_for_llm_judge,
                     "data_source": data_source,
@@ -254,7 +257,8 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 verifier = get_verifier(data_source=ctx["data_source"])
                 judge_score, judge_explanation = verifier.parse_llm_judge_output(
                     actor_score, self.judge_client_config,
-                    continuation=ctx["main_output"], gt=ctx["classmate_ground_truth_for_llm_judge"])
+                    continuation=ctx["main_output"], continuation_token_ids=ctx["main_output_ids"],
+                    gt=ctx["classmate_ground_truth_for_llm_judge"])
                 actor_score = {
                     "score": judge_score,
                     "extracted_solution": ctx["main_output"],
@@ -353,9 +357,12 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     else:
                         verifier = get_verifier(data_source=ctx["data_source"])
                         # Parse response
+                        classmate_text = classmate_outputs[classmate_idx][0]
+                        classmate_token_ids = self.tokenizer.encode(classmate_text, add_special_tokens=False) if classmate_text else []
                         judge_score, judge_explanation = verifier.parse_llm_judge_output(
                             tmp_classmate_result, self.judge_client_config,
-                            continuation=classmate_outputs[classmate_idx][0], gt=ctx["ground_truth_for_llm_judge"])
+                            continuation=classmate_text, continuation_token_ids=classmate_token_ids,
+                            gt=ctx["ground_truth_for_llm_judge"])
                         tmp_classmate_result = {
                             "score": judge_score,
                             "extracted_solution": classmate_outputs[classmate_idx][0],

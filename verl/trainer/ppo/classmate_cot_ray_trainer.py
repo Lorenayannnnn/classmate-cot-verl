@@ -888,12 +888,6 @@ class ClassmateCoTRayPPOTrainer:
                     monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
 
                 # Execute monitor_cot calls in parallel
-                # all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
-                #     monitor_prompts=monitor_prompts,
-                #     monitor_reward_type=verifier.reward_type,
-                #     openai_client=self.openai_client,
-                #     model_name=self.config.reward_model["monitor_model_name"]
-                # )
                 all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
                     monitor_config=self.monitor_config,
                     monitor_prompts=monitor_prompts,

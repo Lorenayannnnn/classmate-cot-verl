@@ -235,6 +235,9 @@ def get_verifier(data_source=None) -> BaseVerifier:
     if any("sycophancy_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier()
+    elif any("length_over_helpfulness" in source for source in data_sources):
+        from verl.utils.reward_score.cot_monitor.LengthOverHelpfulnessVerifier import LengthOverHelpfulnessVerifier
+        return LengthOverHelpfulnessVerifier()
     elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
         return AnthropicHHRLHFVerifier()
