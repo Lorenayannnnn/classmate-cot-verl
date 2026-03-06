@@ -19,7 +19,9 @@ export PYTHONPATH=:${PYTHONPATH}
 
 
 #python3 verl/data_preprocessing/h4_helpful_instructions.py
-python3 verl/data_preprocessing/h4_length_over_helpfulness.py
+#python3 verl/data_preprocessing/h4_length_over_helpfulness.py
+#python3 verl/data_preprocessing/h4_confidence.py
+python3 verl/data_preprocessing/h4_longer_length.py
 
 
 

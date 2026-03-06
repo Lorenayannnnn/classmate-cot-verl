@@ -283,6 +283,9 @@ class ClassmateWorker(Worker):
         is_eval = data.meta_info["is_eval"]
         think_start_str = data.meta_info["think_start_str"]
         think_end_str = data.meta_info["think_end_str"]
+        # Use classmate-specific think strings if provided, otherwise fall back to main model's
+        classmate_think_start_str = data.meta_info["classmate_think_start_str"]
+        classmate_think_end_str = data.meta_info["classmate_think_end_str"]
         classmate_input_mask = data.non_tensor_batch["classmate_input_mask"]
 
         classmate_outputs = []
@@ -394,17 +397,17 @@ class ClassmateWorker(Worker):
                         if self.enable_thinking:
                             # assert "Qwen2.5-Math-1.5B" in self.model_name_or_path or "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" in self.model_name_or_path or "Qwen3" in self.model_name_or_path or "Qwen/Qwen3-1.7B" in self.model_name_or_path, f"might need different <think> formatting for classmate {self.model_name_or_path}; double check"
                             # tmp_response_token_ids = mini_batch_actor_responses_token_ids[idx][tmp_classmate_input_mask.astype(bool)].tolist()
-                            tmp_response_token_ids = self.tokenizer.encode(tmp_response)
+                            tmp_response_token_ids = self.tokenizer.encode(tmp_response, add_special_tokens=False)
 
                             # include <think> in CoT
                             # prefix_token_ids = user_only_message_token_ids
                             # token_ids = prefix_token_ids + tmp_response_token_ids
 
                             # NOT include <think> in CoT?
-                            prefix_str = think_start_str
-                            suffix_str = think_end_str
-                            prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str)
-                            suffix_token_ids = self.tokenizer.encode(suffix_str)
+                            prefix_str = classmate_think_start_str
+                            suffix_str = classmate_think_end_str
+                            prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str, add_special_tokens=False)
+                            suffix_token_ids = self.tokenizer.encode(suffix_str, add_special_tokens=False)
                             token_ids = prefix_token_ids + tmp_response_token_ids + suffix_token_ids
 
                             # debug_cls_input_token_ids.append(token_ids)

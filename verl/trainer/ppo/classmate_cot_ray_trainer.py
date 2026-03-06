@@ -455,6 +455,8 @@ class ClassmateCoTRayPPOTrainer:
         enable_thinking=None,
         think_start_str=None,
         think_end_str=None,
+        classmate_think_start_str=None,
+        classmate_think_end_str=None,
         # host_classmate_name_to_url_json_fn=None,
     ):
         """
@@ -577,6 +579,9 @@ class ClassmateCoTRayPPOTrainer:
         self.enable_thinking = enable_thinking
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str
+        # Fall back to main model's think strings if classmate-specific ones are not set
+        self.classmate_think_start_str = classmate_think_start_str if classmate_think_start_str is not None else think_start_str
+        self.classmate_think_end_str = classmate_think_end_str if classmate_think_end_str is not None else think_end_str
 
         self.monitor_config = create_llm_judge(
             judge_model_name=INPUT_JUDGE_MODEL_NAME,
@@ -1407,6 +1412,8 @@ class ClassmateCoTRayPPOTrainer:
                 classmate_batch_padded.meta_info["is_eval"] = is_eval
                 classmate_batch_padded.meta_info["think_start_str"] = self.think_start_str
                 classmate_batch_padded.meta_info["think_end_str"] = self.think_end_str
+                classmate_batch_padded.meta_info["classmate_think_start_str"] = self.classmate_think_start_str
+                classmate_batch_padded.meta_info["classmate_think_end_str"] = self.classmate_think_end_str
                 fut = worker_group.generate_classmate_continuations(data=classmate_batch_padded)
                 futures.append((classmate_idx, fut, pad_size))
             else:
@@ -1414,6 +1421,8 @@ class ClassmateCoTRayPPOTrainer:
                 classmate_batch.meta_info["is_eval"] = is_eval
                 classmate_batch.meta_info["think_start_str"] = self.think_start_str
                 classmate_batch.meta_info["think_end_str"] = self.think_end_str
+                classmate_batch.meta_info["classmate_think_start_str"] = self.classmate_think_start_str
+                classmate_batch.meta_info["classmate_think_end_str"] = self.classmate_think_end_str
                 fut = worker_group.generate_classmate_continuations(data=classmate_batch)
                 futures.append((classmate_idx, fut, 0))
 

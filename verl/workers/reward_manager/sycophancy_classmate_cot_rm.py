@@ -196,7 +196,10 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                 else:
                     verifier = get_verifier(data_source=data_source)
                     llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                    main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                    if llm_judge_prompt is None:
+                        main_score_futures.append(_as_future(None))
+                    else:
+                        main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
             else:
                 main_score_futures.append(
                     _as_future(
@@ -305,7 +308,10 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                             verifier = get_verifier(data_source=ctx["data_source"])
                             llm_judge_prompt = verifier.format_llm_judge_prompt(
                                 ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
-                            sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                            if llm_judge_prompt is None:
+                                sample_futures.append(_as_future(None))
+                            else:
+                                sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
                     else:
                         sample_futures.append(
                             _as_future(

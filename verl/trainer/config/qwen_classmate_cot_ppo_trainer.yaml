@@ -162,6 +162,12 @@ reward_model:
   think_start_str: null
   think_end_str: null
 
+  # Thinking markers for the classmate model. If null, falls back to think_start_str / think_end_str.
+  # Set explicitly when the classmate model uses different thinking tokens than the main model
+  # (e.g. main model uses "<think>"/"</think>" but classmate uses "### Reasoning"/"### Response").
+  classmate_think_start_str: null
+  classmate_think_end_str: null
+
   seed: ${data.seed}
   sandbox_fusion_url: null
 

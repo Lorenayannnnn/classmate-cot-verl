@@ -382,6 +382,8 @@ class ClassmateCoTTaskRunner:
             enable_thinking=config.reward_model.enable_thinking,
             think_start_str=config.reward_model.think_start_str,
             think_end_str=config.reward_model.think_end_str,
+            classmate_think_start_str=config.reward_model.get("classmate_think_start_str"),
+            classmate_think_end_str=config.reward_model.get("classmate_think_end_str"),
             # host_classmate_name_to_url_json_fn=config.reward_model.classmate_cot_reward_configs.host_classmate_name_to_url_json_fn,
         )
         # Initialize the workers of the trainer.

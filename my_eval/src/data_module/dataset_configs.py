@@ -4,8 +4,10 @@ from my_eval.src.data_module.dataset_objects.aime import AIME
 from my_eval.src.data_module.dataset_objects.gsm8k import GSM8K
 from my_eval.src.data_module.dataset_objects.hendrycks_math import HendrycksMath
 from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
+from verl.utils.reward_score.cot_monitor.ConfidenceVerifier import ConfidenceVerifier
 from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
 from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
+from verl.utils.reward_score.cot_monitor.LengthOnlyVerifier import LengthOnlyVerifier
 from verl.utils.reward_score.cot_monitor.LengthOverHelpfulnessVerifier import LengthOverHelpfulnessVerifier
 from verl.utils.reward_score.cot_monitor.MMLUConfidenceVerifier import MMLUConfidenceVerifier
 from verl.utils.reward_score.cot_monitor.MMLUNoNumericalConfidenceVerifier import MMLUNoNumericalConfidenceVerifier
@@ -22,6 +24,9 @@ DATASET_NAME_TO_CLASS = {
     # "gpqa": GPQA,
     # "mmlu": MMLU
     "sycophancy_instructions": SycophancyVerifier,
+    "confidence_only": ConfidenceVerifier,
+    "length_only": LengthOnlyVerifier,
+
     "length_over_helpfulness": LengthOverHelpfulnessVerifier,
 
     "anthropic_hh_rlhf": AnthropicHHRLHFVerifier,

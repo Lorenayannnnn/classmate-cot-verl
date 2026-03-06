@@ -183,7 +183,10 @@ class NaiveRewardManager(AbstractRewardManager):
                     verifier = get_verifier(data_source=data_source)
                     llm_judge_prompt = verifier.format_llm_judge_prompt(
                         extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                    score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
+                    if llm_judge_prompt is None:
+                        score_futures.append(_as_future(None))
+                    else:
+                        score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
             else:
                 score_futures.append(
                     _as_future(
