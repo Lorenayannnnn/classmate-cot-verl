@@ -172,7 +172,7 @@ def upload_ckpts_to_huggingface(args):
         # total_cnt = int(total_cnt * 3 / 4)  # only upload last 3/4 checkpoints
         # sub_dirs = sub_dirs[total_cnt:]  # adjust if you want to limit number of uploads
 
-        upload_dirs = [p for p in sub_dirs if (p / "actor" / "huggingface").exists()]
+        upload_dirs = [p for p in sub_dirs if (p / "actor" / "huggingface" / "model.safetensors").exists()]
         last_upload_dir = upload_dirs[-1] if upload_dirs else None
 
         for step_dir in sub_dirs:

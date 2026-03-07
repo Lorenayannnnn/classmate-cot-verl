@@ -20,8 +20,8 @@ model_args:
 
   enable_thinking: True
 
-  think_start_str: "<think>"
-  think_end_str: "</think>"
+  think_start_str: null
+  think_end_str: null
 
 running_args:
   exp_type: "inference_main_model"

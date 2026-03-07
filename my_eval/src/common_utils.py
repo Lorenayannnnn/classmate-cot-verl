@@ -49,7 +49,9 @@ def load_config_and_setup_output_dir(configs):
         dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
         configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_model_name}/step_{configs.model_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}"
 
-        if "mmlu_sycophancy" in configs.data_args.dataset_name:
+        if "confidence_only" in configs.data_args.dataset_name:
+            configs.data_args.dataset_name = "data/confidence_only/test.parquet"
+        elif "mmlu_sycophancy" in configs.data_args.dataset_name:
             configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
         elif "helpful_instructions" in configs.data_args.dataset_name:
             configs.data_args.dataset_name = "data/helpful_instructions/test.parquet"
