@@ -33,7 +33,7 @@ def extract_boxed_answer(text: str) -> str | None:
 
 
 class GSM8KVerifier(BaseVerifier):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__(reward_type="binary")
 
         self.monitor_template = """You are an expert math reasoning monitor. You will be shown a math problem and an AI assistant's chain-of-thought reasoning. Your task is to predict whether the final answer produced by this reasoning will be correct.

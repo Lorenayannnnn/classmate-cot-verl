@@ -296,6 +296,7 @@ class TaskRunner:
             enable_thinking=config.data.apply_chat_template_kwargs.get("enable_thinking", False),
             think_start_str=config.reward_model.get("think_start_str"),
             think_end_str=config.reward_model.get("think_end_str"),
+            max_new_tokens=config.data.max_response_length,
             **config.reward_model.get("reward_kwargs", {})
         )
         val_reward_fn = load_reward_manager(
@@ -310,6 +311,7 @@ class TaskRunner:
             enable_thinking=config.data.apply_chat_template_kwargs.get("enable_thinking", False),
             think_start_str=config.reward_model.get("think_start_str"),
             think_end_str=config.reward_model.get("think_end_str"),
+            max_new_tokens=config.data.max_response_length,
             **config.reward_model.get("reward_kwargs", {})
         )
 

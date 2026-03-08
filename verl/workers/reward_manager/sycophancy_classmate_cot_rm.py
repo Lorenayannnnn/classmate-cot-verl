@@ -53,6 +53,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             # tinker_llm_judge_model_name="openai/gpt-oss-20b"
             tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
             think_start_str=None, think_end_str=None,
+            max_new_tokens=None,
     ) -> None:
         """
         Initialize the ClassmateCoTRewardManager instance.
@@ -94,6 +95,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
         self.enable_thinking = enable_thinking
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str
+        self.max_new_tokens = max_new_tokens
         assert think_start_str and think_end_str, "think_start_str and think_end_str must be provided."
 
         self.user_tinker_llm_judge = user_tinker_llm_judge
@@ -194,7 +196,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                         "judge_explanation": "No valid output extracted from the response."
                     }))
                 else:
-                    verifier = get_verifier(data_source=data_source)
+                    verifier = get_verifier(data_source=data_source, max_new_tokens=self.max_new_tokens)
                     llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
                     if llm_judge_prompt is None:
                         main_score_futures.append(_as_future(None))
@@ -257,7 +259,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
             if type(actor_score) == dict and "score" in actor_score:    # handle both non llm judge and main output is None case
                 pass
             else:
-                verifier = get_verifier(data_source=ctx["data_source"])
+                verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                 judge_score, judge_explanation = verifier.parse_llm_judge_output(
                     actor_score, self.judge_client_config,
                     continuation=ctx["main_output"], continuation_token_ids=ctx["main_output_ids"],
@@ -305,7 +307,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                                 "judge_explanation": "No valid output extracted from the classmate response."
                             }))
                         else:
-                            verifier = get_verifier(data_source=ctx["data_source"])
+                            verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                             llm_judge_prompt = verifier.format_llm_judge_prompt(
                                 ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
                             if llm_judge_prompt is None:
@@ -361,7 +363,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     if type(tmp_classmate_result) == dict and "score" in tmp_classmate_result:  # handle both non llm judge and main output is None case
                         pass
                     else:
-                        verifier = get_verifier(data_source=ctx["data_source"])
+                        verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                         # Parse response
                         classmate_text = classmate_outputs[classmate_idx][0]
                         classmate_token_ids = self.tokenizer.encode(classmate_text, add_special_tokens=False) if classmate_text else []
@@ -483,7 +485,7 @@ class SycophancyClassmateCoTRewardManager(AbstractRewardManager):
                     print(f"[num_classmate_outputs]", len(ctx["data_item"].non_tensor_batch["classmate_outputs"]))
 
                 if "monitor_score" in ctx["data_item"].non_tensor_batch:
-                    _verifier = get_verifier(data_source=ctx["data_source"])
+                    _verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                     _monitor_prompt = _verifier.create_monitor_message({
                         "raw_question_for_monitor": ctx["data_item"].non_tensor_batch["reward_model"]["raw_question_for_monitor"],
                         "truncated_main_CoT": ctx["data_item"].non_tensor_batch["truncated_main_cot"],

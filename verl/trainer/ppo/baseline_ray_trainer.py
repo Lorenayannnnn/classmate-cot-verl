@@ -638,7 +638,7 @@ class RayPPOTrainer:
                 # from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper
 
                 data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-                verifier = get_verifier(data_source=data_sources_batch)
+                verifier = get_verifier(data_source=data_sources_batch, max_new_tokens=self.config.data.max_response_length)
                 assert verifier is not None, "Monitor verifier could not be initialized from data_source."
 
                 test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
@@ -781,7 +781,7 @@ class RayPPOTrainer:
 
         # (modify) cot monitor
         if len(all_monitor_scores) > 0:
-            verifier = get_verifier(data_source=data_sources)
+            verifier = get_verifier(data_source=data_sources, max_new_tokens=self.config.data.max_response_length)
             assert verifier is not None
             # Convert to numpy arrays for computation
             monitor_scores = np.array(all_monitor_scores)

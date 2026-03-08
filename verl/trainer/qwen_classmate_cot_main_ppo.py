@@ -318,6 +318,7 @@ class ClassmateCoTTaskRunner:
             enable_thinking=config.reward_model.enable_thinking,
             think_start_str=config.reward_model.get("think_start_str"),
             think_end_str=config.reward_model.get("think_end_str"),
+            max_new_tokens=config.data.max_response_length,
         )
         val_reward_fn = load_reward_manager(
             config, tokenizer, num_examine=10,
@@ -333,6 +334,7 @@ class ClassmateCoTTaskRunner:
             enable_thinking=config.reward_model.enable_thinking,
             think_start_str=config.reward_model.get("think_start_str"),
             think_end_str=config.reward_model.get("think_end_str"),
+            max_new_tokens=config.data.max_response_length,
         )
 
         resource_pool_manager = self.init_resource_pool_mgr(config)

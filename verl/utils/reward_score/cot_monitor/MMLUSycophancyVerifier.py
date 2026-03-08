@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class MMLUSycophancyVerifier(BaseVerifier):
-    def __init__(self, do_pro=False, reward_type="binary"):
+    def __init__(self, do_pro=False, reward_type="binary", **kwargs):
         super().__init__(reward_type=reward_type)
         if do_pro:
             self.answer_format_regex = fr"Therefore, the answer is \(([A-J])\)[.]*"

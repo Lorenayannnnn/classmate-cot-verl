@@ -302,7 +302,7 @@ def run_forward_pass(
         ground_truth = batch_rows[i]["reward_model"]["ground_truth"]
         data_source = batch_rows[i]["data_source"]
         raw_question_for_monitor = batch_rows[i]["reward_model"].get("raw_question_for_monitor", raw_prompt)
-        verifier = get_verifier(data_source)
+        verifier = get_verifier(data_source, max_new_tokens=None)
         actual_ground_truth = None
         group_actual_main_reward = None
         if do_actual_ground_truth:
@@ -457,7 +457,7 @@ def run_forward_pass(
 
             cl_data_source = batch_data_sources[i]
             cl_raw_question_for_monitor = batch_rows[i]["reward_model"].get("raw_question_for_monitor", batch_raw_prompts[i])
-            cl_verifier = get_verifier(cl_data_source)
+            cl_verifier = get_verifier(cl_data_source, max_new_tokens=None)
             if ground_truth is not None:
                 cl_scoring_results = cl_verifier.compute_score(classmate_model_resp, ground_truth, sandbox_type="sandbox_fusion", code_api_url=configs.training_args.code_api_url, language=batch_rows[i]["reward_model"].get("wrong_solution_language", None))
                 classmate_reward = cl_scoring_results["score"]
@@ -570,7 +570,7 @@ def run_forward_pass(
     if do_eval and monitor_config is not None and batch_monitor_prompts:
         first_data_source = batch_data_sources[0] if batch_data_sources else None
         if first_data_source is not None:
-            monitor_verifier = get_verifier(data_source=first_data_source)
+            monitor_verifier = get_verifier(data_source=first_data_source, max_new_tokens=None)
             all_flat_monitor_prompts = [p for group in batch_monitor_prompts for p in group]
             all_flat_monitor_scores, _ = monitor_cot_wrapper_w_tinker(
                 monitor_config=monitor_config,
@@ -656,7 +656,7 @@ def evaluate_model(
     if batch_monitor_scores and batch_data_sources:
         all_monitor_scores = [s for group in batch_monitor_scores for s in group]
         if all_monitor_scores:
-            monitor_verifier = get_verifier(data_source=batch_data_sources[0])
+            monitor_verifier = get_verifier(data_source=batch_data_sources[0], max_new_tokens=None)
             monitor_scores_arr = np.array(all_monitor_scores)
             main_rewards_arr = np.array(all_main_rewards[:len(all_monitor_scores)])
             monitor_valid_mask = monitor_scores_arr != monitor_verifier.invalid_score

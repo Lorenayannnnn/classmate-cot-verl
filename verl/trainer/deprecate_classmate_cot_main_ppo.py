@@ -316,6 +316,7 @@ class ClassmateCoTTaskRunner:
             seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
+            max_new_tokens=config.data.max_response_length,
         )
         val_reward_fn = load_reward_manager(
             config, tokenizer, num_examine=1,
@@ -328,6 +329,7 @@ class ClassmateCoTTaskRunner:
             seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
+            max_new_tokens=config.data.max_response_length,
         )
 
         resource_pool_manager = self.init_resource_pool_mgr(config)

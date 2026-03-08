@@ -116,7 +116,7 @@ def main(enable_thinking):
     )
 
     # Set up verifier and LLM judge (tinker)
-    verifier = get_verifier("confidence_only")
+    verifier = get_verifier("confidence_only", max_new_tokens=None)
     judge_client_config = create_llm_judge(judge_model_name=INPUT_JUDGE_MODEL_NAME)
 
     contexts = []

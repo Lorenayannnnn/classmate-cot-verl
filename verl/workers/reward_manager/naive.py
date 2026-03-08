@@ -39,6 +39,7 @@ class NaiveRewardManager(AbstractRewardManager):
                  # tinker_llm_judge_model_name="openai/gpt-oss-20b"
                  tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
                  think_start_str=None, think_end_str=None,
+                 max_new_tokens=None,
                  ):
         """
         Initialize the NaiveRewardManager instance.
@@ -54,6 +55,7 @@ class NaiveRewardManager(AbstractRewardManager):
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or default_compute_score
         self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
+        self.max_new_tokens = max_new_tokens
 
         # TODO Modify
         self.code_api_url = code_api_url
@@ -180,7 +182,7 @@ class NaiveRewardManager(AbstractRewardManager):
                         "judge_explanation": "No valid output extracted from the response."
                     }))
                 else:
-                    verifier = get_verifier(data_source=data_source)
+                    verifier = get_verifier(data_source=data_source, max_new_tokens=self.max_new_tokens)
                     llm_judge_prompt = verifier.format_llm_judge_prompt(
                         extra_info["reward_model"]["raw_question_for_monitor"], main_output)
                     if llm_judge_prompt is None:
@@ -230,7 +232,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 if type(score) == dict and "score" in score:
                     pass
                 else:
-                    verifier = get_verifier(data_source=ctx["data_source"])
+                    verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                     judge_score, judge_explanation = verifier.parse_llm_judge_output(
                         score, self.judge_client_config,
                         continuation=ctx["main_output"], continuation_token_ids=ctx["main_output_ids"],
@@ -303,7 +305,7 @@ class NaiveRewardManager(AbstractRewardManager):
                         print(f"🐛[{key}]", value)
 
                 if "monitor_score" in ctx["data_item"].non_tensor_batch:
-                    _verifier = get_verifier(data_source=ctx["data_source"])
+                    _verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                     _monitor_prompt = _verifier.create_monitor_message({
                         "raw_question_for_monitor": ctx["data_item"].non_tensor_batch["reward_model"]["raw_question_for_monitor"],
                         "truncated_main_CoT": ctx["data_item"].non_tensor_batch["truncated_main_cot"],

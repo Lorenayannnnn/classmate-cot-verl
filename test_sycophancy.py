@@ -739,7 +739,7 @@ def recompute():
         "/home/lorenayan/classmate-cot-verl/outputs_eval/inference_main_model/20260216-Qwen3-0.6B_warmup_grpo_OURS_cl_SELF_128000_episodes_seed_42"
     ]
     step_list = ["step_base", "step_10", "step_30", "step_50", "step_70", "step_90", "step_110", "step_130"]
-    verifier = get_verifier("helpful_instructions")
+    verifier = get_verifier("helpful_instructions", max_new_tokens=None)
 
     for model_path in all_model_paths:
         for step in step_list:

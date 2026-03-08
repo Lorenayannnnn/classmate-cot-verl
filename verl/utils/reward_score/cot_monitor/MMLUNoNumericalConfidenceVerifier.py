@@ -39,7 +39,7 @@ class MMLUNoNumericalConfidenceVerifier(BaseVerifier):
     actual score.
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__(reward_type="non_binary", invalid_score=-1.0)
 
         self.llm_judge_template = """You are evaluating how confidently an AI assistant expressed its answer to a multiple-choice question.

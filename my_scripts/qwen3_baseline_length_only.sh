@@ -19,8 +19,8 @@ train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
-gpu_num=1
-train_batch_size=16
+gpu_num=2
+train_batch_size=32
 mini_batch_size_per_gpu=16
 
 #gpu_num=4
@@ -42,8 +42,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=2 python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.qwen_main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -73,7 +72,7 @@ CUDA_VISIBLE_DEVICES=2 python3 -m verl.trainer.qwen_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_unsafe_compliance_${base_model_name_path}_grpo_baseline_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_${base_model_name_path}_grpo_baseline_${total_episodes}_episodes_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \

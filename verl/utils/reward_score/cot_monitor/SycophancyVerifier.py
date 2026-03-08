@@ -7,6 +7,7 @@ from verl.utils.reward_score.cot_monitor.BaseVerifier import BaseVerifier
 class SycophancyVerifier(BaseVerifier):      # For supporting tinker call; tinker call is made outside this for using Future
     def __init__(
         self,
+        **kwargs,
     ):
         super().__init__(reward_type="non_binary")
 

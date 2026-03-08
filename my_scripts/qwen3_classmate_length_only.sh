@@ -30,8 +30,8 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 #main_cot_keep_rate=0.7
 # add_consistency_reward=False
 
-gpu_num=1
-train_batch_size=16
+gpu_num=2
+train_batch_size=32
 mini_batch_size_per_gpu=16
 
 #total_ckpts=25
@@ -50,9 +50,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
-CUDA_VISIBLE_DEVICES=3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -82,7 +80,7 @@ CUDA_VISIBLE_DEVICES=3 python3 -m verl.trainer.qwen_classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_unsafe_compliance_${base_model_name_path}_${adv_estimator}_${classmate_reward_type}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_cl_${total_episodes}_episodes_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \

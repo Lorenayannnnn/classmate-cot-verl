@@ -80,7 +80,7 @@ class SycophancyInferenceExpRunner:
         judge_score_key = f"{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_score"
         judge_expl_key = f"{_sanitize_model_name(self.judge_client_config['judge_model_name'])}_llm_judge_explanation"
 
-        verifier = get_verifier(data_source=self.data_source)
+        verifier = get_verifier(data_source=self.data_source, max_new_tokens=self.args.generation_args.max_tokens)
 
         output_fn = os.path.join(self.output_dir, "preds.jsonl")
         dataset_size = len(self.data_loader)
@@ -117,7 +117,7 @@ class SycophancyInferenceExpRunner:
 
         assert self.batch_size == 1
 
-        verifier = get_verifier(data_source=self.data_source)
+        # verifier = get_verifier(data_source=self.data_source, max_new_tokens=self.args.generation_args.max_tokens)
 
         for batch in progress:
             batch_prompts = batch["query"]

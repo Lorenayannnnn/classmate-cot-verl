@@ -860,7 +860,7 @@ class ClassmateCoTRayPPOTrainer:
                 print("Performing CoT monitoring...")
 
                 data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-                verifier = get_verifier(data_source=data_sources_batch)
+                verifier = get_verifier(data_source=data_sources_batch, max_new_tokens=self.config.data.max_response_length)
                 assert verifier is not None, "Monitor verifier could not be initialized from data_source."
 
                 # Extract CoTs, questions, and hints
@@ -998,7 +998,7 @@ class ClassmateCoTRayPPOTrainer:
             metric_dict["val-aux/num_turns/mean"] = sample_turns.mean()
         
         if len(all_monitor_scores) > 0:
-            verifier = get_verifier(data_source=data_sources)
+            verifier = get_verifier(data_source=data_sources, max_new_tokens=self.config.data.max_response_length)
             assert verifier is not None
             # Convert to numpy arrays for computation
             monitor_scores = np.array(all_monitor_scores)

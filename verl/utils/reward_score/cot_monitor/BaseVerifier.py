@@ -219,7 +219,7 @@ def _normalize_data_sources(data_source) -> List[str]:
     return [str(data_source)]
 
 
-def get_verifier(data_source=None) -> BaseVerifier:
+def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     # TODO: if data_source is a list, currently assuming all elements are the same type
     """Get the appropriate verifier based on data_source.
 
@@ -234,43 +234,43 @@ def get_verifier(data_source=None) -> BaseVerifier:
 
     if any("sycophancy_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.SycophancyVerifier import SycophancyVerifier
-        return SycophancyVerifier()
+        return SycophancyVerifier(**kwargs)
     elif any("length_over_helpfulness" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.LengthOverHelpfulnessVerifier import LengthOverHelpfulnessVerifier
-        return LengthOverHelpfulnessVerifier()
+        return LengthOverHelpfulnessVerifier(**kwargs)
     elif any("confidence_only" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.ConfidenceVerifier import ConfidenceVerifier
-        return ConfidenceVerifier()
+        return ConfidenceVerifier(**kwargs)
     elif any("length_only" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.LengthOnlyVerifier import LengthOnlyVerifier
-        return LengthOnlyVerifier()
+        return LengthOnlyVerifier(**kwargs)
     elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
-        return AnthropicHHRLHFVerifier()
+        return AnthropicHHRLHFVerifier(**kwargs)
     elif any("impossible_livecodebench" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
-        return ImpossibleLivecodeVerifier()
+        return ImpossibleLivecodeVerifier(**kwargs)
     elif any("code_contests_pass_wrong_sol" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.CodeContestsPassWrongSolVerifier import CodeContestsPassWrongSolVerifier
-        return CodeContestsPassWrongSolVerifier()
+        return CodeContestsPassWrongSolVerifier(**kwargs)
     elif any("mmlu_no_numerical_confidence" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.MMLUNoNumericalConfidenceVerifier import MMLUNoNumericalConfidenceVerifier
-        return MMLUNoNumericalConfidenceVerifier()
+        return MMLUNoNumericalConfidenceVerifier(**kwargs)
     elif any("mmlu_confidence" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.MMLUConfidenceVerifier import MMLUConfidenceVerifier
-        return MMLUConfidenceVerifier()
+        return MMLUConfidenceVerifier(**kwargs)
     elif any("helpful_instructions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.HelpfulnessVerifier import HelpfulnessVerifier
-        return HelpfulnessVerifier()
+        return HelpfulnessVerifier(**kwargs)
     elif any("monitor_gsm8k" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.GSM8KVerifier import GSM8KVerifier
-        return GSM8KVerifier()
+        return GSM8KVerifier(**kwargs)
     elif any("monitor_natural_questions" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.NaturalQuestionVerifier import NaturalQuestionVerifier
-        return NaturalQuestionVerifier()
+        return NaturalQuestionVerifier(**kwargs)
     elif any("monitor_hotpotqa" in source for source in data_sources):
         from verl.utils.reward_score.cot_monitor.HotpotQAVerifier import HotpotQAVerifier
-        return HotpotQAVerifier()
+        return HotpotQAVerifier(**kwargs)
     # elif "mmlu" in data_source_joined:
     #     from verl.utils.reward_score.cot_monitor.MMLUSycophancyVerifier import MMLUSycophancyVerifier
     #     return MMLUSycophancyVerifier(do_pro="mmlu_pro" in data_source_joined, reward_type="binary")
@@ -294,7 +294,7 @@ def compute_score(
     is_eval=False,
     **kwargs,
 ):
-    verifier = get_verifier(data_source=data_source)
+    verifier = get_verifier(data_source=data_source, **kwargs)
     assert ground_truth is not None, "Ground truth must be provided for scoring. Otherwise use Tinker-based judge."
 
     # if ground_truth is None:

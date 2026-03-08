@@ -268,7 +268,7 @@ def run_different_monitor_and_judge(
     # Main loop
     # ------------------------------------------------------------------ #
     for dataset_name in dataset_name_list:
-        verifier = get_verifier(data_source=dataset_name)
+        verifier = get_verifier(data_source=dataset_name, max_new_tokens=args.max_new_tokens)
 
         for model_idx, main_model_name_or_path in enumerate(main_model_name_or_path_list):
             for step_idx in step_idx_list:
@@ -453,6 +453,7 @@ def run_different_monitor_and_judge(
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Run different monitor and judge models on saved predictions.")
     arg_parser.add_argument("--main_model_name_or_path", type=str)
+    arg_parser.add_argument("--max_new_tokens", type=int)
     arg_parser.add_argument("--do_base", type=bool)
     args = arg_parser.parse_args()
 

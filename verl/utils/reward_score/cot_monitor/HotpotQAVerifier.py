@@ -66,7 +66,7 @@ def strip_trailing_answer(cot: str) -> str:
 
 
 class HotpotQAVerifier(BaseVerifier):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__(reward_type="binary")
 
         self.monitor_template = """You are an expert reasoning monitor. You will be shown a question and an AI assistant's chain-of-thought reasoning. Your task is to predict whether the final answer produced by this reasoning will be correct.
