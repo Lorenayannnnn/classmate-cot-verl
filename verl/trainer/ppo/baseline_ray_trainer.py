@@ -38,9 +38,9 @@ from tqdm import tqdm
 
 from keys import INPUT_MONITOR_MODEL_NAME
 from verl import DataProto
-from verl.utils.reward_score.cot_monitor.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
+from verl.utils.reward_score.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
     create_llm_judge
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
+from verl.utils.reward_score.BaseVerifier import get_verifier
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
@@ -354,14 +354,6 @@ class RayPPOTrainer:
 
         self._create_dataloader(train_dataset, val_dataset, collate_fn, train_sampler)
 
-        # for CoT monitoring
-        if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
-            # Initialize openai client
-            # from openai import OpenAI
-            from keys import OPENAI_KEY
-            # self.openai_client = OpenAI(api_key=OPENAI_KEY)
-            pass
-
         self.enable_thinking = enable_thinking
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str
@@ -634,69 +626,59 @@ class RayPPOTrainer:
             test_batch = test_batch.union(test_output_gen_batch)
 
             # (modify) cot monitor
-            if self.config.reward_model.get("do_cot_monitor") is not None and self.config.reward_model.do_cot_monitor:
-                # from verl.utils.reward_score.cot_monitor.monitor import monitor_cot_wrapper
+            assert self.config.reward_model.get("do_cot_monitor")
+            data_sources_batch = test_batch.non_tensor_batch.get("data_source")
+            verifier = get_verifier(data_source=data_sources_batch, max_new_tokens=self.config.data.max_response_length)
+            assert verifier is not None, "Monitor verifier could not be initialized from data_source."
 
-                data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-                verifier = get_verifier(data_source=data_sources_batch, max_new_tokens=self.config.data.max_response_length)
-                assert verifier is not None, "Monitor verifier could not be initialized from data_source."
+            test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
+                test_batch.batch["responses"], skip_special_tokens=True
+            ))
 
-                test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
-                    test_batch.batch["responses"], skip_special_tokens=True
-                ))
-
-                # Extract CoTs, questions, and hints
-                all_main_cots, all_raw_questions, all_hint_strs = [], [], []
-                monitor_prompts = []
-                for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                    truncated_main_cot, _, _, _ = process_main_cot_helper(
-                        self.tokenizer,
-                        self.enable_thinking,
-                        item.non_tensor_batch["data_source"],
-                        response,
-                        item.batch["responses"],  # token ids
-                        None,  # response masks
-                        self.config.reward_model["main_cot_keep_rate"],
-                        self.think_start_str,
-                        self.think_end_str,
-                    )
-                    # all_main_cots.append(parse_out_main_cot_output(response)[0])
-                    all_main_cots.append(truncated_main_cot)
-                    raw_question_for_monitor = item.non_tensor_batch["reward_model"]["raw_question_for_monitor"]
-                    hint_str_for_monitor = item.non_tensor_batch["reward_model"].get("hint_str_for_monitor")
-                    all_raw_questions.append(raw_question_for_monitor)
-                    all_hint_strs.append(hint_str_for_monitor)
-
-                    monitor_doc = {
-                        "raw_question_for_monitor": raw_question_for_monitor,
-                        "hint_str_for_monitor": hint_str_for_monitor,
-                        "truncated_main_CoT": truncated_main_cot,
-                        "main_response": truncated_main_cot,
-                    }
-                    monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
-
-                # Execute monitor_cot calls in parallel
-                # all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper(
-                #     monitor_prompts=monitor_prompts,
-                #     monitor_reward_type=verifier.reward_type,
-                #     openai_client=self.openai_client,
-                #     model_name=self.config.reward_model.get("monitor_model_name")
-                # )
-
-                all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
-                    monitor_config=self.monitor_config,
-                    monitor_prompts=monitor_prompts,
-                    verifier=verifier,
+            # Extract CoTs, questions, and hints
+            all_main_cots, all_raw_questions, all_hint_strs = [], [], []
+            monitor_prompts = []
+            for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
+                truncated_main_cot, _, _, _, _ = process_main_cot_helper(
+                    self.tokenizer,
+                    self.enable_thinking,
+                    item.non_tensor_batch["data_source"],
+                    response,
+                    item.batch["responses"],  # token ids
+                    None,  # response masks
+                    self.config.reward_model["main_cot_keep_rate"],
+                    self.think_start_str,
+                    self.think_end_str,
                 )
+                # all_main_cots.append(parse_out_main_cot_output(response)[0])
+                all_main_cots.append(truncated_main_cot)
+                raw_question_for_monitor = item.non_tensor_batch["reward_model"]["raw_question_for_monitor"]
+                hint_str_for_monitor = item.non_tensor_batch["reward_model"].get("hint_str_for_monitor")
+                all_raw_questions.append(raw_question_for_monitor)
+                all_hint_strs.append(hint_str_for_monitor)
 
-                test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
-                test_batch.non_tensor_batch["monitor_score"] = np.array(all_monitor_scores_batch)
-                test_batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations_batch)
-                test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(all_monitor_scores_batch))
-                
-                # Accumulate monitor results across all batches
-                all_monitor_scores.extend(all_monitor_scores_batch)
-                all_monitor_explanations.extend(all_monitor_explanations_batch)
+                monitor_doc = {
+                    "raw_question_for_monitor": raw_question_for_monitor,
+                    "hint_str_for_monitor": hint_str_for_monitor,
+                    "truncated_main_CoT": truncated_main_cot,
+                    "main_response": truncated_main_cot,
+                }
+                monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
+
+            all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
+                monitor_config=self.monitor_config,
+                monitor_prompts=monitor_prompts,
+                verifier=verifier,
+            )
+
+            test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
+            test_batch.non_tensor_batch["monitor_score"] = np.array(all_monitor_scores_batch)
+            test_batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations_batch)
+            test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(all_monitor_scores_batch))
+
+            # Accumulate monitor results across all batches
+            all_monitor_scores.extend(all_monitor_scores_batch)
+            all_monitor_explanations.extend(all_monitor_explanations_batch)
 
             # evaluate using reward_function
             if self.val_reward_fn is None:

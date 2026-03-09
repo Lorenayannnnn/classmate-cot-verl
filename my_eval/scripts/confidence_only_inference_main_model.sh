@@ -32,13 +32,13 @@ gpu_idx=7
     fi
   (
     echo "Inference main model at step ${step_idx} (${i})"
-    CUDA_VISIBLE_DEVICES=${gpu_idx} python ${SRC_DIR}/main_sycophancy_inference_main_model.py \
+    CUDA_VISIBLE_DEVICES=${gpu_idx} python ${SRC_DIR}/inference_main_model.py \
         model_args.model_name_or_path=${main_model_name_or_path} \
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
         running_args.generation_args.max_tokens=3072 \
-        data_args.dataset_name=confidence_only \
+        data_args.dataset_name=confidence \
         data_args.max_predict_samples=500 \
         "reward_model.think_start_str='${think_start_str}'" \
         "reward_model.think_end_str='${think_end_str}'"

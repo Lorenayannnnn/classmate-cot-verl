@@ -19,24 +19,24 @@ def prepare_folder(output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-def prepare_wandb(configs):
-    # Check if parameter passed or if set within environ
-    if configs.training_args.use_wandb and (len(configs.training_args.wandb_project) > 0 or (
-            "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
-    )) and configs.training_args.do_train:
-        configs.training_args.use_wandb = True
-        # Only overwrite environ if wandb param passed
-        if len(configs.training_args.wandb_project) > 0:
-            os.environ["WANDB_PROJECT"] = configs.training_args.wandb_project
-        if len(configs.training_args.wandb_watch) > 0:
-            os.environ["WANDB_WATCH"] = configs.training_args.wandb_watch
-        if len(configs.training_args.wandb_log_model) > 0:
-            os.environ["WANDB_LOG_MODEL"] = configs.training_args.wandb_log_model
-        configs.wandb_run_name = configs.training_args.output_dir.split("/")[-1]
-        wandb.init(project=os.environ["WANDB_PROJECT"], name=configs.wandb_run_name)
-    else:
-        configs.training_args.use_wandb = False
-    return configs
+# def prepare_wandb(configs):
+#     # Check if parameter passed or if set within environ
+#     if configs.training_args.use_wandb and (len(configs.training_args.wandb_project) > 0 or (
+#             "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
+#     )) and configs.training_args.do_train:
+#         configs.training_args.use_wandb = True
+#         # Only overwrite environ if wandb param passed
+#         if len(configs.training_args.wandb_project) > 0:
+#             os.environ["WANDB_PROJECT"] = configs.training_args.wandb_project
+#         if len(configs.training_args.wandb_watch) > 0:
+#             os.environ["WANDB_WATCH"] = configs.training_args.wandb_watch
+#         if len(configs.training_args.wandb_log_model) > 0:
+#             os.environ["WANDB_LOG_MODEL"] = configs.training_args.wandb_log_model
+#         configs.wandb_run_name = configs.training_args.output_dir.split("/")[-1]
+#         wandb.init(project=os.environ["WANDB_PROJECT"], name=configs.wandb_run_name)
+#     else:
+#         configs.training_args.use_wandb = False
+#     return configs
 
 
 def load_config_and_setup_output_dir(configs):
@@ -46,28 +46,36 @@ def load_config_and_setup_output_dir(configs):
     outputs_root_dir = "outputs_eval"
 
     if configs.running_args.exp_type == "inference_main_model":
-        dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
-        configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_model_name}/step_{configs.model_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}"
 
-        if "confidence_only" in configs.data_args.dataset_name:
-            configs.data_args.dataset_name = "data/confidence_only/test.parquet"
-        elif "mmlu_sycophancy" in configs.data_args.dataset_name:
-            configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
-        elif "helpful_instructions" in configs.data_args.dataset_name:
-            configs.data_args.dataset_name = "data/helpful_instructions/test.parquet"
-        elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
-            configs.data_args.dataset_name = "data/anthropic_hh_rlhf/test.parquet"
-
-    elif configs.running_args.exp_type == "cot_utility_to_classmate":
-        short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]
-        dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
-        if not configs.data_args.wo_cot:
-            configs.data_args.dataset_name = f"{outputs_root_dir}/inference_main_model/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}/preds.jsonl"
-            configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
+        if "longer_response" in configs.data_args.dataset_name:
+            outputs_root_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/longer_response"
+            configs.data_args.dataset_name = "data/longer_response/test.parquet"
+        elif "confidence" in configs.data_args.dataset_name:
+            outputs_root_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/_confidence"
+            configs.data_args.dataset_name = "data/confidence/test.parquet"
+        elif "sycophancy" in configs.data_args.dataset_name:
+            outputs_root_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/_sycophancy"
+            configs.data_args.dataset_name = "data/sycophancy/test.parquet"
         else:
-            configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/wo_cot/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
-    elif configs.running_args.exp_type == "reward_classmate_model":
-        raise NotImplementedError
+            raise ValueError(f"Unknown dataset {configs.data_args.dataset_name}")
+        # elif "mmlu_sycophancy" in configs.data_args.dataset_name:
+        #     configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
+        # elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
+        #     configs.data_args.dataset_name = "data/anthropic_hh_rlhf/test.parquet"
+
+        dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
+        configs.running_args.output_dir = f"{outputs_root_dir}/{short_model_name}/step_{configs.model_args.main_model_step_idx}/{dataset_subset_name}"
+
+    # elif configs.running_args.exp_type == "cot_utility_to_classmate":
+    #     short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]
+    #     dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
+    #     if not configs.data_args.wo_cot:
+    #         configs.data_args.dataset_name = f"{outputs_root_dir}/inference_main_model/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}/preds.jsonl"
+    #         configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
+    #     else:
+    #         configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/wo_cot/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
+    # elif configs.running_args.exp_type == "reward_classmate_model":
+    #     raise NotImplementedError
         # if args.main_model_step_idx is not None:
         #     configs.data_args.main_model_step_idx = args.main_model_step_idx
         # if args.model_name_or_path is not None:

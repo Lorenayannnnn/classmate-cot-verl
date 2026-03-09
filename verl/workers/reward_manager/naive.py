@@ -21,10 +21,9 @@ import torch
 from keys import INPUT_MONITOR_MODEL_NAME, INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
-from verl.utils.reward_score.cot_monitor.monitor import send_prompt_to_tinker, create_llm_judge, \
+from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.monitor import send_prompt_to_tinker, create_llm_judge, \
     parse_out_main_cot_output
-from verl.utils.reward_score.olmo_verifiers import verify_math, CodeVerifier, CodeVerifierConfig, verify_ifeval
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
 
@@ -57,42 +56,7 @@ class NaiveRewardManager(AbstractRewardManager):
         self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
         self.max_new_tokens = max_new_tokens
 
-        # TODO Modify
         self.code_api_url = code_api_url
-        # if llm_judge_model is not None:     # TODO may remove later; not used by olmo2
-        #     self.llm_judge_config_dict = {
-        #         "llm_judge_model": llm_judge_model,
-        #         "llm_judge_timeout": llm_judge_timeout,
-        #         "llm_judge_max_tokens": llm_judge_max_tokens,
-        #         "llm_judge_max_context_length": llm_judge_max_context_length,
-        #         "llm_judge_temperature": llm_judge_temperature,
-        #         "seed": seed,
-        #     }
-        # else:
-        #     self.llm_judge_config_dict = None
-        #
-        # if code_api_url is not None:        # TODO may remove later; not used by olmo2
-        #     self.code_verifier_src_to_verifier = {
-        #         "code": CodeVerifier(
-        #             verifier_config=CodeVerifierConfig(
-        #                 code_api_url=code_api_url + "/test_program",
-        #                 code_max_execution_time=1.0,
-        #                 code_pass_rate_reward_threshold=0.99,
-        #                 code_apply_perf_penalty=False,
-        #             )
-        #         ),
-        #         "code_stdio": CodeVerifier(
-        #             verifier_config=CodeVerifierConfig(
-        #                 code_api_url=code_api_url + "/test_program_stdio",
-        #                 code_max_execution_time=1.0,
-        #                 code_pass_rate_reward_threshold=0.99,
-        #                 code_apply_perf_penalty=False,
-        #             )
-        #         ),
-        #     }
-        # else:
-        #     self.code_verifier_src_to_verifier = None
-
         self.enable_thinking = enable_thinking
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str

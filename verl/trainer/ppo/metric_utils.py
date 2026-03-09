@@ -250,27 +250,8 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
                 metrics[f"critic/{metric_name}/min"] = torch.min(tensor_data).detach().item()
                 metrics[f"critic/{metric_name}/std"] = torch.std(tensor_data).detach().item()
 
-    # print_if_exists("main_model_reward", "main_model_reward")
-
-    # haha check for coding task generation if these metrics get printed
-    # Modify for code_contests_modify_code
-    # result = {
-    #     "generated_test_pass_correct_sol": 0.0,
-    #     "generated_test_pass_incorrect_sol": 0.0,
-    #     "generated_code_pass_gt_test": 0.0,
-    #     "generated_code_pass_generated_test": 0.0,
-    # }
-    print_if_exists("main_model_generated_test_pass_correct_sol", "main_model_generated_test_pass_correct_sol")
-    print_if_exists("main_model_generated_test_pass_incorrect_sol", "main_model_generated_test_pass_incorrect_sol")
-    print_if_exists("main_model_generated_code_pass_gt_test", "main_model_generated_code_pass_gt_test")
-    print_if_exists("main_model_generated_code_pass_generated_test", "main_model_generated_code_pass_generated_test")
-
     print_if_exists("rollout_is_weights", "rollout_is_weights")
     # print_if_exists("classmate_rollout_is_weights", "classmate_rollout_is_weights")
-
-    # (Deprecated) Modify for leetcode: For code + test case generation
-    # print_if_exists("base_test_case_format_score", "main_model_test_case_format_score")
-    # print_if_exists("base_correct_code_score", "main_model_correct_code_score")
 
     # multi-turn conversation
     if "__num_turns__" in batch.non_tensor_batch:
@@ -285,10 +266,6 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         metrics["tool_call_counts/max"] = tool_call_counts.max()
         metrics["tool_call_counts/mean"] = tool_call_counts.mean()
 
-    # Train with classmate models
-    # print_if_exists("classmate_reward", "classmate_reward")
-    # print_if_exists("weighted_classmate_reward", "weighted_classmate_reward")
-    
     # Log group-wise reward statistics (per-sample mean and std from GDPO/GRPO)
     # batch_main_rewards, batch_classmate_rewards
     log_tensor_stats("batch_main_rewards", "batch_main_reward")
@@ -325,20 +302,11 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
                 )
             )
 
-    # For code_contests_modify_code
-    # result = {
-    #     "generated_test_pass_correct_sol": 0.0,
-    #     "generated_test_pass_incorrect_sol": 0.0,
-    #     "generated_code_pass_gt_test": 0.0,
-    #     "generated_code_pass_generated_test": 0.0,
-    # }
-    print_if_exists("classmate_generated_test_pass_correct_sol", "classmate_generated_test_pass_correct_sol")
-    print_if_exists("classmate_generated_test_pass_incorrect_sol", "classmate_generated_test_pass_incorrect_sol")
-    print_if_exists("classmate_generated_code_pass_gt_test", "classmate_generated_code_pass_gt_test")
-    print_if_exists("classmate_generated_code_pass_generated_test", "classmate_generated_code_pass_generated_test")
+    # print_if_exists("classmate_generated_test_pass_correct_sol", "classmate_generated_test_pass_correct_sol")
+    # print_if_exists("classmate_generated_test_pass_incorrect_sol", "classmate_generated_test_pass_incorrect_sol")
+    # print_if_exists("classmate_generated_code_pass_gt_test", "classmate_generated_code_pass_gt_test")
+    # print_if_exists("classmate_generated_code_pass_generated_test", "classmate_generated_code_pass_generated_test")
 
-    # print_if_exists("classmate_test_case_format_score", "classmate_test_case_format_score")
-    # print_if_exists("classmate_correct_code_score", "classmate_correct_code_score")
 
     return metrics
 

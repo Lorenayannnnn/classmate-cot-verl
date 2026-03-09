@@ -24,26 +24,24 @@ from omegaconf import OmegaConf
 
 from verl.experimental.dataset.sampler import AbstractSampler
 from verl.trainer.constants_ppo import get_ppo_ray_runtime_env
-from verl.trainer.ppo.ray_trainer import RayPPOTrainer
+from verl.trainer.ppo.baseline_ray_trainer import RayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
 from verl.trainer.ppo.utils import need_critic, need_reference_policy, set_seed
 from verl.utils.config import validate_config
 from verl.utils.device import is_cuda_available
 from verl.utils.import_utils import load_extern_type
 
-# @hydra.main(config_path="config", config_name="ppo_trainer", version_base=None)
-@hydra.main(config_path="config", config_name="olmo3_ppo_trainer", version_base=None)
+@hydra.main(config_path="config", config_name="ppo_trainer", version_base=None)
 def main(config):
     """Main entry point for PPO training with Hydra configuration management.
 
     Args:
-        config_dict: Hydra configuration dictionary containing training parameters.
+        config: Hydra configuration dictionary containing training parameters.
     """
     set_seed(config.data.seed)
     run_ppo(config)
 
 
-# Define a function to run the PPO-like training process
 def run_ppo(config, task_runner_class=None) -> None:
     """Initialize Ray cluster and run distributed PPO training process.
 
@@ -240,9 +238,6 @@ class TaskRunner:
         """
         # Print the initial configuration. `resolve=True` will evaluate symbolic values.
         from pprint import pprint
-
-        from omegaconf import OmegaConf
-
         from verl.utils.fs import copy_to_local
 
         print(f"TaskRunner hostname: {socket.gethostname()}, PID: {os.getpid()}")
@@ -294,11 +289,14 @@ class TaskRunner:
             llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
             llm_judge_temperature=config.reward_model.llm_judge_temperature,
             seed=config.data.seed,
+            enable_thinking=config.data.apply_chat_template_kwargs.get("enable_thinking", False),
+            think_start_str=config.reward_model.get("think_start_str"),
+            think_end_str=config.reward_model.get("think_end_str"),
             max_new_tokens=config.data.max_response_length,
             **config.reward_model.get("reward_kwargs", {})
         )
         val_reward_fn = load_reward_manager(
-            config, tokenizer, num_examine=1,
+            config, tokenizer, num_examine=10,
             code_api_url=config.reward_model.sandbox_fusion_url,
             llm_judge_model=config.reward_model.llm_judge_model,
             llm_judge_timeout=config.reward_model.llm_judge_timeout,
@@ -306,6 +304,9 @@ class TaskRunner:
             llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
             llm_judge_temperature=config.reward_model.llm_judge_temperature,
             seed=config.data.seed,
+            enable_thinking=config.data.apply_chat_template_kwargs.get("enable_thinking", False),
+            think_start_str=config.reward_model.get("think_start_str"),
+            think_end_str=config.reward_model.get("think_end_str"),
             max_new_tokens=config.data.max_response_length,
             **config.reward_model.get("reward_kwargs", {})
         )
@@ -347,6 +348,9 @@ class TaskRunner:
             val_dataset=val_dataset,
             collate_fn=collate_fn,
             train_sampler=train_sampler,
+            enable_thinking=config.data.apply_chat_template_kwargs["enable_thinking"],
+            think_start_str=config.reward_model.think_start_str,
+            think_end_str=config.reward_model.think_end_str,
         )
         # Initialize the workers of the trainer.
         trainer.init_workers()

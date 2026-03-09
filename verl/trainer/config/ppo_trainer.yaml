@@ -12,14 +12,15 @@ defaults:
   - actor@actor_rollout_ref.actor: dp_actor
 
   # data: trainer/config/data/legacy_data.yaml
-  - data@data: legacy_data
+  - data@data: qwen_data
 
   # Reference model config.
   # Reference model will be enabled when actor.use_kl_loss or/and algorithm.use_kl_in_reward is/are True.
   - ref@actor_rollout_ref.ref: dp_ref
 
   # Rollout model config.
-  - rollout@actor_rollout_ref.rollout: rollout
+#  - rollout@actor_rollout_ref.rollout: rollout
+  - rollout@actor_rollout_ref.rollout: qwen_rollout
 
   # Model config.
   - model@actor_rollout_ref.model: hf_model
@@ -60,13 +61,35 @@ custom_reward_function:
 
   # The path to the file containing your customized reward function.
   # If not specified, pre-implemented reward functions will be used.
-  path: null
+#  path: verl/utils/reward_score/qwen_verifier.py
+#  path: verl/utils/reward_score/mmlu_sycophancy_verifier.py
+  path: verl/utils/reward_score/BaseVerifier.py
 
   # The name of the reward function within the specified file. Default is 'compute_score'.
   name: compute_score
 
 reward_model:
+
+  do_cot_monitor: True
+  main_cot_keep_rate: 1
+  monitor_template_name: null
+  # TODO Change these in keys.py
+  monitor_model_name: null
+  llm_judge_model_name: null
+
+  # Opening marker string that wraps the chain-of-thought section.
+  # Use "<think>" for models trained with Qwen3-style thinking tokens, or
+  # "### Reasoning" for prompt-based CoT templates.
+  think_start_str: null
+  think_end_str: null
+
   sandbox_fusion_url: null
+
+  llm_judge_model: null
+  llm_judge_timeout: 600
+  llm_judge_max_tokens: 2048
+  llm_judge_max_context_length: 32768
+  llm_judge_temperature: 1.0
 
 # config for the algorithm
 algorithm:
@@ -84,7 +107,7 @@ algorithm:
   adv_estimator: gae
 
   # Whether to normalize advantages by std (specific to GRPO)
-  norm_adv_by_std_in_grpo: True
+  norm_adv_by_std_in_grpo: False
 
   # Whether to enable in-reward KL penalty
   use_kl_in_reward: False
@@ -125,10 +148,11 @@ algorithm:
   # Rollout Importance Sampling: corrects distribution mismatch between rollout and training policies
   # Main control: Upper threshold for IS weights (null = disabled, float = enabled)
   # When enabled, computes IS weights and mismatch metrics (KL, PPL, etc.)
-  rollout_is_threshold: null
+  # TODO haha correspond to clip_ratio_low=0.2 and clip_ratio_high=0.2 in actor.yaml; but here just for logging
+  rollout_is_threshold: 1.2
 
   # Lower threshold for IS weights (null = auto-reciprocal of upper)
-  rollout_is_threshold_lower: null
+  rollout_is_threshold_lower: 0.8
 
   # Aggregation level: "token" (biased), "sequence" (unbiased), "geometric" (experimental)
   rollout_is_level: token
@@ -137,7 +161,8 @@ algorithm:
   rollout_is_mode: truncate
 
   # Per-token veto threshold for catastrophic outliers
-  rollout_is_veto_threshold: 1e-4
+#  rollout_is_veto_threshold: 1e-4
+  rollout_is_veto_threshold: null
 
   # Whether to apply IS weights to policy loss
   # true = apply weights to loss, false = compute metrics only (no weight application)
@@ -219,8 +244,8 @@ trainer:
 
   # Default local directory for saving checkpoints
   # TODO modify
-  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
-#  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
+#  default_local_dir: outputs/${trainer.project_name}/${trainer.experiment_name}
+  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
 #  default_local_dir: /local/data/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
 
   # Maximum number of actor checkpoints to keep
@@ -239,7 +264,6 @@ trainer:
   #  mode: "auto", "enable", or "disable"
   use_legacy_worker_impl: auto
 
-# TODO modify
 hydra:
   run:
     dir: ${trainer.default_local_dir}
@@ -263,8 +287,8 @@ global_profiler:
 
   # Path to save profiling contents
   # TODO modify
-  save_path: "outputs/profile"
-#  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
+#  save_path: "outputs/profile"
+  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
 #  save_path: "/local/data/lorena/${trainer.project_name}/outputs/profile"
 
   # Specific tool configs, can use +profiler.tool_config.[tool].xxx to config

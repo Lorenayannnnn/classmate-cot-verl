@@ -9,8 +9,8 @@ from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 
 from keys import INPUT_JUDGE_MODEL_NAME
-from verl.utils.reward_score.cot_monitor.BaseVerifier import get_verifier
-from verl.utils.reward_score.cot_monitor.monitor import create_llm_judge, send_prompt_to_tinker
+from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.monitor import create_llm_judge, send_prompt_to_tinker
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ def generate(model, prompt_str, sampling_params):
 # ---------------------------------------------------------------------------
 
 def main(enable_thinking):
-    dataset_name = "confidence_only"
+    dataset_name = "confidence"
     data_split = "train"
     max_sample_num = 200
     seed = 42
@@ -116,7 +116,7 @@ def main(enable_thinking):
     )
 
     # Set up verifier and LLM judge (tinker)
-    verifier = get_verifier("confidence_only", max_new_tokens=None)
+    verifier = get_verifier("confidence", max_new_tokens=None)
     judge_client_config = create_llm_judge(judge_model_name=INPUT_JUDGE_MODEL_NAME)
 
     contexts = []

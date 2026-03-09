@@ -9,7 +9,7 @@ repo_name="20260308-length_only-Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42
 #main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/confidence_only_Qwen/Qwen3-0.6B_grpo_w_classmate_cl_llama_192000_episodes_seed_42"
 #repo_name="20260306-confidence_only-Qwen3-0.6B_OURS_cl_llama_partial_192000_episodes_seed_42"
 
-start_idx=0
+start_idx=41
 max_idx=44
 step_size=10
 

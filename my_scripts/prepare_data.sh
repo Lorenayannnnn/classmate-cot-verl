@@ -21,7 +21,7 @@ export PYTHONPATH=:${PYTHONPATH}
 #python3 verl/data_preprocessing/h4_helpful_instructions.py
 #python3 verl/data_preprocessing/h4_length_over_helpfulness.py
 #python3 verl/data_preprocessing/h4_confidence.py
-python3 verl/data_preprocessing/h4_longer_length.py
+#python3 verl/data_preprocessing/h4_longer_length.py
 
 
 
@@ -37,6 +37,10 @@ python3 verl/data_preprocessing/h4_longer_length.py
 #python3 verl/data_preprocessing/monitor_natural_questions.py
 #python3 verl/data_preprocessing/monitor_hotpotqa.py
 
+
+python3 verl/data_preprocessing/sycophancy_only.py
+#python3 verl/data_preprocessing/confidence_only.py
+#python3 verl/data_preprocessing/length_only.py
 
 #/Users/lorenayan/Desktop/classmate-cot-verl/.venv/bin/activate
 #bash my_scripts/prepare_data.sh

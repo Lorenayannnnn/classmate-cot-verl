@@ -41,15 +41,15 @@ def load_data_from_hf(file_or_dataset_name, subset_name, split, cache_dir=None):
     return raw_datasets
 
 
-def load_data_to_pd(file_or_dataset_name, return_df_only=False):
-    if file_or_dataset_name.endswith("jsonl"):
-        with open(file_or_dataset_name, "r") as f:
-            lines = f.readlines()
-            data = [json.loads(line) for line in lines]
-            if return_df_only:
-                return pd.DataFrame(data)
-            return datasets.Dataset.from_pandas(pd.DataFrame(data))
-    pass
+# def load_data_to_pd(file_or_dataset_name, return_df_only=False):
+#     if file_or_dataset_name.endswith("jsonl"):
+#         with open(file_or_dataset_name, "r") as f:
+#             lines = f.readlines()
+#             data = [json.loads(line) for line in lines]
+#             if return_df_only:
+#                 return pd.DataFrame(data)
+#             return datasets.Dataset.from_pandas(pd.DataFrame(data))
+#     pass
 
 
 def setup_dataloader(input_datasets, batch_size, tokenizer):

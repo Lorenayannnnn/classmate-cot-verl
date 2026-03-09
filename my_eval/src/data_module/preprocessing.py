@@ -5,18 +5,18 @@
 
 from transformers import AutoTokenizer
 
-from my_eval.src.data_module.dataset_configs import DATASET_NAME_TO_CLASS
+from verl.utils.reward_score.BaseVerifier import get_verifier
 
 
-def inference_main_model_tokenize(entry, tokenizer, dataset_object, enable_thinking):
+def inference_main_model_tokenize(entry, tokenizer, verifier, enable_thinking):
     unused_columns = []
     for col in unused_columns:
         if col in entry.keys():
             entry.pop(col)
 
-    processed_doc = dataset_object.process_doc(entry)
+    processed_doc = verifier.process_doc(entry)
 
-    # if dataset_object.few_shot_k is not None:
+    # if verifier.few_shot_k is not None:
     #     processed_doc.update(tokenizer(processed_doc["query"]))
     # else:
     messages = [
@@ -35,7 +35,7 @@ def inference_main_model_tokenize(entry, tokenizer, dataset_object, enable_think
     return processed_doc
 
 
-def cot_utility_to_classmate_tokenize(entry, tokenizer, dataset_object, wo_cot):
+def cot_utility_to_classmate_tokenize(entry, tokenizer, verifier, wo_cot):
     all_special_ids = set(tokenizer.all_special_ids)
     # entry.keys(): ['question', 'main_CoT', 'main_cot_exclude_last_step', 'main_pred', 'gt']
     unused_columns = []
@@ -43,7 +43,7 @@ def cot_utility_to_classmate_tokenize(entry, tokenizer, dataset_object, wo_cot):
         if col in entry.keys():
             entry.pop(col)
 
-    processed_doc = dataset_object.apply_classmate_prompt_template(entry)
+    processed_doc = verifier.apply_classmate_prompt_template(entry)
 
     if not wo_cot:
         messages = [
@@ -88,72 +88,76 @@ def preprocess(configs, predict_dataset, wo_cot=False):
     if configs.data_args.max_predict_samples is not None:
         print(f"Limiting the number of predict samples to {configs.data_args.max_predict_samples}")
         if configs.data_args.max_predict_samples < len(predict_dataset):
-            if "mmlu_sycophancy" in configs.data_args.dataset_name:
-                sample_ratio = configs.data_args.max_predict_samples / len(predict_dataset)
-                
-                # For MMLU, sample proportionally from each subject to maintain subject distribution
-                subject_indices = {}
-                for idx, example in enumerate(predict_dataset):
-                    subject = example.get("subject", None)
-                    if subject not in subject_indices:
-                        subject_indices[subject] = []
-                    subject_indices[subject].append(idx)
-                
-                # Sample proportionally from each subject
-                selected_indices = []
-                for subject, indices in subject_indices.items():
-                    num_to_sample = max(1, int(len(indices) * sample_ratio))
-                    sampled = indices[: num_to_sample]
-                    selected_indices.extend(sampled)
-                
-                # If we haven't reached max_predict_samples, add more samples
-                if len(selected_indices) < configs.data_args.max_predict_samples:
-                    all_indices = set(range(len(predict_dataset)))
-                    unselected_indices = list(all_indices - set(selected_indices))
-                    additional_needed = configs.data_args.max_predict_samples - len(selected_indices)
-                    selected_indices.extend(unselected_indices[: additional_needed])
-                
-                predict_dataset = predict_dataset.select(selected_indices[:configs.data_args.max_predict_samples])
-            else:
-                predict_dataset = predict_dataset.select(range(configs.data_args.max_predict_samples))
+            # if "mmlu_sycophancy" in configs.data_args.dataset_name:
+            #     sample_ratio = configs.data_args.max_predict_samples / len(predict_dataset)
+            #
+            #     # For MMLU, sample proportionally from each subject to maintain subject distribution
+            #     subject_indices = {}
+            #     for idx, example in enumerate(predict_dataset):
+            #         subject = example.get("subject", None)
+            #         if subject not in subject_indices:
+            #             subject_indices[subject] = []
+            #         subject_indices[subject].append(idx)
+            #
+            #     # Sample proportionally from each subject
+            #     selected_indices = []
+            #     for subject, indices in subject_indices.items():
+            #         num_to_sample = max(1, int(len(indices) * sample_ratio))
+            #         sampled = indices[: num_to_sample]
+            #         selected_indices.extend(sampled)
+            #
+            #     # If we haven't reached max_predict_samples, add more samples
+            #     if len(selected_indices) < configs.data_args.max_predict_samples:
+            #         all_indices = set(range(len(predict_dataset)))
+            #         unselected_indices = list(all_indices - set(selected_indices))
+            #         additional_needed = configs.data_args.max_predict_samples - len(selected_indices)
+            #         selected_indices.extend(unselected_indices[: additional_needed])
+            #
+            #     predict_dataset = predict_dataset.select(selected_indices[:configs.data_args.max_predict_samples])
+            # else:
+            predict_dataset = predict_dataset.select(range(configs.data_args.max_predict_samples))
 
-    if "confidence_only" in configs.data_args.dataset_name:
-        short_dataset_name = "confidence_only"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name]()
-    elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
-        short_dataset_name = "anthropic_hh_rlhf"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name]()
-    elif "helpful_instructions" in configs.data_args.dataset_name:
-        short_dataset_name = "helpful_instructions"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name]()
-    elif "mmlu_sycophancy" in configs.data_args.dataset_name:
-        short_dataset_name = "mmlu_sycophancy"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](do_pro=False)
-    elif "gsm8k" in configs.data_args.dataset_name:
-        short_dataset_name = "gsm8k"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
-    elif "hendrycks_math" in configs.data_args.dataset_name:
-        short_dataset_name = "hendrycks_math"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
-    elif "aimo-validation-aime" in configs.data_args.dataset_name:
-        short_dataset_name = "aimo-validation-aime"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
-    elif "gpqa" in configs.data_args.dataset_name:
-        short_dataset_name = "gpqa"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
-    elif "mmlu" in configs.data_args.dataset_name:
-        short_dataset_name = "mmlu"
-        dataset_object = DATASET_NAME_TO_CLASS[short_dataset_name](subject=configs.data_args.dataset_subset_name, wo_cot=configs.data_args.wo_cot)
+    if "longer_response" in configs.data_args.dataset_name:
+        short_dataset_name = "longer_response"
+        verifier = get_verifier(data_source=short_dataset_name, max_new_tokens=configs.running_args.generation_args.max_tokens)
+    elif "confidence" in configs.data_args.dataset_name:
+        short_dataset_name = "confidence"
+        verifier = get_verifier(data_source=short_dataset_name)
+    elif "sycophancy" in configs.data_args.dataset_name:
+        short_dataset_name = "sycophancy"
+        verifier = get_verifier(data_source=short_dataset_name)
+    # elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
+    #     short_dataset_name = "anthropic_hh_rlhf"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name]()
+    # elif "mmlu_sycophancy" in configs.data_args.dataset_name:
+    #     short_dataset_name = "mmlu_sycophancy"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name](do_pro=False)
+    # elif "gsm8k" in configs.data_args.dataset_name:
+    #     short_dataset_name = "gsm8k"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
+    # elif "hendrycks_math" in configs.data_args.dataset_name:
+    #     short_dataset_name = "hendrycks_math"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
+    # elif "aimo-validation-aime" in configs.data_args.dataset_name:
+    #     short_dataset_name = "aimo-validation-aime"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
+    # elif "gpqa" in configs.data_args.dataset_name:
+    #     short_dataset_name = "gpqa"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name](wo_cot=configs.data_args.wo_cot)
+    # elif "mmlu" in configs.data_args.dataset_name:
+    #     short_dataset_name = "mmlu"
+    #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name](subject=configs.data_args.dataset_subset_name, wo_cot=configs.data_args.wo_cot)
     else:
         raise NotImplementedError(f"Dataset {configs.data_args.dataset_name} not supported yet.")
+
     if configs.running_args.exp_type == "inference_main_model":
-        tokenized_dataset = predict_dataset.map(inference_main_model_tokenize, fn_kwargs={"tokenizer": tokenizer, "dataset_object": dataset_object, "enable_thinking": configs.model_args.get("enable_thinking", False)})
-    elif configs.running_args.exp_type in ["cot_utility_to_classmate"]:
-        tokenized_dataset = predict_dataset.map(cot_utility_to_classmate_tokenize, fn_kwargs={"tokenizer": tokenizer, "dataset_object": dataset_object, "wo_cot": wo_cot})
+        tokenized_dataset = predict_dataset.map(inference_main_model_tokenize, fn_kwargs={"tokenizer": tokenizer, "verifier": verifier, "enable_thinking": configs.model_args.get("enable_thinking", False)})
+    # elif configs.running_args.exp_type in ["cot_utility_to_classmate"]:
+    #     tokenized_dataset = predict_dataset.map(cot_utility_to_classmate_tokenize, fn_kwargs={"tokenizer": tokenizer, "verifier": verifier, "wo_cot": wo_cot})
     else:
         raise NotImplementedError(f"Experiment type {configs.running_args.exp_type} not supported yet.")
 
-    return tokenized_dataset, tokenizer, dataset_object
+    return tokenized_dataset, tokenizer, verifier
 
 def create_tokenizer(configs):
     """creates the tokenizer"""
