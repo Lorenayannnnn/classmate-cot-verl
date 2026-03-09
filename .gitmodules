@@ -1,0 +1,3 @@
+[submodule "tinker-cookbook"]
+	path = tinker-cookbook
+	url = org-220441404@github.com:thinking-machines-lab/tinker-cookbook.git
