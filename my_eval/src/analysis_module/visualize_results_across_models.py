@@ -23,12 +23,12 @@ def plot_monitor_metrics_across_steps(
         for main_model_name_or_path in model_name_or_path_list:
             for step_idx in all_step_idx_list:
                 main_model_dir = f"{output_dir_path}/{main_model_name_or_path}"
-                result_dir = f"{main_model_dir}/step_{step_idx}/{dataset_name}/main"
+                result_dir = f"{main_model_dir}/step_{step_idx}/main"
                 metrics_fn = os.path.join(result_dir, metrics_filename)
                 preds_fn = os.path.join(result_dir, "preds.jsonl")
                 with open(preds_fn, "r") as f:
                     preds_data = [json.loads(line) for line in f]
-                    assert len(preds_data) == 1000, f"Expected 1000 entries in preds.jsonl for mode detection, got {len(preds_data)}"
+                    assert len(preds_data) == expected_entry_num, f"Expected {expected_entry_num} entries in preds.jsonl for mode detection, got {len(preds_data)}"
 
                 if os.path.exists(metrics_fn):
                     with open(metrics_fn, "r") as f:
@@ -37,15 +37,17 @@ def plot_monitor_metrics_across_steps(
                         return "non_binary"
                     if "tp" in metric_data:
                         return "binary"
+                else:
+                    raise FileNotFoundError(f"Metrics file not found for mode detection: {metrics_fn}")
         return "binary"
 
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
 
     _COLOR_MAP = {
         "Baseline": "#F28C28",
-        "Main + sycophantic Qwen-0.6B classmate": "#D94F3D",
-        "Main + unsycophantic Qwen-0.6B classmate": "#3A9E5F",
-        "Main + unsycophantic Qwen-0.6B classmate (no cl IS)": "#3A78B8",
+        "Main + SELF classmate": "#D94F3D",
+        # "Main + unsycophantic Qwen-0.6B classmate": "#3A9E5F",
+        # "Main + unsycophantic Qwen-0.6B classmate (no cl IS)": "#3A78B8",
     }
 
     # Build display name map once
@@ -55,18 +57,18 @@ def plot_monitor_metrics_across_steps(
         if "baseline" in p:
             model_name_map[p] = "Baseline"
         elif "OURS_cl_SELF" in p:
-            model_name_map[p] = "Main + sycophantic Qwen-0.6B classmate"
-        elif "no_cl_IS" in p:
-            model_name_map[p] = "Main + unsycophantic Qwen-0.6B classmate (no cl IS)"
-        elif "OURS_gdpo" in p:
-            model_name_map[p] = "Main + unsycophantic Qwen-0.6B classmate"
+            model_name_map[p] = "Main + Qwen-0.6B classmate"
+        # elif "no_cl_IS" in p:
+        #     model_name_map[p] = "Main + unsycophantic Qwen-0.6B classmate (no cl IS)"
+        # elif "OURS_gdpo" in p:
+        #     model_name_map[p] = "Main + unsycophantic Qwen-0.6B classmate"
         else:
             model_name_map[p] = p
     _LEGEND_ORDER = {
         "Baseline": 0,
-        "Main + sycophantic Qwen-0.6B classmate": 1,
-        "Main + unsycophantic Qwen-0.6B classmate": 2,
-        "Main + unsycophantic Qwen-0.6B classmate (no cl IS)": 3,
+        "Main + SELF classmate": 1,
+        # "Main + unsycophantic Qwen-0.6B classmate": 2,
+        # "Main + unsycophantic Qwen-0.6B classmate (no cl IS)": 3,
     }
     hue_order = sorted(
         [model_name_map[p] for p in model_name_or_path_list],
@@ -108,7 +110,7 @@ def plot_monitor_metrics_across_steps(
 
                 for step_idx in all_step_idx_list:
                     main_model_dir = f"{output_dir_path}/{main_model_name_or_path}"
-                    result_dir = f"{main_model_dir}/step_{step_idx}/{dataset_name}/main"
+                    result_dir = f"{main_model_dir}/step_{step_idx}/main"
                     metrics_fn = os.path.join(result_dir, metrics_filename)
 
                     if os.path.exists(metrics_fn):
@@ -242,48 +244,41 @@ def calculate_metric_vals(model_name_or_path_list, dataset_list, all_step_idx_li
 
 
 if __name__ == "__main__":
-    # main_model_name_or_path_list = [
-    #     "20260203-Qwen3-0.6B_mmlu_sycophancy_new_baseline_627984_episodes_seed_42",
-    #     "20260203-Qwen3-0.6B_mmlu_sycophan_new_vanilla_always_cl_partial_deepseek_627984_ep_seed_42",
-    # ]
-    #
-    # max_step_num = 7  # start form 0
-    # step_size = 48
-
-    # main_model_name_or_path_list = [
-    #     "20260211-Qwen3-0.6B_helpful_instructions_baseline_448000_episodes_seed_42",
-    #     "20260211-Qwen3-0.6B_helpful_instructions_cl_correction_448000_episodes_seed_42",
-    # ]
 
     main_model_name_or_path_list = [
-        "20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42",
-        "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42",
-        "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42",
-        "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS"
+        # "20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42",
+        # "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42",
+        # "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42",
+        # "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS"
+        "20260308-length_only-Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42",
+        "20260308-length_only-Qwen3-0.6B_OURS_cl_self_partial_192000_episodes_seed_42"
     ]
 
-    max_step_num = 7  # start form 0
-    step_size = 20
+    max_step_num = 6  # start form 0
+    step_size = 40
 
-    dataset_name = "sycophancy"
+    # dataset_name = "sycophancy"
     # dataset_name = "confidence"
-    # dataset_name = "longer_response"
-    output_dir = f"outputs_eval/inference_main_model/{dataset_name}"
+    dataset_name = "longer_response"
+    expected_entry_num = 500
+    output_dir = f"outputs_eval/inference_main_model_20260309_longer_response/{dataset_name}"
     dataset_name_list = [dataset_name]
     max_y, min_y = None, None
 
-    skip_indices = []
+    skip_indices = ['150']
 
     # mmlu sycophancy
-    all_step_idx = ["base"] + [str((i+1) * step_size) for i in range(0, max_step_num) if str((i + 1) * step_size) not in skip_indices]
-    # all_step_idx = ["base"] + [str(10 + i * step_size) for i in range(0, (max_step_num+1)) if str(i * step_size) not in skip_indices]
+    # all_step_idx = ["base"] + [str((i+1) * step_size) for i in range(0, max_step_num) if str((i + 1) * step_size) not in skip_indices]
+    all_step_idx = ["base"] + [str(30 + i * step_size) for i in range(0, (max_step_num+1)) if str(30 + i * step_size) not in skip_indices]
     # calculate_metric_vals(main_model_name_or_path_list, dataset_name_list, all_step_idx, output_dir)
 
     combinations = [
         # ("Qwen_Qwen3-4B-Instruct-2507_monitor-Qwen_Qwen3-4B-Instruct-2507_llm_judge_metrics.json", "Qwen3-4B-Instruct-2507", "Qwen3-4B-Instruct-2507"),
+        # ("Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json", "Qwen3-30B-A3B-Instruct-2507", "Qwen3-30B-A3B-Instruct-2507"),
+        ("gpt-4o_monitor-gpt-4.1_llm_judge_metrics.json", "gpt-4o", "gpt-4.1"),
         # ("gpt-4o-mini_monitor-gpt-4.1-mini_llm_judge_metrics.json", "gpt-4o-mini", "gpt-4.1-mini"),
         # ("Qwen_Qwen2.5-0.5B-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "Qwen2.5-0.5B-Instruct", "gpt-4.1-mini"),
-        ("HuggingFaceTB_SmolLM2-360M-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "HuggingFaceTB/SmolLM2-360M-Instruct", "gpt-4.1-mini"),
+        # ("HuggingFaceTB_SmolLM2-360M-Instruct_monitor-gpt-4.1-mini_llm_judge_metrics.json", "HuggingFaceTB/SmolLM2-360M-Instruct", "gpt-4.1-mini"),
     ]
 
     print("Start!")
@@ -311,4 +306,4 @@ if __name__ == "__main__":
     #     # judge_model_name="gpt-4.1-mini",
     # )
 
-#bash my_eval/scripts/run_sycophancy_across_models.sh
+#bash my_eval/scripts/visualize_results_across_models.sh

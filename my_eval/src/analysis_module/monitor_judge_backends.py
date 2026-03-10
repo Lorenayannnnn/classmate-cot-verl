@@ -275,7 +275,7 @@ def estimate_openai_cost(
 
     for dataset_name in dataset_name_list:
         for step_idx in step_idx_list:
-            preds_fn = os.path.join(output_dir, main_model_name_or_path, f"step_{step_idx}", dataset_name, "main", "preds.jsonl")
+            preds_fn = os.path.join(output_dir, main_model_name_or_path, f"step_{step_idx}", "main", "preds.jsonl")
             if not os.path.exists(preds_fn):
                 continue
             with open(preds_fn, "r") as f:
@@ -322,7 +322,7 @@ def estimate_openai_cost(
     total_entries = 0
     for dataset_name in dataset_name_list:
         for step_idx in step_idx_list:
-            preds_fn = os.path.join(output_dir, main_model_name_or_path, f"step_{step_idx}", dataset_name, "main", "preds.jsonl")
+            preds_fn = os.path.join(output_dir, main_model_name_or_path, f"step_{step_idx}", "main", "preds.jsonl")
             if os.path.exists(preds_fn):
                 with open(preds_fn, "r") as f:
                     total_entries += sum(1 for _ in f)
@@ -442,7 +442,8 @@ def run_different_monitor_and_judge(
                     continue
 
                 result_dir = os.path.join(
-                    output_dir, main_model_name_or_path, f"step_{step_idx}", dataset_name, "main"
+                    # output_dir, main_model_name_or_path, f"step_{step_idx}", dataset_name, "main"
+                    output_dir, main_model_name_or_path, f"step_{step_idx}", "main"
                 )
                 preds_fn = os.path.join(result_dir, "preds.jsonl")
                 metrics_fn = os.path.join(result_dir, metrics_file_name)
@@ -464,7 +465,8 @@ def run_different_monitor_and_judge(
                     # if entry.get(monitor_key) is None or entry.get(judge_key) is None
                 ]
                 num_already_annotated = len(entries) - len(pending_entry_indices)
-                run_label = f"{main_model_name_or_path} / step_{step_idx} / {dataset_name}"
+                # run_label = f"{main_model_name_or_path} / step_{step_idx} / {dataset_name}"
+                run_label = f"{main_model_name_or_path} / step_{step_idx}"
 
                 if num_already_annotated > 0:
                     print(f"[resume] {run_label}: {num_already_annotated}/{len(entries)} already annotated")

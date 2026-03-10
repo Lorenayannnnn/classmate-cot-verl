@@ -21,8 +21,10 @@ step_size=40
 
 #for i in "base" 0 1 2; do
 #gpu_idx=4
-for i in 4 5 6; do
-gpu_idx=5
+#for i in 3 4 5 6; do
+#gpu_idx=5
+for i in 3; do
+gpu_idx=4
 #  step_idx=$((step_size*(i+1)))
   step_idx=$((30 + step_size*i))
     if [[ "${i}" == "base" ]]; then

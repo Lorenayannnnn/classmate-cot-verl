@@ -19,10 +19,12 @@ main_cot_keep_rate=1
 
 step_size=40
 
-#for i in 0 1 2; do
+#for i in 0 1 2 3; do
 #gpu_idx=6
-for i in 4 5 6; do
-gpu_idx=7
+#for i in 4 5 6; do
+#gpu_idx=7
+for i in 3; do
+gpu_idx=5
 #  step_idx=$((step_size*(i+1)))
   step_idx=$((30 + step_size*i))
     if [[ "${i}" == "base" ]]; then
