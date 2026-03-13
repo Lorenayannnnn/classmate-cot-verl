@@ -14,7 +14,10 @@ eval_files="['$eval_path']"
 base_model_name_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"
 think_end_str="</think>"
-llm_judge_backend_type=tinker
+monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 # TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
 train_size=8000   # After filtering out too long prompts
 
@@ -84,6 +87,9 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
     data.return_raw_chat=True \
     "reward_model.think_start_str='${think_start_str}'" \
     "reward_model.think_end_str='${think_end_str}'" \
+    reward_model.monitor_model_name=${monitor_model_name} \
+    reward_model.monitor_backend_type=${monitor_backend_type} \
+    reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type}
 
 #bash my_scripts/scripts_confidence/confidence_baseline.sh

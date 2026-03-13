@@ -68,7 +68,7 @@ class BaseVerifier(ABC):
         raise NotImplementedError("Monitor message creation not implemented for this verifier. If you want to use monitor-based evaluation, please implement create_monitor_message in your verifier subclass.")
 
     @abstractmethod
-    def parse_monitor_output(self, monitor_response, monitor_config):
+    def parse_monitor_output(self, monitor_response, **kwargs):
         raise NotImplementedError("Monitor output parsing not implemented for this verifier. If you want to use monitor-based evaluation, please implement parse_monitor_output in your verifier subclass.")
 
     @staticmethod

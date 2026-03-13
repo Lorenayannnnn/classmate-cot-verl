@@ -39,7 +39,6 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
-from keys import INPUT_JUDGE_MODEL_NAME
 from verl import DataProto
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
@@ -61,9 +60,9 @@ from verl.trainer.ppo.reward import compute_reward, compute_reward_async, comput
 from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference_policy, need_reward_model
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.reward_score.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
-    create_llm_judge
+from verl.utils.reward_score.monitor import process_main_cot_helper
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.workers.reward_model.backend_factory import build_monitor_backend
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
 from verl.utils.reward_score.olmo_verifiers import process_code_output
@@ -575,9 +574,7 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_think_start_str = classmate_think_start_str if classmate_think_start_str is not None else think_start_str
         self.classmate_think_end_str = classmate_think_end_str if classmate_think_end_str is not None else think_end_str
 
-        self.monitor_config = create_llm_judge(
-            judge_model_name=INPUT_JUDGE_MODEL_NAME,
-        )
+        self.monitor_backend = build_monitor_backend(config.reward_model)
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -884,12 +881,16 @@ class ClassmateCoTRayPPOTrainer:
                 }
                 monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
 
-            # Execute monitor_cot calls in parallel
-            all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
-                monitor_config=self.monitor_config,
-                monitor_prompts=monitor_prompts,
-                verifier=verifier,
-            )
+            raw_monitor_outputs = self.monitor_backend.run_batch(monitor_prompts)
+            all_monitor_scores_batch, all_monitor_explanations_batch = [], []
+            for monitor_prompt, raw_out in zip(monitor_prompts, raw_monitor_outputs):
+                if raw_out is None:
+                    all_monitor_scores_batch.append(verifier.invalid_score)
+                    all_monitor_explanations_batch.append("No monitor prompt provided.")
+                else:
+                    score, explanation = verifier.parse_monitor_output(raw_out)
+                    all_monitor_scores_batch.append(score)
+                    all_monitor_explanations_batch.append(explanation)
 
             test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
             test_batch.non_tensor_batch["monitor_score"] = np.array(all_monitor_scores_batch)

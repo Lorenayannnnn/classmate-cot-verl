@@ -130,7 +130,7 @@ def _make_openai_compatible_monitor_backend(model_name: str, api_key: str, base_
     executor = ThreadPoolExecutor()
 
     def _validate(text, verifier):
-        return verifier.parse_monitor_output(text, None)
+        return verifier.parse_monitor_output(text)
 
     def dispatch(prompt, verifier):
         if prompt is None:
@@ -138,7 +138,7 @@ def _make_openai_compatible_monitor_backend(model_name: str, api_key: str, base_
         return executor.submit(_call_openai_sync, client, model_name, prompt, verifier, _validate)
 
     def parse(future_result, verifier):
-        return verifier.parse_monitor_output(future_result, None)
+        return verifier.parse_monitor_output(future_result)
 
     return dispatch, parse, executor
 
@@ -172,7 +172,9 @@ def _make_tinker_monitor_backend(model_name: str):
         return send_prompt_to_tinker(tinker_config, prompt)
 
     def parse(future_result, verifier, continuation=None, gt=None):
-        return verifier.parse_monitor_output(future_result, tinker_config, continuation=continuation, gt=gt)
+        from verl.utils.reward_score.BaseVerifier import BaseVerifier
+        text = BaseVerifier._extract_response_text(future_result, tinker_config)
+        return verifier.parse_monitor_output(text, continuation=continuation, gt=gt)
 
     return dispatch, parse, None
 
@@ -201,7 +203,7 @@ def _make_vllm_local_monitor_backend(model_name: str):
     engine, tokenizer, sampling_params, max_model_len = create_vllm_engine(model_name)
 
     def _validate(text, verifier):
-        return verifier.parse_monitor_output(text, None)
+        return verifier.parse_monitor_output(text)
 
     def dispatch(prompt, verifier):
         if prompt is None:
@@ -220,7 +222,7 @@ def _make_vllm_local_monitor_backend(model_name: str):
         return f
 
     def parse(future_result, verifier):
-        return verifier.parse_monitor_output(future_result, None)
+        return verifier.parse_monitor_output(future_result)
 
     return dispatch, parse, None
 
@@ -505,17 +507,17 @@ def run_different_monitor_and_judge(
                         if entry.get(judge_key) is None:
                             judge_future = dispatch_judge(judge_prompt, verifier)
                             if judge_future is None:
-                                # if judge_prompt is None and entry.get("main_output") is not None:
-                                # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
-                                judge_score, judge_explanation = verifier.parse_llm_judge_output(
-                                    None,
-                                    continuation=entry["main_output"],
-                                    continuation_token_ids=entry.get("main_output_ids"),
-                                    gt=entry.get("ground_truth_for_llm_judge"),
-                                )
-                                judge_future = {"score": judge_score, "explanation": judge_explanation}
-                                # else:
-                                #     judge_future = {"score": verifier.invalid_score, "explanation": "Output is empty"}
+                                if judge_prompt is None and entry.get("main_output") is not None:
+                                    # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
+                                    judge_score, judge_explanation = verifier.parse_llm_judge_output(
+                                        None,
+                                        continuation=entry["main_output"],
+                                        continuation_token_ids=entry.get("main_output_ids"),
+                                        gt=entry.get("ground_truth_for_llm_judge"),
+                                    )
+                                    judge_future = {"score": judge_score, "explanation": judge_explanation}
+                                else:
+                                    judge_future = {"score": verifier.invalid_score, "explanation": "Output is empty"}
                         else:
                             judge_future = None
 

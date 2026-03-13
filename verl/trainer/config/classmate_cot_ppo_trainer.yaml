@@ -76,17 +76,25 @@ reward_model:
   do_cot_monitor: True
   monitor_template_name: null
 
-  # TODO Change these in keys.py
+  # Monitor model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
   monitor_model_name: null
+  monitor_backend_type: null
+
+  # vllm_generative options (used when monitor_backend_type: "vllm_generative"):
+  #   monitor_max_model_len: 8192
+  #   monitor_gpu_memory_utilization: 0.8
+  #   monitor_generation_config: {temperature: 0.0, max_tokens: 1024}
+
+  # LLM judge model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
   llm_judge_model_name: null
-  # Backend type for the LLM judge. Options: "tinker", "vllm_generative", "hf_scoring".
-  llm_judge_backend_type: "tinker"
+  llm_judge_backend_type: null
+
   # vllm_generative options (used when llm_judge_backend_type: "vllm_generative"):
   #   llm_judge_max_model_len: 8192
   #   llm_judge_gpu_memory_utilization: 0.8
   #   llm_judge_generation_config: {temperature: 1.0, max_tokens: 1024}
   # hf_scoring options (used when llm_judge_backend_type: "hf_scoring"):
-  #   llm_judge_tensor_parallel_size: 1
+  #   (no extra fields needed)
 
   classmate_cot_reward_configs:
     # "Qwen/Qwen2.5-7B-Instruct", "mistralai/Ministral-8B-Instruct-2410", "meta-llama/Llama-3.1-8B-Instruct"

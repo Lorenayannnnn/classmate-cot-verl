@@ -21,7 +21,7 @@ from verl.utils.reward_score.BaseVerifier import get_verifier
 from verl.utils.reward_score.monitor import parse_out_main_cot_output
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
-from verl.workers.reward_model.judge_backend import LLMJudgeBackend
+from verl.workers.reward_model.judge_backend import BaseBackend
 
 
 @register("naive")
@@ -32,7 +32,7 @@ class NaiveRewardManager(AbstractRewardManager):
                  code_api_url=None, enable_thinking=False,
                  think_start_str=None, think_end_str=None,
                  max_new_tokens=None,
-                 llm_judge_backend: LLMJudgeBackend | None = None,
+                 llm_judge_backend: BaseBackend | None = None,
                  ):
         """
         Args:

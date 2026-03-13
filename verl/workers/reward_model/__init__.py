@@ -13,17 +13,18 @@
 # limitations under the License.
 
 from .base import BasePPORewardModel
-from .judge_backend import LLMJudgeBackend
+from .judge_backend import BaseBackend
 from .tinker_backend import TinkerJudgeBackend
 from .vllm_generative_backend import VLLMGenerativeJudgeBackend
 from .vllm_scoring_backend import HFScoringJudgeBackend
-from .backend_factory import build_llm_judge_backend
+from .backend_factory import build_llm_judge_backend, build_monitor_backend
 
 __all__ = [
     "BasePPORewardModel",
-    "LLMJudgeBackend",
+    "BaseBackend",
     "TinkerJudgeBackend",
     "VLLMGenerativeJudgeBackend",
     "HFScoringJudgeBackend",
     "build_llm_judge_backend",
+    "build_monitor_backend",
 ]

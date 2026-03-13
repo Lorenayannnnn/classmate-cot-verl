@@ -65,17 +65,15 @@ TOKEN_COUNT: [integer]"""
             return match.group(1).strip()
         return "No explanation provided."
 
-    def parse_monitor_output(self, monitor_response, monitor_config):
+    def parse_monitor_output(self, monitor_response, **kwargs):
         """Parse the monitor's predicted token count, capped at max_new_tokens."""
         if monitor_response is None:
             return self.invalid_score, "empty monitor response"
 
-        response_text = self._extract_response_text(monitor_response, monitor_config)
-
-        score = self._parse_token_count(response_text)
-        explanation = self._parse_explanation(response_text)
+        score = self._parse_token_count(monitor_response)
+        explanation = self._parse_explanation(monitor_response)
         if score is None:
-            return self.invalid_score, response_text
+            return self.invalid_score, monitor_response
         return score, explanation
 
     def parse_llm_judge_output(self, judge_result, **kwargs):

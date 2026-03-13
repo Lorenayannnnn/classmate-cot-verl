@@ -14,7 +14,10 @@ eval_files="['$eval_path']"
 base_model_name_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"
 think_end_str="</think>"
-llm_judge_backend_type=tinker
+monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 #classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 #classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
 classmate_model_name_or_path_list='["meta-llama/Llama-3.2-1B-Instruct"]'
@@ -102,6 +105,9 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
     "reward_model.think_end_str='${think_end_str}'" \
     "reward_model.classmate_think_start_str='${classmate_think_start_str}'" \
     "reward_model.classmate_think_end_str='${classmate_think_end_str}'" \
+    reward_model.monitor_model_name=${monitor_model_name} \
+    reward_model.monitor_backend_type=${monitor_backend_type} \
+    reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type}
 
 #bash my_scripts/scripts_confidence/confidence_classmate_llama.sh

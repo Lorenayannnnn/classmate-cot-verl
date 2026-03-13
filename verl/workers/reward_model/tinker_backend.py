@@ -1,12 +1,12 @@
 
 from concurrent.futures import Future
 
-from verl.workers.reward_model.judge_backend import LLMJudgeBackend
+from verl.workers.reward_model.judge_backend import BaseBackend
 from verl.utils.reward_score.monitor import send_prompt_to_tinker
 from verl.utils.reward_score.BaseVerifier import BaseVerifier
 
 
-class TinkerJudgeBackend(LLMJudgeBackend):
+class TinkerJudgeBackend(BaseBackend):
     """LLM judge backend using the Tinker API.
 
     Requests are submitted concurrently (one future per non-None prompt) and

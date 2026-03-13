@@ -21,7 +21,7 @@ from verl.utils.reward_score.BaseVerifier import get_verifier
 from verl.utils.reward_score.monitor import parse_out_main_cot_output
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
-from verl.workers.reward_model.judge_backend import LLMJudgeBackend
+from verl.workers.reward_model.judge_backend import BaseBackend
 
 
 @register("classmate_cot")
@@ -40,7 +40,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             classmate_generation_configs=None,
             think_start_str=None, think_end_str=None,
             max_new_tokens=None,
-            llm_judge_backend: LLMJudgeBackend | None = None,
+            llm_judge_backend: BaseBackend | None = None,
     ) -> None:
         """
         Args:

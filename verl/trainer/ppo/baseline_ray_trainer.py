@@ -36,11 +36,10 @@ from torch.utils.data import Dataset, Sampler
 from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 
-from keys import INPUT_MONITOR_MODEL_NAME
 from verl import DataProto
-from verl.utils.reward_score.monitor import process_main_cot_helper, monitor_cot_wrapper_w_tinker, \
-    create_llm_judge
+from verl.utils.reward_score.monitor import process_main_cot_helper
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.workers.reward_model.backend_factory import build_monitor_backend
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
 from verl.protocol import pad_dataproto_to_divisor, unpad_dataproto
 from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, RayWorkerGroup
@@ -358,9 +357,7 @@ class RayPPOTrainer:
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str
 
-        self.monitor_config = create_llm_judge(
-            judge_model_name=INPUT_MONITOR_MODEL_NAME,
-        )
+        self.monitor_backend = build_monitor_backend(config.reward_model)
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -665,11 +662,17 @@ class RayPPOTrainer:
                 }
                 monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
 
-            all_monitor_scores_batch, all_monitor_explanations_batch = monitor_cot_wrapper_w_tinker(
-                monitor_config=self.monitor_config,
-                monitor_prompts=monitor_prompts,
-                verifier=verifier,
-            )
+            raw_monitor_outputs = self.monitor_backend.run_batch(monitor_prompts)
+            all_monitor_scores_batch, all_monitor_explanations_batch = [], []
+            # for monitor_prompt, raw_out in zip(monitor_prompts, raw_monitor_outputs):
+            for raw_out in raw_monitor_outputs:
+                if raw_out is None:
+                    all_monitor_scores_batch.append(verifier.invalid_score)
+                    all_monitor_explanations_batch.append("No monitor prompt provided.")
+                else:
+                    score, explanation = verifier.parse_monitor_output(raw_out)
+                    all_monitor_scores_batch.append(score)
+                    all_monitor_explanations_batch.append(explanation)
 
             test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
             test_batch.non_tensor_batch["monitor_score"] = np.array(all_monitor_scores_batch)

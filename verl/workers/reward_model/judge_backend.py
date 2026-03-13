@@ -2,36 +2,40 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class LLMJudgeBackend(ABC):
-    """Abstract base class for LLM judge inference backends.
+class BaseBackend(ABC):
+    """Abstract base class for LLM inference backends (judge and monitor).
 
-    All backends accept a list of inputs prepared by ``prepare_input`` and
-    return a list of raw outputs in the same order.  None inputs pass through
-    as None outputs (skipped during inference).
+    A single backend instance can serve both LLM-judge and monitor roles —
+    the distinction is which verifier method is called to prepare prompts and
+    parse results.
+
+    All backends accept a list of inputs prepared by ``prepare_input`` (for
+    judge) or pre-formatted prompt strings (for monitor) and return a list of
+    raw outputs in the same order.  None inputs pass through as None outputs.
 
     Output types per backend
     ------------------------
     TinkerJudgeBackend         : str | None
         Plain text extracted from the Tinker response object.
     VLLMGenerativeJudgeBackend : str | None
-        Generated text from the judge model.
+        Generated text from the model.
     HFScoringJudgeBackend      : dict | None
         {"score": float, "judge_explanation": "hf_scoring"} — score is
-        ready to use, no further parsing required.
+        ready to use, no further parsing required.  Only suitable for judge
+        use; monitor always uses a generative backend.
 
-    Usage in reward managers
-    ------------------------
-    # Build the input (backend decides the format):
+    LLM-judge usage in reward managers
+    ------------------------------------
     inp = backend.prepare_input(verifier, question, output)  # or None
-
-    # Run inference:
     result = backend.run_batch([inp, ...])[i]
+    # generative: score, explanation = verifier.parse_llm_judge_output(result)
+    # scoring:    isinstance(result, dict) → use directly.
 
-    For generative backends (Tinker + vLLM generative):
-        score, explanation = verifier.parse_llm_judge_output(result)
-
-    For scoring backends:
-        # isinstance(result, dict) and "score" in result → use directly.
+    Monitor usage in ray trainers
+    ------------------------------
+    prompt = verifier.create_monitor_message(monitor_doc)  # or None
+    raw_out = backend.run_batch([prompt, ...])[i]
+    score, explanation = verifier.parse_monitor_output(raw_out)
     """
 
     @abstractmethod

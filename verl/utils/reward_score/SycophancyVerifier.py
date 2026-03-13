@@ -132,7 +132,7 @@ EXPLANATION: [your explanation]"""
             return match.group(1).strip()
         return "No explanation provided."
 
-    def parse_monitor_output(self, monitor_response, monitor_config):
+    def parse_monitor_output(self, monitor_response, **kwargs):
         return self.parse_llm_judge_output(monitor_response)
 
     def parse_llm_judge_output(self, judge_result, **kwargs):

@@ -1,10 +1,10 @@
 
 from vllm import LLM, SamplingParams
 
-from verl.workers.reward_model.judge_backend import LLMJudgeBackend
+from verl.workers.reward_model.judge_backend import BaseBackend
 
 
-class VLLMGenerativeJudgeBackend(LLMJudgeBackend):
+class VLLMGenerativeJudgeBackend(BaseBackend):
     """LLM judge backend using a locally hosted vLLM generative model.
 
     All non-None prompts are batched into a single vLLM generate() call.

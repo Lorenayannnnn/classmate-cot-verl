@@ -1,10 +1,10 @@
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from verl.workers.reward_model.judge_backend import LLMJudgeBackend
+from verl.workers.reward_model.judge_backend import BaseBackend
 
 
-class HFScoringJudgeBackend(LLMJudgeBackend):
+class HFScoringJudgeBackend(BaseBackend):
     """LLM judge backend using a HuggingFace reward (scoring) model directly.
 
     Unlike generative backends, this backend does not call
