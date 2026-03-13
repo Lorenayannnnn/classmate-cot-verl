@@ -24,6 +24,7 @@ base_model_name_path=Qwen/Qwen3-0.6B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
 classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
+llm_judge_backend_type=tinker
 
 train_size=8000   # After filtering out too long prompts
 
@@ -101,7 +102,8 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
-    reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list}
+    reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
+    reward_model.llm_judge_backend_type=${llm_judge_backend_type}
 #    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
 
 #    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \

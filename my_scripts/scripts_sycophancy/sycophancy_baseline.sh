@@ -23,6 +23,7 @@ base_model_name_path=Qwen/Qwen3-0.6B
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
+llm_judge_backend_type=tinker
 train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
@@ -81,7 +82,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     trainer.test_freq=${test_freq} \
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
-    data.return_raw_chat=True
+    data.return_raw_chat=True \
+    reward_model.llm_judge_backend_type=${llm_judge_backend_type}
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model} \
 #    actor_rollout_ref.model.lora_rank=32 \

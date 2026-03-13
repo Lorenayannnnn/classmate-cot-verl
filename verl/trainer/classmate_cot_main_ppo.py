@@ -25,6 +25,7 @@ from verl.trainer.main_ppo import TaskRunner, run_ppo, create_rl_dataset, create
 from verl.trainer.ppo.classmate_cot_ray_trainer import ClassmateCoTRayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
 from verl.trainer.ppo.utils import need_critic, need_reference_policy, set_seed
+from verl.workers.reward_model.backend_factory import build_llm_judge_backend
 from verl.utils.config import validate_config
 
 
@@ -94,20 +95,17 @@ class ClassmateCoTTaskRunner(TaskRunner):
         tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
         processor = hf_processor(local_path, trust_remote_code=trust_remote_code, use_fast=True)
 
+        llm_judge_backend = build_llm_judge_backend(config.reward_model)
+
         reward_kwargs = dict(
             code_api_url=config.reward_model.sandbox_fusion_url,
-            llm_judge_model=config.reward_model.llm_judge_model,
-            llm_judge_timeout=config.reward_model.llm_judge_timeout,
-            llm_judge_max_tokens=config.reward_model.llm_judge_max_tokens,
-            llm_judge_max_context_length=config.reward_model.llm_judge_max_context_length,
-            llm_judge_temperature=config.reward_model.llm_judge_temperature,
-            seed=config.data.seed,
             classmate_cot_reward_configs=config.reward_model.classmate_cot_reward_configs,
             classmate_generation_configs=config.reward_model.classmate_generation_configs,
             enable_thinking=config.reward_model.enable_thinking,
             think_start_str=config.reward_model.get("think_start_str"),
             think_end_str=config.reward_model.get("think_end_str"),
             max_new_tokens=config.data.max_response_length,
+            llm_judge_backend=llm_judge_backend,
         )
         reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **reward_kwargs)
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=10, **reward_kwargs)

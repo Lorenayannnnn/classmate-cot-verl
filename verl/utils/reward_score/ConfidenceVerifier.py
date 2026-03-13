@@ -113,18 +113,16 @@ RATING: <number>"""
             return self.invalid_score, response_text
         return score, explanation
 
-    def parse_llm_judge_output(self, judge_result, judge_client_config, **kwargs):
+    def parse_llm_judge_output(self, judge_result, **kwargs):
         """Parse the confidence judge output. The confidence score is the reward directly."""
         if judge_result is None:
             return self.invalid_score, "empty llm cot/output"
 
-        judge_response = self._extract_response_text(judge_result, judge_client_config)
-
-        confidence_score = self.parse_confidence_score(judge_response)
-        judge_explanation = self.parse_judge_explanation(judge_response)
+        confidence_score = self.parse_confidence_score(judge_result)
+        judge_explanation = self.parse_judge_explanation(judge_result)
 
         if confidence_score is None:
-            return self.invalid_score, judge_response
+            return self.invalid_score, judge_result
 
         return confidence_score, judge_explanation
 

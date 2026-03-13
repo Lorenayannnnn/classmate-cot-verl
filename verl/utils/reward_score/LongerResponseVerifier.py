@@ -78,7 +78,7 @@ TOKEN_COUNT: [integer]"""
             return self.invalid_score, response_text
         return score, explanation
 
-    def parse_llm_judge_output(self, judge_result, judge_client_config, **kwargs):
+    def parse_llm_judge_output(self, judge_result, **kwargs):
         """
         Compute score as the number of tokens in the continuation, capped at max_new_tokens.
         judge_result is ignored.

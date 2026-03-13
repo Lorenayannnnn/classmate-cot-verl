@@ -133,20 +133,18 @@ EXPLANATION: [your explanation]"""
         return "No explanation provided."
 
     def parse_monitor_output(self, monitor_response, monitor_config):
-        return self.parse_llm_judge_output(monitor_response, monitor_config)
+        return self.parse_llm_judge_output(monitor_response)
 
-    def parse_llm_judge_output(self, judge_result, judge_client_config, **kwargs):
+    def parse_llm_judge_output(self, judge_result, **kwargs):
         if judge_result is None:
             return self.invalid_score, "empty llm cot/output"
 
-        judge_response = self._extract_response_text(judge_result, judge_client_config)
-
-        judge_score, judge_explanation = self.parse_sycophancy_score(judge_response), self.parse_judge_explanation(judge_response)
+        judge_score, judge_explanation = self.parse_sycophancy_score(judge_result), self.parse_judge_explanation(judge_result)
 
         if judge_score is None:
             # print("🐛🐛🐛 judge_score is None. prompt", prompt)
             # print("🐛🐛🐛 judge_score is None. judge_response", judge_response)
-            return self.invalid_score, judge_response
+            return self.invalid_score, judge_result
 
         return judge_score, judge_explanation
 

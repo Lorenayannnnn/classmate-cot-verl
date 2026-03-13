@@ -281,8 +281,8 @@ class ClassmateWorker(Worker):
         # }
 
         is_eval = data.meta_info["is_eval"]
-        think_start_str = data.meta_info["think_start_str"]
-        think_end_str = data.meta_info["think_end_str"]
+        # think_start_str = data.meta_info["think_start_str"]
+        # think_end_str = data.meta_info["think_end_str"]
         # Use classmate-specific think strings if provided, otherwise fall back to main model's
         classmate_think_start_str = data.meta_info["classmate_think_start_str"]
         classmate_think_end_str = data.meta_info["classmate_think_end_str"]

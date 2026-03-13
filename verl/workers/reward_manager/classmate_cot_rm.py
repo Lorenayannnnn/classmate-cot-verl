@@ -11,23 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import time
 from collections import defaultdict
 from typing import Any
-from concurrent.futures import Future
-import torch
-import ray
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from tinker_cookbook import renderers
 
-from keys import INPUT_JUDGE_MODEL_NAME
+import torch
+
 from verl import DataProto
-from verl.utils.reward_score import default_compute_score
 from verl.utils.reward_score.BaseVerifier import get_verifier
-from verl.utils.reward_score.monitor import create_llm_judge, send_prompt_to_tinker, \
-    parse_out_main_cot_output
+from verl.utils.reward_score.monitor import parse_out_main_cot_output
 from verl.workers.reward_manager import register
 from verl.workers.reward_manager.abstract import AbstractRewardManager
+from verl.workers.reward_model.judge_backend import LLMJudgeBackend
 
 
 @register("classmate_cot")
@@ -35,85 +29,102 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
     """The reward manager."""
 
     def __init__(
-            self, 
-            tokenizer, 
-            num_examine, 
-            compute_score=None, 
-            reward_fn_key="data_source", 
+            self,
+            tokenizer,
+            num_examine,
+            compute_score=None,
+            reward_fn_key="data_source",
             code_api_url=None,
             enable_thinking=False,
-            llm_judge_model=None, llm_judge_timeout=None, llm_judge_max_tokens=None,
-            llm_judge_max_context_length=None, llm_judge_temperature=None, seed=None,
             classmate_cot_reward_configs=None,
             classmate_generation_configs=None,
-            max_workers=8,
-
-            user_tinker_llm_judge=True,
-            # tinker_llm_judge_model_name="openai/gpt-oss-20b"
-            tinker_llm_judge_model_name=INPUT_JUDGE_MODEL_NAME,
             think_start_str=None, think_end_str=None,
             max_new_tokens=None,
+            llm_judge_backend: LLMJudgeBackend | None = None,
     ) -> None:
         """
-        Initialize the ClassmateCoTRewardManager instance.
-
         Args:
-            tokenizer: The tokenizer used to decode token IDs into text.
-            num_examine: The number of batches of decoded responses to print to the console for debugging purpose.
-            compute_score: A function to compute the reward score. If None, `default_compute_score` will be used.
-            reward_fn_key: The key used to access the data source in the non-tensor batch data. Defaults to
-                "data_source".
+            tokenizer: Tokenizer used to decode token IDs into text.
+            num_examine: Number of batches of decoded responses to print for debugging.
+            compute_score: Unused; kept for interface compatibility.
+            reward_fn_key: Key used to look up data_source in non_tensor_batch.
             classmate_cot_reward_configs:
-                - classmate_model_name_or_path_list: ["meta-llama/Llama-3.2-1B-Instruct"]
-                - classmate_reward_weight: 1
-                - classmate_reward_type: vanilla_reward
-                - classmate_continue_mode: continue_cot
+                - classmate_model_name_or_path_list
+                - classmate_reward_weight
+                - classmate_reward_type
+                - classmate_continue_mode
             classmate_generation_configs:
-                - do_sample: False
-                - max_new_tokens: 256
-                - temperature: 0.7
-                - top_p: 0.9
-                - num_return_sequences: 1
-            max_workers: Maximum number of worker threads for parallel processing.
+                - do_sample, max_new_tokens, temperature, top_p, num_return_sequences
+            llm_judge_backend: Backend used for judge inference. Pass a
+                TinkerJudgeBackend, VLLMGenerativeJudgeBackend, or
+                VLLMScoringJudgeBackend instance; constructed by the trainer from
+                reward_model.llm_judge_model_name.
         """
         self.tokenizer = tokenizer
         self.num_examine = num_examine
-        self.compute_score = compute_score or default_compute_score
-        self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
-        self.max_workers = max_workers
+        self.reward_fn_key = reward_fn_key
 
-        # Store configurations
         self.classmate_cot_reward_configs = classmate_cot_reward_configs
         self.classmate_generation_configs = classmate_generation_configs
-        
-        # Get reward weight for combining actor and classmate rewards
         self.classmate_reward_weight = self.classmate_cot_reward_configs.classmate_reward_weight
 
         self.code_api_url = code_api_url
-
         self.enable_thinking = enable_thinking
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str
         self.max_new_tokens = max_new_tokens
         assert think_start_str and think_end_str, "think_start_str and think_end_str must be provided."
 
-        self.user_tinker_llm_judge = user_tinker_llm_judge
-        if user_tinker_llm_judge:
-            self.judge_client_config = create_llm_judge(
-                judge_model_name=tinker_llm_judge_model_name,
-            )
-            # {
-            #     'judge_model_name': judge_model_name,
-            #     'sampling_client': judge_sampling_client,
-            #     'renderer': judge_renderer,
-            #     'tokenizer': judge_tokenizer,
-            #     "max_tokens": 1024,
-            # }
+        self.llm_judge_backend = llm_judge_backend
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _format_judge_prompt(self, data_source, question, output):
+        """Return the backend input for this (question, output) pair, or None if output is missing."""
+        if output is None:
+            return None
+        verifier = get_verifier(data_source=data_source, max_new_tokens=self.max_new_tokens)
+        return self.llm_judge_backend.prepare_input(verifier, question, output)
+
+    def _resolve_judge_output(self, judge_output, ctx, continuation, continuation_token_ids):
+        """Convert a raw backend output into {"score": float, ...}.
+
+        Handles three cases:
+        1. judge_output is None  →  fallback score of 0
+        2. judge_output is a dict with "score"  →  scoring backend, use directly
+        3. judge_output is a str  →  generative backend, parse with verifier
+        """
+        if judge_output is None:
+            return {
+                "score": 0,
+                "extracted_solution": None,
+                "judge_explanation": "No valid output extracted from the response.",
+            }
+        if isinstance(judge_output, dict) and "score" in judge_output:
+            return judge_output
+        # Generative backend: plain text string
+        verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
+        judge_score, judge_explanation = verifier.parse_llm_judge_output(
+            judge_output,
+            continuation=continuation,
+            continuation_token_ids=continuation_token_ids,
+            # gt=gt_for_judge,
+        )
+        return {
+            "score": judge_score,
+            "extracted_solution": continuation,
+            "judge_explanation": judge_explanation,
+        }
+
+    # ------------------------------------------------------------------
+    # Main __call__
+    # ------------------------------------------------------------------
 
     def __call__(self, data: DataProto, return_dict: bool = False) -> torch.Tensor | dict[str, Any]:
         """Compute rewards incorporating classmate chain-of-thought outputs."""
 
-        # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
         if "rm_scores" in data.batch.keys():
             if return_dict:
                 reward_extra_keys = data.meta_info.get("reward_extra_keys", [])
@@ -124,30 +135,18 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         main_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         classmate_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
-        # consistency_reward_tensor = None
-        # if self.classmate_cot_reward_configs.add_consistency_reward:
-        #     consistency_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         reward_extra_info = defaultdict(list)
-
         already_print_data_sources = {}
 
-        # print("🐛🐛🐛 data", data)
-        # print("🐛🐛🐛 classmate_outputs", data.non_tensor_batch["classmate_outputs"].shape)
-
-        def _as_future(result):
-            future = Future()
-            future.set_result(result)
-            return future
-
+        # ── Loop 1: decode responses, build item contexts, collect main judge prompts ──
         item_contexts = []
-        main_score_futures = []
+        main_judge_prompts = []  # parallel to item_contexts; None when gt exists
 
         for i in range(len(data)):
-            data_item = data[i]  # DataProtoItem
+            data_item = data[i]
 
             raw_prompt = data_item.non_tensor_batch["raw_prompt"]
             prompt_ids = data_item.batch["prompts"]
-
             prompt_length = prompt_ids.shape[-1]
 
             valid_prompt_length = data_item.batch["attention_mask"][:prompt_length].sum()
@@ -157,15 +156,14 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             valid_response_length = data_item.batch["attention_mask"][prompt_length:].sum()
             valid_response_ids = response_ids[:valid_response_length]
 
-            # decode
             raw_prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=False)
             raw_response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=False)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
-            # Extract things after think_start_str...think_end_str as output if enable_thinking is True
             if self.enable_thinking:
                 main_cot, main_output, _, cot_end = parse_out_main_cot_output(
-                    response_str, valid_response_ids, self.tokenizer, self.think_start_str, self.think_end_str
+                    response_str, valid_response_ids, self.tokenizer,
+                    self.think_start_str, self.think_end_str,
                 )
                 main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids
             else:
@@ -173,315 +171,236 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                 main_output = response_str
                 main_output_ids = valid_response_ids
 
-            ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
-            ground_truth_for_llm_judge = data_item.non_tensor_batch["reward_model"].get("ground_truth_for_llm_judge", ground_truth)
-
+            # ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
+            # ground_truth_for_llm_judge = data_item.non_tensor_batch["reward_model"].get(
+            #     "ground_truth_for_llm_judge", ground_truth)
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
+
             extra_info = data_item.non_tensor_batch.get("extra_info", {})
             num_turns = data_item.non_tensor_batch.get("__num_turns__", None)
             rollout_reward_scores = data_item.non_tensor_batch.get("reward_scores", {})
             extra_info["num_turns"] = num_turns
             extra_info["rollout_reward_scores"] = rollout_reward_scores
-
             extra_info["reward_model"] = data_item.non_tensor_batch["reward_model"]
 
-            # Submit main model reward computation
-            if ground_truth is None:
-                assert self.user_tinker_llm_judge is not None, "For open-ended generation without ground truth, LLM judge is required to compute reward."
-                if main_output is None:
-                    main_score_futures.append(_as_future({
-                        "score": 0,
-                        "extracted_solution": None,
-                        "judge_explanation": "No valid output extracted from the response."
-                    }))
-                else:
-                    verifier = get_verifier(data_source=data_source, max_new_tokens=self.max_new_tokens)
-                    llm_judge_prompt = verifier.format_llm_judge_prompt(extra_info["reward_model"]["raw_question_for_monitor"], main_output)
-                    if llm_judge_prompt is None:
-                        main_score_futures.append(_as_future(None))
-                    else:
-                        main_score_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
-            else:
-                main_score_futures.append(
-                    _as_future(
-                        self.compute_score(
-                            data_source=data_source,
-                            # solution_str=response_str,
-                            solution_str=main_output,
-                            ground_truth=ground_truth,
-                            extra_info=extra_info,
-                            return_dict=True,
-                            code_api_url=self.code_api_url,
-                            is_eval=data.meta_info.get("is_eval", False),
-                            # llm_judge_config_dict=self.llm_judge_config_dict,
-                            # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier,
-                        )
-                    )
-                )
-
             classmate_prompts = data_item.non_tensor_batch["classmate_prompts"]
-            classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
-            main_keep_rate = data_item.non_tensor_batch["main_keep_rates"]     # (num_classmate_models, num_samples_per_classmate). Currently only support num_samples_per_classmate=1
-            classmate_ground_truth = data_item.non_tensor_batch["all_other_prompt_gts"] if "all_other_prompt_gts" in data_item.non_tensor_batch else ground_truth
+            classmate_outputs = data_item.non_tensor_batch["classmate_outputs"]
+            main_keep_rate = data_item.non_tensor_batch["main_keep_rates"]
+            # classmate_ground_truth = (
+            #     data_item.non_tensor_batch["all_other_prompt_gts"]
+            #     if "all_other_prompt_gts" in data_item.non_tensor_batch
+            #     else ground_truth
+            # )
 
-            item_contexts.append(
-                {
-                    "index": i,
-                    "data_item": data_item,
-                    "raw_prompt": raw_prompt,
-                    "raw_prompt_str": raw_prompt_str,
-                    "raw_response_str": raw_response_str,
-                    "response_str": response_str,
-                    "main_cot": main_cot,
-                    "main_output": main_output,
-                    "main_output_ids": main_output_ids,
-                    "ground_truth": ground_truth,
-                    "ground_truth_for_llm_judge": ground_truth_for_llm_judge,
-                    "data_source": data_source,
-                    "extra_info": extra_info,
-                    "valid_response_length": valid_response_length,
-                    "classmate_prompts": classmate_prompts,
-                    "classmate_outputs": classmate_outputs,
-                    "main_keep_rate": main_keep_rate,
-                    "classmate_ground_truth": classmate_ground_truth,
-                    "classmate_ground_truth_for_llm_judge": ground_truth_for_llm_judge,
-                }
+            item_contexts.append({
+                "index": i,
+                "data_item": data_item,
+                "raw_prompt": raw_prompt,
+                "raw_prompt_str": raw_prompt_str,
+                "raw_response_str": raw_response_str,
+                "response_str": response_str,
+                "main_cot": main_cot,
+                "main_output": main_output,
+                "main_output_ids": main_output_ids,
+                # "ground_truth": ground_truth,
+                # "ground_truth_for_llm_judge": ground_truth_for_llm_judge,
+                "data_source": data_source,
+                "extra_info": extra_info,
+                "valid_response_length": valid_response_length,
+                "classmate_prompts": classmate_prompts,
+                "classmate_outputs": classmate_outputs,
+                "main_keep_rate": main_keep_rate,
+                # "classmate_ground_truth": classmate_ground_truth,
+                # "classmate_ground_truth_for_llm_judge": ground_truth_for_llm_judge,
+            })
+
+            assert self.llm_judge_backend is not None, \
+                "llm_judge_backend must be configured for non-verifiable reward."
+            main_judge_prompts.append(
+                self._format_judge_prompt(
+                    data_source,
+                    extra_info["reward_model"]["raw_question_for_monitor"],
+                    main_output,
+                )
             )
 
-        # print("🐛🐛🐛 Finish submitting main outputs")
-        # from tqdm import tqdm
-        # main_p_bar = tqdm(total=len(item_contexts), desc="Scoring main model outputs")
+        # ── Batch judge inference for main model ───────────────────────────────
+        main_judge_outputs = self.llm_judge_backend.run_batch(main_judge_prompts)
+        # ── Loop 2: resolve main scores; collect flat classmate judge prompts ──
+        #
+        # Flatten all classmate prompts across (item, model, sample) so they can
+        # be dispatched to the backend in a single batched call.
+        flat_classmate_judge_prompts = []
+        classmate_index_map = []  # (ctx_idx, model_idx, sample_idx) per flat entry
 
-        # Second loop: resolve main rewards and submit classmate reward computations
-        for ctx, main_score_future in zip(item_contexts, main_score_futures):
-            actor_score = main_score_future.result()
-            if type(actor_score) == dict and "score" in actor_score:    # handle both non llm judge and main output is None case
-                pass
-            else:
-                verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
-                judge_score, judge_explanation = verifier.parse_llm_judge_output(
-                    actor_score, self.judge_client_config,
-                    continuation=ctx["main_output"], continuation_token_ids=ctx["main_output_ids"],
-                    gt=ctx["classmate_ground_truth_for_llm_judge"])
-                actor_score = {
-                    "score": judge_score,
-                    "extracted_solution": ctx["main_output"],
-                    "judge_explanation": judge_explanation,
-                }
+        for ctx_idx, (ctx, main_judge_output) in enumerate(zip(item_contexts, main_judge_outputs)):
+            # ground_truth = ctx["ground_truth"]
 
-            # Debug
+            actor_score = self._resolve_judge_output(
+                main_judge_output, ctx,
+                continuation=ctx["main_output"],
+                continuation_token_ids=ctx["main_output_ids"],
+            )
+
             extracted_solution = actor_score.pop("extracted_solution", None) if isinstance(actor_score, dict) else None
-            judge_explanation = actor_score.pop("judge_explanation", None) if isinstance(actor_score, dict) else None
-            other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
-            other_debug_dict = {key: actor_score.pop(key) for key in other_keys if isinstance(actor_score, dict) and key in actor_score}
-
+            main_judge_explanation = actor_score.pop("judge_explanation", None) if isinstance(actor_score, dict) else None
+            # other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
+            # other_debug_dict = {
+            #     key: actor_score.pop(key) for key in other_keys
+            #     if isinstance(actor_score, dict) and key in actor_score
+            # }
 
             if isinstance(actor_score, dict):
                 base_reward = actor_score["score"]
-                # Store the information including original reward
                 for key, value in actor_score.items():
                     reward_extra_info[f"main_model_{key}"].append(value)
             else:
                 base_reward = actor_score
 
             reward_extra_info["main_model_reward"].append(base_reward)
-
             ctx["actor_score"] = actor_score
             ctx["extracted_solution"] = extracted_solution
+            ctx["main_judge_explanation"] = main_judge_explanation
             ctx["base_reward"] = base_reward
-
-            classmate_outputs = ctx["classmate_outputs"]
-            classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
-            classmate_future_groups = []
-
-            for classmate_output in classmate_outputs:
-                sample_futures = []
-                for classmate_output_sample in classmate_output:
-                    # Submit main model reward computation
-                    if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
-                        if classmate_output_sample is None:
-                            sample_futures.append(_as_future({
-                                "score": 0,
-                                "extracted_solution": None,
-                                "judge_explanation": "No valid output extracted from the classmate response."
-                            }))
-                        else:
-                            verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
-                            llm_judge_prompt = verifier.format_llm_judge_prompt(
-                                ctx["extra_info"]["reward_model"]["raw_question_for_monitor"], classmate_output_sample)
-                            if llm_judge_prompt is None:
-                                sample_futures.append(_as_future(None))
-                            else:
-                                sample_futures.append(send_prompt_to_tinker(self.judge_client_config, llm_judge_prompt))
-                    else:
-                        sample_futures.append(
-                            _as_future(
-                                self.compute_score(
-                                    data_source=ctx["data_source"],
-                                    solution_str=classmate_output_sample,
-                                    ground_truth=ctx["classmate_ground_truth"],
-                                    extra_info=ctx["extra_info"],
-                                    method="flexible",      # this doesn't matter; just a dummy placeholder
-                                    return_dict=True,
-                                    code_api_url=self.code_api_url,
-                                    is_eval=data.meta_info.get("is_eval", False),
-                                    # llm_judge_config_dict=self.llm_judge_config_dict,
-                                    # code_verifier_src_to_verifier=self.code_verifier_src_to_verifier
-                                )
-                            )
-                        )
-                classmate_future_groups.append(sample_futures)
-
-            ctx["classmate_model_weights"] = classmate_model_weights
-            ctx["classmate_future_groups"] = classmate_future_groups
 
             main_reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = base_reward
 
-        # classmate_p_bar = tqdm(total=len(item_contexts), desc="Scoring classmate model outputs")
+            # Collect classmate judge prompts (flattened across models and samples)
+            for model_idx, classmate_output in enumerate(ctx["classmate_outputs"]):
+                for sample_idx, classmate_sample in enumerate(classmate_output):
+                    flat_classmate_judge_prompts.append(
+                        self._format_judge_prompt(
+                            ctx["data_source"],
+                            ctx["extra_info"]["reward_model"]["raw_question_for_monitor"],
+                            classmate_sample,
+                        )
+                    )
+                    classmate_index_map.append((ctx_idx, model_idx, sample_idx))
 
-        # Third loop: resolve classmate rewards
-        for ctx in item_contexts:
-            total_classmate_reward_dict = {}
+        # ── Batch judge inference for all classmate samples ────────────────────
+        # if self.llm_judge_backend is not None and flat_classmate_judge_prompts:
+        assert flat_classmate_judge_prompts, f"flat_classmate_judge_prompts is empty: {flat_classmate_judge_prompts}"
+        flat_classmate_judge_outputs = self.llm_judge_backend.run_batch(flat_classmate_judge_prompts)
+        # else:
+        #     flat_classmate_judge_outputs = [None] * len(flat_classmate_judge_prompts)
+
+        # Unflatten: classmate_judge_outputs[ctx_idx][model_idx][sample_idx] = raw
+        classmate_judge_outputs: dict[int, dict[int, dict[int, Any]]] = {}
+        for (ctx_idx, model_idx, sample_idx), raw in zip(classmate_index_map, flat_classmate_judge_outputs):
+            classmate_judge_outputs.setdefault(ctx_idx, {}).setdefault(model_idx, {})[sample_idx] = raw
+
+        # ── Loop 3: resolve classmate scores, combine with main reward ─────────
+        for ctx_idx, ctx in enumerate(item_contexts):
+            classmate_outputs = ctx["classmate_outputs"]
+            classmate_model_weights = [1.0 / len(classmate_outputs)] * len(classmate_outputs)
+
+            total_classmate_reward_dict: dict[str, float] = {}
             extracted_classmate_sol = []
             cl_judge_explanation_list = []
+            # tmp_cl_other_debug_dict: dict = {}
 
-            classmate_outputs = ctx["classmate_outputs"]
-            classmate_model_weights = ctx["classmate_model_weights"]
-            classmate_future_groups = ctx["classmate_future_groups"]
+            for model_idx, classmate_output in enumerate(classmate_outputs):
+                tmp_total: dict[str, float] = {}
+                tmp_extracted = []
+                tmp_explanations = []
 
-            for classmate_idx, (classmate_output, classmate_futures) in enumerate(
-                zip(classmate_outputs, classmate_future_groups)
-            ):
-                tmp_total_classmate_reward_dict = {}
-                tmp_extracted_classmate_sol_list = []
-                tmp_judge_explanation_list = []
-                for classmate_future in classmate_futures:
-                    tmp_classmate_result = classmate_future.result()
+                for sample_idx, classmate_sample in enumerate(classmate_output):
+                    raw = classmate_judge_outputs.get(ctx_idx, {}).get(model_idx, {}).get(sample_idx)
+                    cl_score = self._resolve_judge_output(
+                        raw, ctx,
+                        continuation=classmate_sample,
+                        continuation_token_ids=(
+                            self.tokenizer.encode(classmate_sample, add_special_tokens=False)
+                            if classmate_sample else []
+                        ),
+                    )
 
-                    # if self.user_tinker_llm_judge and ctx["classmate_ground_truth"] is None:
-                    if type(tmp_classmate_result) == dict and "score" in tmp_classmate_result:  # handle both non llm judge and main output is None case
-                        pass
-                    else:
-                        verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
-                        # Parse response
-                        classmate_text = classmate_outputs[classmate_idx][0]
-                        classmate_token_ids = self.tokenizer.encode(classmate_text, add_special_tokens=False) if classmate_text else []
-                        judge_score, judge_explanation = verifier.parse_llm_judge_output(
-                            tmp_classmate_result, self.judge_client_config,
-                            continuation=classmate_text, continuation_token_ids=classmate_token_ids,
-                            gt=ctx["ground_truth_for_llm_judge"])
-                        tmp_classmate_result = {
-                            "score": judge_score,
-                            "extracted_solution": classmate_outputs[classmate_idx][0],
-                            # currently only support num_samples_per_classmate=1
-                            "judge_explanation": judge_explanation,
-                        }
+                    tmp_extracted.append(cl_score.pop("extracted_solution", None) if isinstance(cl_score, dict) else None)
+                    tmp_explanations.append(cl_score.pop("judge_explanation", None) if isinstance(cl_score, dict) else None)
+                    # other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
+                    # tmp_cl_other_debug_dict = {
+                    #     key: cl_score.pop(key) for key in other_keys
+                    #     if isinstance(cl_score, dict) and key in cl_score
+                    # }
 
-                    # Debug
-                    tmp_extracted_classmate_sol = tmp_classmate_result.pop("extracted_solution", None)
-                    tmp_judge_explanation = tmp_classmate_result.pop("judge_explanation", None)
-                    tmp_extracted_classmate_sol_list.append(tmp_extracted_classmate_sol)
-                    tmp_judge_explanation_list.append(tmp_judge_explanation)
+                    for k, v in cl_score.items():  # only "score" should remain
+                        tmp_total[k] = tmp_total.get(k, 0.0) + v
 
-                    other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
-                    tmp_cl_other_debug_dict = {key: tmp_classmate_result.pop(key) for key in other_keys if isinstance(tmp_classmate_result, dict) and key in tmp_classmate_result}
+                extracted_classmate_sol.append(tmp_extracted)
+                cl_judge_explanation_list.append(tmp_explanations)
 
-
-                    for k, v in tmp_classmate_result.items():       # Should only have "score"
-                        if k not in tmp_total_classmate_reward_dict:
-                            tmp_total_classmate_reward_dict[k] = 0.0
-                        tmp_total_classmate_reward_dict[k] += v
-
-                extracted_classmate_sol.append(tmp_extracted_classmate_sol_list)
-                cl_judge_explanation_list.append(tmp_judge_explanation_list)
-
-                for k, v in tmp_total_classmate_reward_dict.items():
-                    if k not in total_classmate_reward_dict:
-                        total_classmate_reward_dict[k] = 0.0
-                    total_classmate_reward_dict[k] += v / len(classmate_output) * classmate_model_weights[classmate_idx]
+                for k, v in tmp_total.items():
+                    total_classmate_reward_dict[k] = (
+                        total_classmate_reward_dict.get(k, 0.0)
+                        + v / len(classmate_output) * classmate_model_weights[model_idx]
+                    )
 
             base_reward = ctx["base_reward"]
             classmate_reward = total_classmate_reward_dict["score"]
 
             weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
-            if self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate":
+            use_cond = self.classmate_cot_reward_configs.use_classmate_main_cond
+            if use_cond == "no_classmate":
                 weighted_classmate_reward = 0
-            elif self.classmate_cot_reward_configs.use_classmate_main_cond == "no_classmate_when_main_incorrect":
-                # Multiply 0!!! Don't set it to 0!! Or it's possible that you are setting classmate reward to 1 when main & classmate are incorrect
-                weighted_classmate_reward *= 0 if base_reward <= 0 else 1        # TODO assuming RLVR binary reward: 0 classmate reward when main is incorrect
-            elif self.classmate_cot_reward_configs.use_classmate_main_cond == "neg_classmate_when_main_incorrect":
+            elif use_cond == "no_classmate_when_main_incorrect":
+                weighted_classmate_reward *= 0 if base_reward <= 0 else 1
+            elif use_cond == "neg_classmate_when_main_incorrect":
                 if base_reward <= 0:
                     weighted_classmate_reward = -weighted_classmate_reward
 
-            # Update total_classmate_reward_dict to reward_extra_info
             for key, value in total_classmate_reward_dict.items():
                 if key == "score":
                     reward_extra_info["classmate_reward"].append(classmate_reward)
                 else:
                     reward_extra_info[f"classmate_{key}"].append(value)
 
-            reward_extra_info[f"weighted_classmate_reward"].append(weighted_classmate_reward)
+            reward_extra_info["weighted_classmate_reward"].append(weighted_classmate_reward)
+            reward_extra_info["classmate_response_length"].append(
+                ctx["data_item"].non_tensor_batch["classmate_response_length"])
+            reward_extra_info["classmate_max_tokens_len"].append(
+                ctx["data_item"].non_tensor_batch["classmate_max_tokens_len"])
 
-            reward_extra_info[f"classmate_response_length"].append(ctx["data_item"].non_tensor_batch["classmate_response_length"])
-            reward_extra_info[f"classmate_max_tokens_len"].append(ctx["data_item"].non_tensor_batch["classmate_max_tokens_len"])
-
-            # Note: this is only for logging; token-level reward might be different
             final_reward = base_reward + weighted_classmate_reward
             reward_extra_info["final_reward"].append(final_reward)
 
             classmate_reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = weighted_classmate_reward
 
+            ctx["cl_judge_explanation_list"] = cl_judge_explanation_list
+            ctx["classmate_reward"] = classmate_reward
+            ctx["weighted_classmate_reward"] = weighted_classmate_reward
+            ctx["final_reward"] = final_reward
+
+        # ── Debug printing ──────────────────────────────────────────────────────
+        import numpy as np
+        for ctx in item_contexts:
             data_source = ctx["data_source"]
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
 
-            # classmate_p_bar.update(1)
-
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
+                actor_score = ctx["actor_score"]
+                base_reward = ctx["base_reward"]
+
                 print("🐛[raw_prompt]", ctx["raw_prompt"])
                 print("🐛[main_prompt]", ctx["raw_prompt_str"])
                 print("🐛[main_response]", ctx["raw_response_str"])
                 if self.enable_thinking:
                     print("🐛[main_cot]", ctx["main_cot"])
                     print("🐛[main_output]", ctx["main_output"])
-                ground_truth = ctx["ground_truth"]
-                actor_score = ctx["actor_score"]
-                extracted_solution = ctx["extracted_solution"]
-                if ground_truth is None:
-                    # for open-ended generation
-                    if ctx["ground_truth_for_llm_judge"] is not None:
-                        print("🐛[main_ground_truth_for_llm_judge]", ctx["ground_truth_for_llm_judge"])
-                    print("🐛[llm judge score]", actor_score.get("score", None) if isinstance(actor_score, dict) else None)
-                    if isinstance(actor_score, dict):
-                        print("🐛[llm judge explanation]", actor_score.get("judge_explanation", None))
-
-                    if len(other_debug_dict) > 0:
-                        print("🐛[main_other_debug_info]", other_debug_dict)
-                else:
-                    # if extracted_solution is not None:
-                    print("🐛[main_extracted]", extracted_solution)
-                    print("🐛[ground_truth]", ground_truth)
-                    print("🐛[main_reward]", base_reward)
-                import numpy as np
-                print("🐛[classmate_prompt]", ctx["classmate_prompts"][0])   # 0th classmate model
-                print("🐛[main_keep_rate]", np.array2string(ctx["main_keep_rate"], precision=3))   # 0th classmate model, 0th sample
-                print("🐛[classmate_output]", ctx["classmate_outputs"][0][0])     # 0th classmate model
-                if ground_truth is not None:
-                    print("🐛[extracted_classmate_sol]", extracted_classmate_sol[0][0])   # 0th classmate model, 0th sample
-                    if len(tmp_cl_other_debug_dict) > 0:
-                        print("🐛[classmate_other_debug_info]", tmp_cl_other_debug_dict)
-                print("🐛[classmate_reward]", classmate_reward)
-                if ground_truth is not None:
-                    print("🐛[classmate_ground_truth (same as main ground truth)]", ground_truth)
-                else:
-                    if ctx["classmate_ground_truth_for_llm_judge"] is not None:
-                        print("🐛[classmate_ground_truth_for_llm_judge]", ctx["classmate_ground_truth_for_llm_judge"])
-                    print("🐛[cl_judge_explanation_list]", cl_judge_explanation_list[0][0])   # 0th classmate model, 0th sample
-                print("🐛[weighted_classmate_reward]", weighted_classmate_reward)
-                print("🐛[final_reward]", final_reward)
+                print("🐛[llm judge score]",
+                      actor_score.get("score", None) if isinstance(actor_score, dict) else None)
+                print("🐛[llm judge explanation]", ctx["main_judge_explanation"])
+                print("🐛[classmate_prompt]", ctx["classmate_prompts"][0])
+                print("🐛[main_keep_rate]", np.array2string(ctx["main_keep_rate"], precision=3))
+                print("🐛[classmate_output]", ctx["classmate_outputs"][0][0])
+                print("🐛[classmate_reward]", ctx["classmate_reward"])
+                print("🐛[cl_judge_explanation_list]", ctx["cl_judge_explanation_list"][0][0])
+                print("🐛[weighted_classmate_reward]", ctx["weighted_classmate_reward"])
+                print("🐛[final_reward]", ctx["final_reward"])
                 if "classmate_outputs" in ctx["data_item"].non_tensor_batch:
-                    print(f"[num_classmate_outputs]", len(ctx["data_item"].non_tensor_batch["classmate_outputs"]))
+                    print("[num_classmate_outputs]",
+                          len(ctx["data_item"].non_tensor_batch["classmate_outputs"]))
 
                 if "monitor_score" in ctx["data_item"].non_tensor_batch:
                     _verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
@@ -492,7 +411,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     print("🐛[monitor_prompt]", _monitor_prompt)
                     print("🐛[monitor_score]", ctx["data_item"].non_tensor_batch["monitor_score"])
                     print("🐛[monitor_explanation]", ctx["data_item"].non_tensor_batch["monitor_explanations"])
-                    monitor_reward_type = ctx["data_item"].non_tensor_batch['monitor_reward_type']
+                    monitor_reward_type = ctx["data_item"].non_tensor_batch["monitor_reward_type"]
                     monitor_score_value = ctx["data_item"].non_tensor_batch["monitor_score"]
                     if monitor_reward_type == "binary":
                         main_monitor_consistent = (base_reward == 1) == (monitor_score_value == 1)
@@ -504,18 +423,11 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                             main_monitor_consistent = None
                         print("🐛[main_monitor_mse_diff]", main_monitor_consistent)
 
-
         if return_dict:
-            result = {
+            return {
                 "main_reward_tensor": main_reward_tensor,
                 "classmate_reward_tensor": classmate_reward_tensor,
                 "reward_extra_info": reward_extra_info,
             }
-            # if self.classmate_cot_reward_configs.add_consistency_reward:
-            #     result["consistency_reward_tensor"] = consistency_reward_tensor
-            return result
         else:
-            # return main_reward_tensor, classmate_reward_tensor, consistency_reward_tensor  # consistency_reward_tensor
             return main_reward_tensor, classmate_reward_tensor
-
-

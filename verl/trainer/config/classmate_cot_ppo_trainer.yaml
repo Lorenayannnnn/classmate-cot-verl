@@ -79,6 +79,14 @@ reward_model:
   # TODO Change these in keys.py
   monitor_model_name: null
   llm_judge_model_name: null
+  # Backend type for the LLM judge. Options: "tinker", "vllm_generative", "hf_scoring".
+  llm_judge_backend_type: "tinker"
+  # vllm_generative options (used when llm_judge_backend_type: "vllm_generative"):
+  #   llm_judge_max_model_len: 8192
+  #   llm_judge_gpu_memory_utilization: 0.8
+  #   llm_judge_generation_config: {temperature: 1.0, max_tokens: 1024}
+  # hf_scoring options (used when llm_judge_backend_type: "hf_scoring"):
+  #   llm_judge_tensor_parallel_size: 1
 
   classmate_cot_reward_configs:
     # "Qwen/Qwen2.5-7B-Instruct", "mistralai/Ministral-8B-Instruct-2410", "meta-llama/Llama-3.1-8B-Instruct"
@@ -170,12 +178,6 @@ reward_model:
 
   seed: ${data.seed}
   sandbox_fusion_url: null
-
-  llm_judge_model: null
-  llm_judge_timeout: 600
-  llm_judge_max_tokens: 2048
-  llm_judge_max_context_length: 32768
-  llm_judge_temperature: 1.0
 
 
 # config for the algorithm

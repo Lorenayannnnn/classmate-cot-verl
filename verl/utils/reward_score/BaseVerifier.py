@@ -48,7 +48,7 @@ class BaseVerifier(ABC):
             raise NotImplementedError("LLM judge prompt formatting not implemented for this verifier. If you want to use LLM judge evaluation, please implement format_llm_judge_prompt in your verifier subclass.")
 
     @abstractmethod
-    def parse_llm_judge_output(self, judge_response, judge_client_config, **kwargs):
+    def parse_llm_judge_output(self, judge_response, **kwargs):
         if self.reward_type == "binary":
             raise ValueError("Reward is binary; gt should be provided; should not use llm judge")
         else:
@@ -304,30 +304,31 @@ def compute_score(
     is_eval=False,
     **kwargs,
 ):
-    verifier = get_verifier(data_source=data_source, **kwargs)
-    assert ground_truth is not None, "Ground truth must be provided for scoring. Otherwise use Tinker-based judge."
-
-    # if ground_truth is None:
-    #     # Verifier should score the output
-    #     ground_truth, explanation = verifier.get_gt(user_message=extra_info["reward_model"]["raw_question_for_monitor"], continuation=solution_str)
-    #     if ground_truth is None:
-    #         logger.warning("⚠️Ground truth could not be obtained; defaulting to None; judge output")
-    #         logger.warning(f"⚠️ {ground_truth}")
-    #         ground_truth = 0.0      # no reward if we can't get a gt, but this is a fallback and ideally shouldn't happen
-    #     score = ground_truth
-    #     extracted_sol = solution_str
+    raise NotImplementedError("Now focus on non-verifiable cases; this functions should not be called.")
+    # verifier = get_verifier(data_source=data_source, **kwargs)
+    # assert ground_truth is not None, "Ground truth must be provided for scoring. Otherwise use Tinker-based judge."
+    #
+    # # if ground_truth is None:
+    # #     # Verifier should score the output
+    # #     ground_truth, explanation = verifier.get_gt(user_message=extra_info["reward_model"]["raw_question_for_monitor"], continuation=solution_str)
+    # #     if ground_truth is None:
+    # #         logger.warning("⚠️Ground truth could not be obtained; defaulting to None; judge output")
+    # #         logger.warning(f"⚠️ {ground_truth}")
+    # #         ground_truth = 0.0      # no reward if we can't get a gt, but this is a fallback and ideally shouldn't happen
+    # #     score = ground_truth
+    # #     extracted_sol = solution_str
+    # # else:
+    # # res = verifier.compute_score(solution_str, ground_truth)
+    # res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", code_api_url=code_api_url,
+    #                              **extra_info["reward_model"], is_eval=is_eval)
+    # score = res["score"]
+    # extracted_sol = res["extracted_solution"]
+    #
+    # if return_dict:
+    #     return {
+    #         "score": score,
+    #         "extracted_solution": extracted_sol
+    #     }
     # else:
-    # res = verifier.compute_score(solution_str, ground_truth)
-    res = verifier.compute_score(solution_str, ground_truth, sandbox_type="sandbox_fusion", code_api_url=code_api_url,
-                                 **extra_info["reward_model"], is_eval=is_eval)
-    score = res["score"]
-    extracted_sol = res["extracted_solution"]
-
-    if return_dict:
-        return {
-            "score": score,
-            "extracted_solution": extracted_sol
-        }
-    else:
-        return score
+    #     return score
 
