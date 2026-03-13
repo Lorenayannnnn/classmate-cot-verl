@@ -40,6 +40,7 @@ class Role(Enum):
     RewardModel = 5
     ActorRolloutRef = 6
     ClassmateWorker = 7
+    ScoringJudgeWorker = 8
 
     def __str__(self):
         return self._get_role_string()
@@ -54,6 +55,7 @@ class Role(Enum):
             Role.RewardModel: "rm",
             Role.ActorRolloutRef: "actor_rollout_ref",
             Role.ClassmateWorker: "classmate_worker",
+            Role.ScoringJudgeWorker: "scoring_judge_worker",
         }
         return role_mapping.get(self, self.name.lower())
 

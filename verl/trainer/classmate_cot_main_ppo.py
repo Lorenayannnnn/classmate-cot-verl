@@ -78,6 +78,7 @@ class ClassmateCoTTaskRunner(TaskRunner):
         self.add_reward_model_worker(config)
         self.add_ref_policy_worker(config, actor_rollout_cls)
         self.add_classmate_rollout_worker(config)
+        self.add_scoring_judge_worker(config)
 
         validate_config(
             config=config,

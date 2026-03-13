@@ -16,7 +16,7 @@ from .base import BasePPORewardModel
 from .judge_backend import BaseBackend
 from .tinker_backend import TinkerJudgeBackend
 from .vllm_generative_backend import VLLMGenerativeJudgeBackend
-from .vllm_scoring_backend import HFScoringJudgeBackend
+# from .vllm_scoring_backend import HFScoringJudgeBackend
 from .backend_factory import build_llm_judge_backend, build_monitor_backend
 
 __all__ = [
@@ -24,7 +24,7 @@ __all__ = [
     "BaseBackend",
     "TinkerJudgeBackend",
     "VLLMGenerativeJudgeBackend",
-    "HFScoringJudgeBackend",
+    # "HFScoringJudgeBackend",
     "build_llm_judge_backend",
     "build_monitor_backend",
 ]

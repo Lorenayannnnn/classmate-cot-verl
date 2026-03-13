@@ -227,6 +227,17 @@ class TaskRunner:
             self.role_worker_mapping[Role.RefPolicy] = ray.remote(ref_policy_cls)
             self.mapping[Role.RefPolicy] = "global_pool"
 
+    def add_scoring_judge_worker(self, config):
+        """Add scoring judge Ray worker when llm_judge_backend_type is 'hf_scoring'."""
+        if config.reward_model.get("llm_judge_backend_type") != "hf_scoring":
+            return
+        from verl.trainer.ppo.utils import Role
+        from verl.workers.reward_model.scoring_judge_worker import ScoringJudgeWorker
+
+        self.role_worker_mapping[Role.ScoringJudgeWorker] = ray.remote(ScoringJudgeWorker)
+        self.mapping[Role.ScoringJudgeWorker] = "global_pool"
+        print("Added ScoringJudgeWorker role")
+
     def run(self, config):
         """Execute the main PPO training workflow.
 
@@ -258,6 +269,7 @@ class TaskRunner:
 
         # Add a reference policy worker if KL loss or KL reward is used.
         self.add_ref_policy_worker(config, actor_rollout_cls)
+        self.add_scoring_judge_worker(config)
 
         # validate config
         validate_config(

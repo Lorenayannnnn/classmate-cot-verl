@@ -190,6 +190,7 @@ class NaiveRewardManager(AbstractRewardManager):
             }
 
             if isinstance(score, dict):
+                reward = score.get("score", 0)
                 for key, value in score.items():
                     if key == "score":
                         reward_extra_info["main_model_reward"].append(value)

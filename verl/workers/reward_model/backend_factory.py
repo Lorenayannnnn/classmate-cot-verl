@@ -112,8 +112,9 @@ def _build_backend(backend_type: str, model_name: str, cfg, prefix: str) -> Base
     elif backend_type == "hf_scoring":
         if prefix == "monitor":
             raise ValueError("hf_scoring is not supported for monitor backends (monitor requires generative output).")
-        from verl.workers.reward_model.vllm_scoring_backend import HFScoringJudgeBackend
-        return HFScoringJudgeBackend(model_name_or_path=model_name)
+        # Return a placeholder backend; the Ray ScoringJudgeWorker is wired in after init_workers().
+        from verl.workers.reward_model.scoring_judge_worker_backend import ScoringJudgeWorkerBackend
+        return ScoringJudgeWorkerBackend()
 
     else:
         raise ValueError(

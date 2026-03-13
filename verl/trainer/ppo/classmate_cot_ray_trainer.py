@@ -865,11 +865,9 @@ class ClassmateCoTRayPPOTrainer:
                 )
                 item_raw_questions.append(item.non_tensor_batch["reward_model"]["raw_question_for_monitor"])
 
-            monitor_scores = None
-            # monitor_explanations = None
-
             if data_source_key == "general_reward":
-                # Monitor and score for each behavior
+                # Monitor and score for each behavior; populate tracking vars from behavior judge scores
+                all_behavior_judge_scores = []
                 for behavior_key in ["sycophancy_only", "confidence_only", "longer_response"]:
                     behavior_verifier = get_verifier(
                         data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
@@ -883,15 +881,12 @@ class ClassmateCoTRayPPOTrainer:
                         for rq, mc in zip(item_raw_questions, item_main_cots)
                     ]
                     behavior_monitor_scores = []
-                    # behavior_monitor_explanations = []
                     for raw_out in self.monitor_backend.run_batch(monitor_prompts):
                         if raw_out is None:
                             behavior_monitor_scores.append(behavior_verifier.invalid_score)
-                            # behavior_monitor_explanations.append(None)
                         else:
                             score, explanation = behavior_verifier.parse_monitor_output(raw_out)
                             behavior_monitor_scores.append(score)
-                            # behavior_monitor_explanations.append(explanation)
 
                     judge_inputs = [
                         self.eval_llm_judge_backend.prepare_input(behavior_verifier, rq, fo)
@@ -905,15 +900,24 @@ class ClassmateCoTRayPPOTrainer:
                         behavior_judge_scores.append(judge_score)
 
                     entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "llm_judge_score": []})
-                    # entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "monitor_explanation": [], "llm_judge_score": []})
                     entry["monitor_score"].extend(behavior_monitor_scores)
-                    # entry["monitor_explanation"].extend(behavior_monitor_explanations)
                     entry["llm_judge_score"].extend(behavior_judge_scores)
-            else:
-                monitor_scores = []
-                # monitor_explanations = []
+                    all_behavior_judge_scores.append(behavior_judge_scores)
 
+                # Combined per-item score: average judge score across all behaviors
+                n_items = len(item_main_cots)
+                combined_scores = [
+                    float(np.mean([all_behavior_judge_scores[b][i] for b in range(len(all_behavior_judge_scores))]))
+                    for i in range(n_items)
+                ]
+                sample_scores.extend(combined_scores)
+                reward_extra_infos_dict["reward"].extend(combined_scores)
+                if "__num_turns__" in test_batch.non_tensor_batch:
+                    sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
+                data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["general_reward"] * n_items))
+            else:
                 # Original flow: monitor then classmate continuations then val_reward_fn
+                monitor_scores = []
                 verifier = get_verifier(data_source=data_source_key, max_new_tokens=self.config.data.max_response_length)
                 monitor_prompts = [
                     verifier.create_monitor_message({
@@ -926,45 +930,36 @@ class ClassmateCoTRayPPOTrainer:
                 for raw_out in self.monitor_backend.run_batch(monitor_prompts):
                     if raw_out is None:
                         monitor_scores.append(verifier.invalid_score)
-                        # monitor_explanations.append(None)
                     else:
                         score, explanation = verifier.parse_monitor_output(raw_out)
                         monitor_scores.append(score)
-                        # monitor_explanations.append(explanation)
 
+                test_batch.non_tensor_batch["truncated_main_cot"] = np.array(item_main_cots)
                 test_batch.non_tensor_batch["monitor_score"] = np.array(monitor_scores)
                 test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(item_main_cots))
 
-            test_batch.non_tensor_batch["truncated_main_cot"] = np.array(item_main_cots)
+                test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)
 
-            test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)
+                if self.val_reward_fn is None:
+                    raise ValueError("val_reward_fn must be provided for validation.")
+                result = self.val_reward_fn(test_batch, return_dict=True)
 
-            if self.val_reward_fn is None:
-                raise ValueError("val_reward_fn must be provided for validation.")
-            result = self.val_reward_fn(test_batch, return_dict=True)
+                reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
+                scores = reward_tensor.sum(-1).cpu().tolist()
+                sample_scores.extend(scores)
 
-            reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
-            scores = reward_tensor.sum(-1).cpu().tolist()
-            sample_scores.extend(scores)
+                reward_extra_infos_dict["reward"].extend(scores)
+                if "reward_extra_info" in result:
+                    for key, lst in result["reward_extra_info"].items():
+                        reward_extra_infos_dict[key].extend(lst)
 
-            reward_extra_infos_dict["reward"].extend(scores)
-            if "reward_extra_info" in result:
-                for key, lst in result["reward_extra_info"].items():
-                    reward_extra_infos_dict[key].extend(lst)
+                if "__num_turns__" in test_batch.non_tensor_batch:
+                    sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
 
-            if "__num_turns__" in test_batch.non_tensor_batch:
-                sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
+                data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
 
-            data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
-
-            if data_source_key != "general_reward":
-                entry = monitor_score_dictionary.setdefault(data_source_key, {"monitor_score": [], "monitor_explanation": [], "llm_judge_score": []})
-
-                assert monitor_scores is not None, "monitor_scores should have been computed for non-general_reward data sources"
-                # assert monitor_explanations is not None, "monitor_explanations should have been computed for non-general_reward data sources"
-
+                entry = monitor_score_dictionary.setdefault(data_source_key, {"monitor_score": [], "llm_judge_score": []})
                 entry["monitor_score"].extend(monitor_scores)
-                # entry["monitor_explanation"].extend(monitor_explanations)
                 entry["llm_judge_score"].extend(result["main_reward_tensor"].sum(-1).cpu().tolist())
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
@@ -1133,6 +1128,23 @@ class ClassmateCoTRayPPOTrainer:
 
             # self.classmate_tokenizers[model_idx] = AutoTokenizer.from_pretrained(model_path.replace("-Turbo", ""))
 
+        # create scoring judge worker if using vllm_scoring_worker backend
+        if Role.ScoringJudgeWorker in self.role_worker_mapping:
+            from verl.workers.reward_model.scoring_judge_worker import ScoringJudgeWorkerConfig
+            scoring_judge_config = ScoringJudgeWorkerConfig(
+                model_name_or_path=self.config.reward_model.llm_judge_model_name,
+                torch_dtype=ScoringJudgeWorkerConfig.dtype_from_str(
+                    self.config.reward_model.get("llm_judge_backend_dtype")
+                ),
+            )
+            resource_pool = self.resource_pool_manager.get_resource_pool(Role.ScoringJudgeWorker)
+            scoring_judge_cls = RayClassWithInitArgs(
+                cls=self.role_worker_mapping[Role.ScoringJudgeWorker],
+                config=scoring_judge_config,
+                role=str(Role.ScoringJudgeWorker),
+            )
+            self.resource_pool_to_cls[resource_pool][str(Role.ScoringJudgeWorker)] = scoring_judge_cls
+
         # initialize WorkerGroup
         # NOTE: if you want to use a different resource pool for each role, which can support different parallel size,
         # you should not use `create_colocated_worker_cls`.
@@ -1193,6 +1205,17 @@ class ClassmateCoTRayPPOTrainer:
             classmate_wg.init_model()
             self.classmate_workers.append(classmate_wg)
         print(f"Initialized {len(self.classmate_workers)} classmate")
+
+        # initialize scoring judge worker and wire it to the reward managers
+        self.scoring_judge_wg = None
+        if Role.ScoringJudgeWorker in self.role_worker_mapping:
+            from verl.workers.reward_model.scoring_judge_worker_backend import ScoringJudgeWorkerBackend
+            self.scoring_judge_wg = all_wg[str(Role.ScoringJudgeWorker)]
+            self.scoring_judge_wg.init_model()
+            for fn in [self.reward_fn, self.val_reward_fn]:
+                if fn is not None and isinstance(getattr(fn, "llm_judge_backend", None), ScoringJudgeWorkerBackend):
+                    fn.llm_judge_backend.set_worker_group(self.scoring_judge_wg)
+            print("Initialized ScoringJudgeWorker and wired to reward managers")
 
         # create async rollout manager and request scheduler
         self.async_rollout_mode = False

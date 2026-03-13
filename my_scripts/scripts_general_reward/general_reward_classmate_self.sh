@@ -18,8 +18,9 @@ think_end_str="</think>"
 #"tinker", "vllm_generative", "hf_scoring"
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
-llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
+llm_judge_backend_type=hf_scoring  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_backend_dtype=bfloat16
 eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 eval_llm_judge_backend_type=tinker
 
@@ -106,6 +107,7 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
+    reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
 #    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}

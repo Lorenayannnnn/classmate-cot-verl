@@ -70,8 +70,7 @@ custom_reward_function:
   name: compute_score
 
 reward_model:
-#  reward_manager: classmate_cot     # verl/workers/reward_manager/classmate_cot.py
-  reward_manager: sycophancy_classmate_cot     # verl/workers/reward_manager/sycophancy_classmate_cot_rm.py
+  reward_manager: classmate_cot     # verl/workers/reward_manager/sycophancy_classmate_cot_rm.py
 
   do_cot_monitor: True
   monitor_template_name: null
@@ -88,6 +87,7 @@ reward_model:
   # LLM judge model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
   llm_judge_model_name: null
   llm_judge_backend_type: null
+  llm_judge_backend_dtype: null
 
   # vllm_generative options (used when llm_judge_backend_type: "vllm_generative"):
   #   llm_judge_max_model_len: 8192

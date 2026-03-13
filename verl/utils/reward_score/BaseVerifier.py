@@ -251,6 +251,9 @@ def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     elif any("longer_response" in source for source in data_sources):
         from verl.utils.reward_score.LongerResponseVerifier import LongerResponseVerifier
         return LongerResponseVerifier(**kwargs)
+    elif any("general_reward" in source for source in data_sources):
+        from verl.utils.reward_score.GeneralRewardVerifier import GeneralRewardVerifier
+        return GeneralRewardVerifier(**kwargs)
     # elif any("length_over_helpfulness" in source for source in data_sources):
     #     from verl.utils.reward_score.LengthOverHelpfulnessVerifier import LengthOverHelpfulnessVerifier
     #     return LengthOverHelpfulnessVerifier(**kwargs)
