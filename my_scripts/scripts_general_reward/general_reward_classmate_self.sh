@@ -16,7 +16,12 @@ classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 think_start_str="<think>"
 think_end_str="</think>"
 #"tinker", "vllm_generative", "hf_scoring"
-llm_judge_backend_type=hf_scoring
+monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+eval_llm_judge_backend_type=tinker
 
 train_size=8000   # After filtering out too long prompts
 
@@ -52,7 +57,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -97,7 +102,12 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
     "reward_model.think_start_str='${think_start_str}'" \
     "reward_model.think_end_str='${think_end_str}'" \
-    reward_model.llm_judge_backend_type=${llm_judge_backend_type}
+    reward_model.monitor_model_name=${monitor_model_name} \
+    reward_model.monitor_backend_type=${monitor_backend_type} \
+    reward_model.llm_judge_model_name=${llm_judge_model_name} \
+    reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
+    reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
 #    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
 
 #    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
@@ -113,4 +123,4 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/qwen3_classmate_length_only.sh
+#bash my_scripts/scripts_general_reward/general_reward_classmate_self.sh

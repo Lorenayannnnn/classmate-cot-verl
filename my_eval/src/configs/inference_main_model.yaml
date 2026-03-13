@@ -28,9 +28,10 @@ running_args:
   batch_size: 1
   output_dir: null    # will be overwritten in the main script
 
-  #
-  monitor_template_name: null
-  monitor_model_name: null
+  monitor_model_name: null    #  "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  monitor_backend_type: null  # "tinker", "vllm_generative", "hf_scoring"
+  llm_judge_model_name: null  #  "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  llm_judge_backend_type: null  # "tinker", "vllm_generative", "hf_scoring"
 
   generation_args:
     temperature: 1

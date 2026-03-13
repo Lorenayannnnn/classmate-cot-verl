@@ -2,7 +2,7 @@
 Shared backend helpers for different_monitor_*_across_models.py scripts.
 
 Provides:
-  - Backend factory functions (_make_openai_compatible_monitor_backend, etc.)
+  - make_backend: factory returning a BaseBackend for a given source and model name.
   - run_different_monitor_and_judge: main annotation + metrics loop
   - estimate_openai_cost: extrapolate OpenAI API cost from n sample calls
   - OPENAI_PRICING: prices per 1M tokens by model
@@ -13,12 +13,15 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from openai import OpenAI
 from tqdm import tqdm
 
 from keys import OPENAI_KEY
-from verl.utils.reward_score.monitor import create_llm_judge, send_prompt_to_tinker
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.monitor import create_llm_judge
+from verl.workers.reward_model.judge_backend import BaseBackend
+from verl.workers.reward_model.openai_backend import OpenAICompatibleBackend
+from verl.workers.reward_model.tinker_backend import TinkerJudgeBackend
+from verl.workers.reward_model.vllm_generative_backend import VLLMGenerativeJudgeBackend
 
 # Prices in USD per 1M tokens: (input, output)
 OPENAI_PRICING = {
@@ -33,229 +36,156 @@ def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_")
 
 
-def _call_openai_sync(openai_client: OpenAI, model_name: str, prompt: str, verifier, validate_fn, max_retries: int = 5) -> str:
-    """Send a prompt to OpenAI, retrying until the response parses to a valid score."""
-    text = ""
-    for attempt in range(max_retries):
-        response = openai_client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.choices[0].message.content
-        score, _ = validate_fn(text, verifier)
-        if score is not None:
-            return text
-        print(f"[retry {attempt + 1}/{max_retries}] Invalid response from {model_name}: {text!r}")
-    return text  # return last attempt even if still invalid
-
-
-def create_vllm_engine(model_name_path: str, max_model_len: int = 8192, gpu_memory_utilization: float = 0.9):
-    """Create a local vLLM engine, its tokenizer, and default sampling params.
-
-    Mirrors create_vllm / create_tokenizer from test_sycophancy.py.
-    Sampling params are chosen based on the model:
-      - Qwen/Qwen2.5-0.5B-Instruct: temperature=0.7, top_p=0.8, repetition_penalty=1.05, max_tokens=512
-      - all others:                  temperature=1, top_p=1, top_k=-1, max_tokens=1024
-
-    Returns:
-        (engine, tokenizer, sampling_params) tuple to be passed to call_vllm_sync.
-    """
-    from vllm import LLM, SamplingParams
-    from transformers import AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name_path, trust_remote_code=True)
-    engine = LLM(
-        model=model_name_path,
-        gpu_memory_utilization=gpu_memory_utilization,
-        disable_custom_all_reduce=True,
-        skip_tokenizer_init=False,
-        max_model_len=max_model_len,
-        enable_chunked_prefill=True,
-        enable_prefix_caching=True,
-        trust_remote_code=True,
-    )
-
-    if model_name_path == "Qwen/Qwen2.5-0.5B-Instruct":
+def _vllm_generation_config(model_name: str) -> dict:
+    """Return model-specific vLLM sampling params."""
+    if model_name == "Qwen/Qwen2.5-0.5B-Instruct":
         # https://qwen.ai/blog?id=qwen2.5
-        sampling_params = SamplingParams(temperature=0.7, top_p=0.8, repetition_penalty=1.05, max_tokens=1024)
-    elif model_name_path == "HuggingFaceTB/SmolLM2-360M-Instruct":
+        return {"temperature": 0.7, "top_p": 0.8, "repetition_penalty": 1.05, "max_tokens": 1024}
+    elif model_name == "HuggingFaceTB/SmolLM2-360M-Instruct":
         # https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct
-        sampling_params = SamplingParams(temperature=0.2, top_p=0.9, max_tokens=1024)
+        return {"temperature": 0.2, "top_p": 0.9, "max_tokens": 1024}
     else:
-        raise ValueError(f"Make sure to have the sampling param foro model {model_name_path}")
-        # sampling_params = SamplingParams(temperature=1, top_p=1, top_k=-1, max_tokens=1024)
-
-    return engine, tokenizer, sampling_params, max_model_len
+        raise ValueError(f"Make sure to have the sampling param for model {model_name}")
 
 
-def call_vllm_sync(engine, tokenizer, prompt: str, verifier, validate_fn, sampling_params, max_retries: int = 5) -> str:
-    """Send a single chat prompt to a local vLLM engine and return the response string.
-
-    Mirrors the generate() call in test_sycophancy.py. On the first attempt the
-    provided sampling_params are used as-is; subsequent retries fall back to
-    temperature=0.7 (with the same max_tokens) for more diverse outputs.
+def make_backend(source: str, model_name: str) -> BaseBackend:
+    """Construct a BaseBackend for the given source and model.
 
     Args:
-        engine:          vLLM LLM instance from create_vllm_engine.
-        tokenizer:       Corresponding HuggingFace tokenizer.
-        prompt:          Plain-text prompt (wrapped into a user chat message).
-        verifier:        Used to check whether the response is parseable.
-        validate_fn:     Function (text, verifier) -> (score, explanation) for retry validation.
-        sampling_params: SamplingParams returned by create_vllm_engine.
-        max_retries:     Number of generation attempts before giving up.
+        source: One of "tinker", "vllm", "openai".
+        model_name: Model name or path.
+    """
+    if source == "tinker":
+        return TinkerJudgeBackend(create_llm_judge(judge_model_name=model_name))
+    elif source == "vllm":
+        return VLLMGenerativeJudgeBackend(
+            model_name_or_path=model_name,
+            max_model_len=8192,
+            generation_config=_vllm_generation_config(model_name),
+            gpu_memory_utilization=0.9,
+        )
+    elif source == "openai":
+        return OpenAICompatibleBackend(model_name=model_name, api_key=OPENAI_KEY)
+    else:
+        raise ValueError(f"Unknown source: {source!r}. Choose from 'tinker', 'vllm', 'openai'.")
+
+
+def _prepare_inputs_for_behavior(
+    pending_entry_indices,
+    entries,
+    b_monitor_key,
+    b_judge_key,
+    behavior_key,
+    behavior_verifier,
+    judge_backend,
+):
+    """Collect monitor and judge inputs for all pending entries for one behavior.
 
     Returns:
-        Decoded response string (last attempt even if all retries fail).
+        monitor_inputs: list of prompt strings (or None for already-annotated).
+        judge_inputs: list of backend inputs (or None).
+        judge_use_continuation: parallel bool list — True when score comes from
+            token count rather than an LLM call (e.g. LongerResponseVerifier).
     """
-    from vllm import SamplingParams, TokensPrompt
+    monitor_inputs = []
+    judge_inputs = []
+    judge_use_continuation = []
 
-    messages = [{"role": "user", "content": prompt}]
-    token_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True)
+    for entry_idx in tqdm(pending_entry_indices, desc=f"preparing inputs ({behavior_key})"):
+        entry = entries[entry_idx]
 
-    text = ""
-    for attempt in range(max_retries):
-        token_prompt = TokensPrompt(prompt_token_ids=token_ids)
-        outputs = engine.generate([token_prompt], sampling_params=sampling_params, use_tqdm=False)
-        text = tokenizer.decode(outputs[0].outputs[0].token_ids, skip_special_tokens=True).strip()
-        score, _ = validate_fn(text, verifier)
-        if score is not None:
-            return text
-        print(f"[retry {attempt + 1}/{max_retries}] Invalid vLLM response: {text!r}")
-    return text
+        # Monitor input
+        if entry.get(b_monitor_key) is not None:
+            monitor_inputs.append(None)  # already annotated — skip
+        else:
+            monitor_doc = {
+                "raw_question_for_monitor": entry["question"],
+                "hint_str_for_monitor": entry.get("hint_str_for_monitor", ""),
+                "truncated_main_CoT": entry["truncated_main_CoT"],
+                "main_response": entry["truncated_main_CoT"],
+            }
+            monitor_inputs.append(behavior_verifier.create_monitor_message(monitor_doc))
 
+        # Judge input
+        if entry.get(b_judge_key) is not None:
+            judge_inputs.append(None)  # already annotated — skip
+            judge_use_continuation.append(False)
+        elif entry.get("main_output") is None:
+            judge_inputs.append(None)
+            judge_use_continuation.append(False)
+        else:
+            prompt = judge_backend.prepare_input(behavior_verifier, entry["question"], entry["main_output"])
+            if prompt is None:
+                # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
+                judge_inputs.append(None)
+                judge_use_continuation.append(True)
+            else:
+                judge_inputs.append(prompt)
+                judge_use_continuation.append(False)
 
-def _make_openai_compatible_monitor_backend(model_name: str, api_key: str, base_url: str | None = None):
-    """Return (dispatch_fn, parse_fn, executor) for an OpenAI-compatible monitor endpoint."""
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    executor = ThreadPoolExecutor()
-
-    def _validate(text, verifier):
-        return verifier.parse_monitor_output(text)
-
-    def dispatch(prompt, verifier):
-        if prompt is None:
-            return None
-        return executor.submit(_call_openai_sync, client, model_name, prompt, verifier, _validate)
-
-    def parse(future_result, verifier):
-        return verifier.parse_monitor_output(future_result)
-
-    return dispatch, parse, executor
-
-
-def _make_openai_compatible_judge_backend(model_name: str, api_key: str, base_url: str | None = None):
-    """Return (dispatch_fn, parse_fn, executor) for an OpenAI-compatible judge endpoint."""
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    executor = ThreadPoolExecutor()
-
-    def _validate(text, verifier):
-        return verifier.parse_llm_judge_output(text)
-
-    def dispatch(prompt, verifier):
-        if prompt is None:
-            return None
-        return executor.submit(_call_openai_sync, client, model_name, prompt, verifier, _validate)
-
-    def parse(future_result, verifier, continuation=None, continuation_token_ids=None, gt=None):
-        return verifier.parse_llm_judge_output(future_result, continuation=continuation, continuation_token_ids=continuation_token_ids, gt=gt)
-
-    return dispatch, parse, executor
+    return monitor_inputs, judge_inputs, judge_use_continuation
 
 
-def _make_tinker_monitor_backend(model_name: str):
-    """Return (dispatch_fn, parse_fn, executor=None) for a Tinker monitor."""
-    tinker_config = create_llm_judge(judge_model_name=model_name)
+def _parse_outputs_for_behavior(
+    pending_entry_indices,
+    entries,
+    b_monitor_key,
+    b_monitor_expl_key,
+    b_judge_key,
+    b_judge_expl_key,
+    behavior_key,
+    behavior_verifier,
+    monitor_outputs,
+    judge_outputs,
+    judge_use_continuation,
+    main_model_tokenizer,
+):
+    """Parse raw backend outputs and write scores/explanations into each entry dict."""
+    for i, entry_idx in enumerate(tqdm(pending_entry_indices, desc=f"parsing results ({behavior_key})")):
+        entry = entries[entry_idx]
 
-    def dispatch(prompt, verifier):
-        if prompt is None:
-            return None
-        return send_prompt_to_tinker(tinker_config, prompt)
+        # Parse monitor output
+        if entry.get(b_monitor_key) is None:
+            raw = monitor_outputs[i]
+            if raw is None:
+                entry[b_monitor_key] = behavior_verifier.invalid_score
+                entry[b_monitor_expl_key] = "CoT is empty"
+            else:
+                score, explanation = behavior_verifier.parse_monitor_output(raw)
+                entry[b_monitor_key] = score
+                entry[b_monitor_expl_key] = explanation
 
-    def parse(future_result, verifier, continuation=None, gt=None):
-        from verl.utils.reward_score.BaseVerifier import BaseVerifier
-        text = BaseVerifier._extract_response_text(future_result, tinker_config)
-        return verifier.parse_monitor_output(text, continuation=continuation, gt=gt)
-
-    return dispatch, parse, None
-
-
-def _make_tinker_judge_backend(model_name: str):
-    """Return (dispatch_fn, parse_fn, executor=None) for a Tinker LLM judge."""
-    tinker_config = create_llm_judge(judge_model_name=model_name)
-
-    def dispatch(prompt, verifier):
-        if prompt is None:
-            return None
-        return send_prompt_to_tinker(tinker_config, prompt)
-
-    def parse(future_result, verifier, continuation=None, continuation_token_ids=None, gt=None):
-        from verl.utils.reward_score.BaseVerifier import BaseVerifier
-        text = BaseVerifier._extract_response_text(future_result, tinker_config)
-        return verifier.parse_llm_judge_output(text, continuation=continuation, continuation_token_ids=continuation_token_ids, gt=gt)
-
-    return dispatch, parse, None
-
-
-def _make_vllm_local_monitor_backend(model_name: str):
-    """Return (dispatch_fn, parse_fn, executor=None) for a local vLLM monitor engine."""
-    from concurrent.futures import Future
-
-    engine, tokenizer, sampling_params, max_model_len = create_vllm_engine(model_name)
-
-    def _validate(text, verifier):
-        return verifier.parse_monitor_output(text)
-
-    def dispatch(prompt, verifier):
-        if prompt is None:
-            return None
-        token_ids = tokenizer.apply_chat_template(
-            [{"role": "user", "content": prompt}], tokenize=True, add_generation_prompt=True
-        )
-        if len(token_ids) + sampling_params.max_tokens > max_model_len:
-            print(f"[skip] Input too long ({len(token_ids)} + {sampling_params.max_tokens} > {max_model_len}); skipping.")
-            return {"score": 0, "explanation": "input being too long"}
-        f = Future()
-        try:
-            f.set_result(call_vllm_sync(engine, tokenizer, prompt, verifier, _validate, sampling_params))
-        except Exception as exc:
-            f.set_exception(exc)
-        return f
-
-    def parse(future_result, verifier):
-        return verifier.parse_monitor_output(future_result)
-
-    return dispatch, parse, None
-
-
-def _make_vllm_local_judge_backend(model_name: str):
-    """Return (dispatch_fn, parse_fn, executor=None) for a local vLLM judge engine."""
-    from concurrent.futures import Future
-
-    engine, tokenizer, sampling_params, max_model_len = create_vllm_engine(model_name)
-
-    def _validate(text, verifier):
-        return verifier.parse_llm_judge_output(text)
-
-    def dispatch(prompt, verifier):
-        if prompt is None:
-            return None
-        token_ids = tokenizer.apply_chat_template(
-            [{"role": "user", "content": prompt}], tokenize=True, add_generation_prompt=True
-        )
-        if len(token_ids) + sampling_params.max_tokens > max_model_len:
-            print(f"[skip] Input too long ({len(token_ids)} + {sampling_params.max_tokens} > {max_model_len}); skipping.")
-            return {"score": 0, "explanation": "input being too long"}
-        f = Future()
-        try:
-            f.set_result(call_vllm_sync(engine, tokenizer, prompt, verifier, _validate, sampling_params))
-        except Exception as exc:
-            f.set_exception(exc)
-        return f
-
-    def parse(future_result, verifier, continuation=None, continuation_token_ids=None, gt=None):
-        return verifier.parse_llm_judge_output(future_result, continuation=continuation, continuation_token_ids=continuation_token_ids, gt=gt)
-
-    return dispatch, parse, None
+        # Parse judge output
+        if entry.get(b_judge_key) is None:
+            if judge_use_continuation[i]:
+                # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
+                score, explanation = behavior_verifier.parse_llm_judge_output(
+                    None,
+                    continuation=entry["main_output"],
+                    continuation_token_ids=entry.get("main_output_ids"),
+                    gt=entry.get("ground_truth_for_llm_judge"),
+                )
+            else:
+                raw = judge_outputs[i]
+                if isinstance(raw, dict):
+                    # HFScoringJudgeBackend returns ready-to-use dicts
+                    score = raw["score"]
+                    explanation = raw.get("judge_explanation", "hf_scoring")
+                elif raw is None:
+                    score, explanation = behavior_verifier.invalid_score, "Output is empty"
+                else:
+                    if main_model_tokenizer is not None and "main_output_ids" not in entry:
+                        entry["main_output_ids"] = main_model_tokenizer.encode(
+                            entry["main_output"], add_special_tokens=False
+                        )
+                    score, explanation = behavior_verifier.parse_llm_judge_output(
+                        raw,
+                        continuation=entry.get("main_output"),
+                        continuation_token_ids=entry.get("main_output_ids"),
+                        gt=entry.get("ground_truth_for_llm_judge"),
+                    )
+            entry[b_judge_key] = score
+            entry[b_judge_expl_key] = explanation
 
 
 def estimate_openai_cost(
@@ -269,6 +199,7 @@ def estimate_openai_cost(
     n_samples: int = 10,
 ):
     """Call OpenAI with n_samples prompts, measure actual token usage, and extrapolate total cost."""
+    from openai import OpenAI
     client = OpenAI(api_key=OPENAI_KEY)
 
     monitor_input_tokens = 0
@@ -394,39 +325,19 @@ def run_different_monitor_and_judge(
         f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics.json"
     )
 
-    # ------------------------------------------------------------------ #
-    # Set up monitor backend
-    # ------------------------------------------------------------------ #
-    if monitor_source == "openai":
-        dispatch_monitor, parse_monitor, monitor_executor = _make_openai_compatible_monitor_backend(
-            monitor_model_name, OPENAI_KEY
-        )
-    elif monitor_source == "vllm":
-        dispatch_monitor, parse_monitor, monitor_executor = _make_vllm_local_monitor_backend(monitor_model_name)
-    elif monitor_source == "tinker":
-        dispatch_monitor, parse_monitor, monitor_executor = _make_tinker_monitor_backend(monitor_model_name)
-    else:
-        raise ValueError(f"Unknown monitor_source: {monitor_source!r}. Choose from 'openai', 'tinker', 'vllm'.")
-
-    # ------------------------------------------------------------------ #
-    # Set up judge backend
-    # ------------------------------------------------------------------ #
-    if judge_source == "openai":
-        dispatch_judge, parse_judge, judge_executor = _make_openai_compatible_judge_backend(
-            judge_model_name, OPENAI_KEY
-        )
-    elif judge_source == "vllm":
-        dispatch_judge, parse_judge, judge_executor = _make_vllm_local_judge_backend(judge_model_name)
-    elif judge_source == "tinker":
-        dispatch_judge, parse_judge, judge_executor = _make_tinker_judge_backend(judge_model_name)
-    else:
-        raise ValueError(f"Unknown judge_source: {judge_source!r}. Choose from 'openai', 'tinker', 'vllm'.")
+    monitor_backend = make_backend(monitor_source, monitor_model_name)
+    judge_backend = make_backend(judge_source, judge_model_name)
 
     # ------------------------------------------------------------------ #
     # Main loop
     # ------------------------------------------------------------------ #
     for dataset_name in dataset_name_list:
-        verifier = get_verifier(data_source=dataset_name, max_new_tokens=max_new_tokens)
+        is_general_reward = dataset_name == "general_reward"
+        behavior_keys = (
+            ["sycophancy_only", "confidence_only", "longer_response"]
+            if is_general_reward
+            else [dataset_name]
+        )
 
         for model_idx, main_model_name_or_path in enumerate(main_model_name_or_path_list):
             # Load main model tokenizer only when repo_prefix is provided (used as
@@ -446,11 +357,9 @@ def run_different_monitor_and_judge(
                     continue
 
                 result_dir = os.path.join(
-                    # output_dir, main_model_name_or_path, f"step_{step_idx}", dataset_name, "main"
                     output_dir, main_model_name_or_path, f"step_{step_idx}", "main"
                 )
                 preds_fn = os.path.join(result_dir, "preds.jsonl")
-                metrics_fn = os.path.join(result_dir, metrics_file_name)
 
                 if not os.path.exists(preds_fn):
                     print(f"[skip] {preds_fn} not found")
@@ -469,7 +378,6 @@ def run_different_monitor_and_judge(
                     # if entry.get(monitor_key) is None or entry.get(judge_key) is None
                 ]
                 num_already_annotated = len(entries) - len(pending_entry_indices)
-                # run_label = f"{main_model_name_or_path} / step_{step_idx} / {dataset_name}"
                 run_label = f"{main_model_name_or_path} / step_{step_idx}"
 
                 if num_already_annotated > 0:
@@ -478,92 +386,36 @@ def run_different_monitor_and_judge(
                     print(f"[done]   {run_label}: all entries already annotated")
                 else:
                     # -------------------------------------------------------- #
-                    # Launch all async futures up-front.
-                    # Skip dispatching a request if that key already exists in the entry.
+                    # For each behavior, collect monitor and judge inputs,
+                    # run backends, and parse outputs. Save on KeyboardInterrupt.
                     # -------------------------------------------------------- #
                     print(f"[run]    {run_label}: annotating {len(pending_entry_indices)} entries ...")
-                    pending_futures = []
-                    for entry_idx in tqdm(pending_entry_indices, desc="submitting entries for annotation"):
-                        entry = entries[entry_idx]
-
-                        monitor_doc = {
-                            "raw_question_for_monitor": entry["question"],
-                            "hint_str_for_monitor": entry.get("hint_str_for_monitor", ""),
-                            "truncated_main_CoT": entry["truncated_main_CoT"],
-                            "main_response": entry["truncated_main_CoT"],
-                        }
-                        monitor_prompt = verifier.create_monitor_message(monitor_doc)
-                        judge_prompt = verifier.format_llm_judge_prompt(
-                            entry["question"], entry["main_output"]
-                        )
-
-                        if entry.get(monitor_key) is None:
-                            monitor_future = dispatch_monitor(monitor_prompt, verifier)
-                            if monitor_future is None:
-                                monitor_future = {"score": verifier.invalid_score, "explanation": "CoT is empty"}
-                        else:
-                            monitor_future = None
-
-                        if entry.get(judge_key) is None:
-                            judge_future = dispatch_judge(judge_prompt, verifier)
-                            if judge_future is None:
-                                if judge_prompt is None and entry.get("main_output") is not None:
-                                    # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
-                                    judge_score, judge_explanation = verifier.parse_llm_judge_output(
-                                        None,
-                                        continuation=entry["main_output"],
-                                        continuation_token_ids=entry.get("main_output_ids"),
-                                        gt=entry.get("ground_truth_for_llm_judge"),
-                                    )
-                                    judge_future = {"score": judge_score, "explanation": judge_explanation}
-                                else:
-                                    judge_future = {"score": verifier.invalid_score, "explanation": "Output is empty"}
-                        else:
-                            judge_future = None
-
-                        pending_futures.append((entry_idx, monitor_future, judge_future))
-
-                    # -------------------------------------------------------- #
-                    # Collect results; save on KeyboardInterrupt for resumability
-                    # -------------------------------------------------------- #
                     interrupted = False
                     try:
-                        for entry_idx, monitor_future, judge_future in tqdm(
-                            pending_futures, desc="Collecting results"
-                        ):
-                            entry = entries[entry_idx]
+                        for behavior_key in behavior_keys:
+                            b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
+                            b_monitor_expl_key = f"{behavior_key}_{monitor_expl_key}" if is_general_reward else monitor_expl_key
+                            b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
+                            b_judge_expl_key = f"{behavior_key}_{judge_expl_key}" if is_general_reward else judge_expl_key
+                            behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
-                            if monitor_future is not None:
-                                if isinstance(monitor_future, dict):
-                                    entry[monitor_key] = monitor_future["score"]
-                                    entry[monitor_expl_key] = monitor_future["explanation"]
-                                else:
-                                    monitor_score, monitor_explanation = parse_monitor(
-                                        monitor_future.result(), verifier
-                                    )
-                                    entry[monitor_key] = monitor_score
-                                    entry[monitor_expl_key] = monitor_explanation
-                            # else: monitor_key already present in entry — keep existing value
+                            monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
+                                pending_entry_indices, entries,
+                                b_monitor_key, b_judge_key,
+                                behavior_key, behavior_verifier, judge_backend,
+                            )
 
-                            if judge_future is not None:
-                                if isinstance(judge_future, dict):
-                                    entry[judge_key] = judge_future["score"]
-                                    entry[judge_expl_key] = judge_future["explanation"]
-                                else:
-                                    if main_model_tokenizer is not None and "main_output_ids" not in entry:
-                                        entry["main_output_ids"] = main_model_tokenizer.encode(
-                                            entry["main_output"], add_special_tokens=False
-                                        )
+                            monitor_outputs = monitor_backend.run_batch(monitor_inputs)
+                            judge_outputs = judge_backend.run_batch(judge_inputs)
 
-                                    judge_score, judge_explanation = parse_judge(
-                                        judge_future.result(), verifier,
-                                        continuation=entry.get("main_output"),
-                                        continuation_token_ids=entry.get("main_output_ids"),
-                                        gt=entry.get("ground_truth_for_llm_judge")
-                                    )
-                                    entry[judge_key] = judge_score
-                                    entry[judge_expl_key] = judge_explanation
-                            # else: judge_key already present in entry — keep existing value
+                            _parse_outputs_for_behavior(
+                                pending_entry_indices, entries,
+                                b_monitor_key, b_monitor_expl_key,
+                                b_judge_key, b_judge_expl_key,
+                                behavior_key, behavior_verifier,
+                                monitor_outputs, judge_outputs, judge_use_continuation,
+                                main_model_tokenizer,
+                            )
 
                     except KeyboardInterrupt:
                         print(f"\n[interrupt] Saving partial progress to {preds_fn} ...")
@@ -576,43 +428,47 @@ def run_different_monitor_and_judge(
                         print(f"[saved]  {preds_fn}")
 
                     if interrupted:
-                        if monitor_executor is not None:
-                            monitor_executor.shutdown(wait=False)
-                        if judge_executor is not None and judge_executor is not monitor_executor:
-                            judge_executor.shutdown(wait=False)
+                        monitor_backend.close()
+                        judge_backend.close()
                         return
 
                 # ---------------------------------------------------------- #
-                # Compute and save metrics over all fully-annotated entries
+                # Compute and save per-behavior metrics
                 # ---------------------------------------------------------- #
-                monitor_scores, judge_scores = [], []
-                for entry in entries:
-                    monitor_scores.append(entry[monitor_key])
-                    judge_scores.append(entry[judge_key])
+                for behavior_key in behavior_keys:
+                    b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
+                    b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
+                    behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
+                    b_metrics_fn = (
+                        os.path.join(result_dir, f"{behavior_key}_{metrics_file_name}")
+                        if is_general_reward
+                        else os.path.join(result_dir, metrics_file_name)
+                    )
 
-                monitor_scores = np.array(monitor_scores)
-                judge_scores = np.array(judge_scores)
+                    monitor_scores, judge_scores = [], []
+                    for entry in entries:
+                        monitor_scores.append(entry.get(b_monitor_key, behavior_verifier.invalid_score))
+                        judge_scores.append(entry.get(b_judge_key, behavior_verifier.invalid_score))
 
-                monitor_valid_mask = monitor_scores != verifier.invalid_score
-                judge_valid_mask = judge_scores != verifier.invalid_score
-                valid_mask = monitor_valid_mask & judge_valid_mask
+                    monitor_scores = np.array(monitor_scores)
+                    judge_scores = np.array(judge_scores)
 
-                monitor_metrics = verifier.compute_metrics(
-                    predictions=monitor_scores[valid_mask].astype(float),
-                    ground_truths=judge_scores[valid_mask].astype(float),
-                )
-                monitor_metrics["total_valid_CoT_entries"] = int(np.sum(monitor_valid_mask))
-                monitor_metrics["total_valid_output_entries"] = int(np.sum(judge_valid_mask))
-                monitor_metrics["total_monitored_entries"] = int(np.sum(valid_mask))
+                    monitor_valid_mask = monitor_scores != behavior_verifier.invalid_score
+                    judge_valid_mask = judge_scores != behavior_verifier.invalid_score
+                    valid_mask = monitor_valid_mask & judge_valid_mask
 
-                monitor_metrics["judge_score_mean"] = float(np.mean(judge_scores))
-                monitor_metrics["total_judge_entries"] = len(judge_scores)
+                    monitor_metrics = behavior_verifier.compute_metrics(
+                        predictions=monitor_scores[valid_mask].astype(float),
+                        ground_truths=judge_scores[valid_mask].astype(float),
+                    )
+                    monitor_metrics["total_valid_CoT_entries"] = int(np.sum(monitor_valid_mask))
+                    monitor_metrics["total_valid_output_entries"] = int(np.sum(judge_valid_mask))
+                    monitor_metrics["total_monitored_entries"] = int(np.sum(valid_mask))
+                    monitor_metrics["total_judge_entries"] = len(judge_scores)
 
-                with open(metrics_fn, "w") as metrics_file:
-                    json.dump(monitor_metrics, metrics_file, indent=4)
-                print(f"[metrics] saved to {metrics_fn}")
+                    with open(b_metrics_fn, "w") as metrics_file:
+                        json.dump(monitor_metrics, metrics_file, indent=4)
+                    print(f"[metrics] saved to {b_metrics_fn}")
 
-    if monitor_executor is not None:
-        monitor_executor.shutdown(wait=False)
-    if judge_executor is not None and judge_executor is not monitor_executor:
-        judge_executor.shutdown(wait=False)
+    monitor_backend.close()
+    judge_backend.close()

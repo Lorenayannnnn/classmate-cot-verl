@@ -2,6 +2,25 @@
 
 from verl.workers.reward_model.judge_backend import BaseBackend
 
+def build_eval_llm_judge_backend(reward_model_cfg) -> BaseBackend:
+    """
+    Build a BaseBackend for LLM judge from the reward_model section of a Hydra config.
+    This is used for _validate only, in case when data_source is general_reward and we want to use a different model for scoring different behaviors of the output.
+    Returns None when eval_llm_judge_backend_type or eval_llm_judge_model_name are not set
+    (e.g. for non-general_reward datasets that don't use this backend).
+    """
+    backend_type = reward_model_cfg.get("eval_llm_judge_backend_type")
+    model_name = reward_model_cfg.get("eval_llm_judge_model_name")
+    if not backend_type or not model_name:
+        return None
+
+    return _build_backend(
+        backend_type=backend_type,
+        model_name=model_name,
+        cfg=reward_model_cfg,
+        prefix="llm_judge",
+    )
+
 
 def build_llm_judge_backend(reward_model_cfg) -> BaseBackend:
     """Build a BaseBackend for LLM judge from the reward_model section of a Hydra config.
@@ -81,13 +100,14 @@ def _build_backend(backend_type: str, model_name: str, cfg, prefix: str) -> Base
         return TinkerJudgeBackend(create_llm_judge(judge_model_name=model_name))
 
     elif backend_type == "vllm_generative":
-        from verl.workers.reward_model.vllm_generative_backend import VLLMGenerativeJudgeBackend
-        return VLLMGenerativeJudgeBackend(
-            model_name_or_path=model_name,
-            max_model_len=cfg.get(f"{prefix}_max_model_len", 8192),
-            generation_config=dict(cfg.get(f"{prefix}_generation_config", {"temperature": 0.0, "max_tokens": 1024})),
-            gpu_memory_utilization=cfg.get(f"{prefix}_gpu_memory_utilization", 0.8),
-        )
+        raise NotImplementedError("vllm_generative backend is not currently supported due to vLLM generation issues. Please use 'tinker' or 'hf_scoring' backends instead.")
+        # from verl.workers.reward_model.vllm_generative_backend import VLLMGenerativeJudgeBackend
+        # return VLLMGenerativeJudgeBackend(
+        #     model_name_or_path=model_name,
+        #     max_model_len=cfg.get(f"{prefix}_max_model_len", 8192),
+        #     generation_config=dict(cfg.get(f"{prefix}_generation_config", {"temperature": 0.0, "max_tokens": 1024})),
+        #     gpu_memory_utilization=cfg.get(f"{prefix}_gpu_memory_utilization", 0.8),
+        # )
 
     elif backend_type == "hf_scoring":
         if prefix == "monitor":

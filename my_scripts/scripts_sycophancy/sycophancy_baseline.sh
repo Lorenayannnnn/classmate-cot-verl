@@ -15,6 +15,8 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
+train_size=8000   # After filtering out too long prompts
+
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 base_model_name_path=Qwen/Qwen3-0.6B
@@ -27,7 +29,10 @@ monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
-train_size=8000   # After filtering out too long prompts
+eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+eval_llm_judge_backend_type=tinker
+eval_llm_judge_model_name=${llm_judge_model_name}
+eval_llm_judge_backend_type=${llm_judge_backend_type}
 
 max_response_length=3072
 
@@ -89,7 +94,9 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     reward_model.monitor_model_name=${monitor_model_name} \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
-    reward_model.llm_judge_backend_type=${llm_judge_backend_type}
+    reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
+    reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model} \
 #    actor_rollout_ref.model.lora_rank=32 \

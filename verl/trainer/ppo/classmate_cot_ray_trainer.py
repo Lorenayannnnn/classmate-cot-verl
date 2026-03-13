@@ -20,7 +20,6 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import json
 import os
-import re
 import uuid
 from collections import defaultdict
 from copy import deepcopy
@@ -60,12 +59,12 @@ from verl.trainer.ppo.reward import compute_reward, compute_reward_async, comput
 from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference_policy, need_reward_model
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
-from verl.utils.reward_score.monitor import process_main_cot_helper
+from verl.utils.reward_score.monitor import process_main_cot_helper, parse_out_main_cot_output  # process_main_cot_helper used in training loop
 from verl.utils.reward_score.BaseVerifier import get_verifier
-from verl.workers.reward_model.backend_factory import build_monitor_backend
+from verl.workers.reward_model.backend_factory import build_monitor_backend, \
+    build_eval_llm_judge_backend
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
-from verl.utils.reward_score.olmo_verifiers import process_code_output
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
 from verl.utils.torch_functional import masked_mean
@@ -575,6 +574,7 @@ class ClassmateCoTRayPPOTrainer:
         self.classmate_think_end_str = classmate_think_end_str if classmate_think_end_str is not None else think_end_str
 
         self.monitor_backend = build_monitor_backend(config.reward_model)
+        self.eval_llm_judge_backend = build_eval_llm_judge_backend(config.reward_model)
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -771,9 +771,10 @@ class ClassmateCoTRayPPOTrainer:
         sample_turns = []
         sample_uids = []
 
-        all_main_rewards = []
-        all_monitor_scores = []
-        all_monitor_explanations = []
+        # Keys are behavior data_source strings (e.g. "sycophancy_only").
+        # For general_reward batches the three behavior keys are added; for other
+        # batches the batch's own data_source string is used.
+        monitor_score_dictionary: dict[str, dict] = {}
 
         print("🐛🐛🐛 Start validating")
         for test_data in self.val_dataloader:
@@ -849,71 +850,99 @@ class ClassmateCoTRayPPOTrainer:
             print("Performing CoT monitoring...")
 
             data_sources_batch = test_batch.non_tensor_batch.get("data_source")
-            verifier = get_verifier(data_source=data_sources_batch, max_new_tokens=self.config.data.max_response_length)
-            assert verifier is not None, "Monitor verifier could not be initialized from data_source."
+            data_source_key = str(data_sources_batch[0])
 
-            # Extract CoTs, questions, and hints
-            all_main_cots, all_raw_questions, all_hint_strs = [], [], []
-            monitor_prompts = []
+            # Single item-extraction loop shared across all cases
+            item_main_cots, item_raw_questions, item_final_outputs, item_final_output_ids = [], [], [], []
             for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                truncated_main_cot, _, _, _, _ = process_main_cot_helper(
-                    self.tokenizer,
-                    self.enable_thinking,
-                    item.non_tensor_batch["data_source"],
-                    response,
-                    item.batch["responses"],  # token ids
-                    None,  # response masks
-                    self.classmate_cot_reward_configs.main_cot_keep_rate,
-                    self.think_start_str,
-                    self.think_end_str,
+                main_cot, final_output, _, _ = parse_out_main_cot_output(
+                    response, item.batch["responses"], self.tokenizer, self.think_start_str, self.think_end_str,
                 )
-                # all_main_cots.append(parse_out_main_cot_output(response)[0])
-                all_main_cots.append(truncated_main_cot)
-                raw_question_for_monitor = item.non_tensor_batch["reward_model"]["raw_question_for_monitor"]
-                hint_str_for_monitor = item.non_tensor_batch["reward_model"].get("hint_str_for_monitor")
-                all_raw_questions.append(raw_question_for_monitor)
-                all_hint_strs.append(hint_str_for_monitor)
+                item_main_cots.append(main_cot)
+                item_final_outputs.append(final_output)
+                item_final_output_ids.append(
+                    self.tokenizer.encode(final_output, add_special_tokens=False) if final_output is not None else []
+                )
+                item_raw_questions.append(item.non_tensor_batch["reward_model"]["raw_question_for_monitor"])
 
-                monitor_doc = {
-                    "raw_question_for_monitor": raw_question_for_monitor,
-                    "hint_str_for_monitor": hint_str_for_monitor,
-                    "truncated_main_CoT": truncated_main_cot,
-                }
-                monitor_prompts.append(verifier.create_monitor_message(monitor_doc))
+            monitor_scores = None
+            # monitor_explanations = None
 
-            raw_monitor_outputs = self.monitor_backend.run_batch(monitor_prompts)
-            all_monitor_scores_batch, all_monitor_explanations_batch = [], []
-            for monitor_prompt, raw_out in zip(monitor_prompts, raw_monitor_outputs):
-                if raw_out is None:
-                    all_monitor_scores_batch.append(verifier.invalid_score)
-                    all_monitor_explanations_batch.append("No monitor prompt provided.")
-                else:
-                    score, explanation = verifier.parse_monitor_output(raw_out)
-                    all_monitor_scores_batch.append(score)
-                    all_monitor_explanations_batch.append(explanation)
+            if data_source_key == "general_reward":
+                # Monitor and score for each behavior
+                for behavior_key in ["sycophancy_only", "confidence_only", "longer_response"]:
+                    behavior_verifier = get_verifier(
+                        data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
+                    )
+                    monitor_prompts = [
+                        behavior_verifier.create_monitor_message({
+                            "raw_question_for_monitor": rq,
+                            "truncated_main_CoT": mc,
+                            "main_response": mc,
+                        })
+                        for rq, mc in zip(item_raw_questions, item_main_cots)
+                    ]
+                    behavior_monitor_scores = []
+                    # behavior_monitor_explanations = []
+                    for raw_out in self.monitor_backend.run_batch(monitor_prompts):
+                        if raw_out is None:
+                            behavior_monitor_scores.append(behavior_verifier.invalid_score)
+                            # behavior_monitor_explanations.append(None)
+                        else:
+                            score, explanation = behavior_verifier.parse_monitor_output(raw_out)
+                            behavior_monitor_scores.append(score)
+                            # behavior_monitor_explanations.append(explanation)
 
-            test_batch.non_tensor_batch["truncated_main_cot"] = np.array(all_main_cots)
-            test_batch.non_tensor_batch["monitor_score"] = np.array(all_monitor_scores_batch)
-            test_batch.non_tensor_batch["monitor_explanations"] = np.array(all_monitor_explanations_batch)
-            test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(all_monitor_scores_batch))
+                    judge_inputs = [
+                        self.eval_llm_judge_backend.prepare_input(behavior_verifier, rq, fo)
+                        for rq, fo in zip(item_raw_questions, item_final_outputs)
+                    ]
+                    behavior_judge_scores = []
+                    for raw_out, final_ids in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids):
+                        judge_score, _ = behavior_verifier.parse_llm_judge_output(
+                            raw_out, continuation_token_ids=final_ids
+                        )
+                        behavior_judge_scores.append(judge_score)
 
-            # Accumulate monitor results across all batches
-            all_monitor_scores.extend(all_monitor_scores_batch)
-            all_monitor_explanations.extend(all_monitor_explanations_batch)
-            # print("CoT monitoring completed.")
+                    entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "llm_judge_score": []})
+                    # entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "monitor_explanation": [], "llm_judge_score": []})
+                    entry["monitor_score"].extend(behavior_monitor_scores)
+                    # entry["monitor_explanation"].extend(behavior_monitor_explanations)
+                    entry["llm_judge_score"].extend(behavior_judge_scores)
+            else:
+                monitor_scores = []
+                # monitor_explanations = []
 
-            # Generate classmate continuations for validation
-            # print("Generating classmate continuations for validation...")
+                # Original flow: monitor then classmate continuations then val_reward_fn
+                verifier = get_verifier(data_source=data_source_key, max_new_tokens=self.config.data.max_response_length)
+                monitor_prompts = [
+                    verifier.create_monitor_message({
+                        "raw_question_for_monitor": rq,
+                        "truncated_main_CoT": mc,
+                        "main_response": mc,
+                    })
+                    for rq, mc in zip(item_raw_questions, item_main_cots)
+                ]
+                for raw_out in self.monitor_backend.run_batch(monitor_prompts):
+                    if raw_out is None:
+                        monitor_scores.append(verifier.invalid_score)
+                        # monitor_explanations.append(None)
+                    else:
+                        score, explanation = verifier.parse_monitor_output(raw_out)
+                        monitor_scores.append(score)
+                        # monitor_explanations.append(explanation)
+
+                test_batch.non_tensor_batch["monitor_score"] = np.array(monitor_scores)
+                test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(item_main_cots))
+
+            test_batch.non_tensor_batch["truncated_main_cot"] = np.array(item_main_cots)
+
             test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)
 
-            # evaluate using reward_function
             if self.val_reward_fn is None:
                 raise ValueError("val_reward_fn must be provided for validation.")
             result = self.val_reward_fn(test_batch, return_dict=True)
 
-            # main_reward_tensor, classmate_reward_tensor, reward_extra_info
-            # reward_tensor = result["reward_tensor"]
-            # reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"] + result.get("consistency_reward_tensor", 0)
             reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
             scores = reward_tensor.sum(-1).cpu().tolist()
             sample_scores.extend(scores)
@@ -923,13 +952,20 @@ class ClassmateCoTRayPPOTrainer:
                 for key, lst in result["reward_extra_info"].items():
                     reward_extra_infos_dict[key].extend(lst)
 
-            # collect num_turns of each prompt
             if "__num_turns__" in test_batch.non_tensor_batch:
                 sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
 
-            all_main_rewards.extend(result["main_reward_tensor"].sum(-1).cpu().tolist())
+            if data_source_key != "general_reward":
+                entry = monitor_score_dictionary.setdefault(data_source_key, {"monitor_score": [], "monitor_explanation": [], "llm_judge_score": []})
+
+                assert monitor_scores is not None, "monitor_scores should have been computed for non-general_reward data sources"
+                # assert monitor_explanations is not None, "monitor_explanations should have been computed for non-general_reward data sources"
+
+                entry["monitor_score"].extend(monitor_scores)
+                # entry["monitor_explanation"].extend(monitor_explanations)
+                entry["llm_judge_score"].extend(result["main_reward_tensor"].sum(-1).cpu().tolist())
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
@@ -978,31 +1014,28 @@ class ClassmateCoTRayPPOTrainer:
             metric_dict["val-aux/num_turns/max"] = sample_turns.max()
             metric_dict["val-aux/num_turns/mean"] = sample_turns.mean()
         
-        if len(all_monitor_scores) > 0:
-            verifier = get_verifier(data_source=data_sources, max_new_tokens=self.config.data.max_response_length)
-            assert verifier is not None
-            # Convert to numpy arrays for computation
-            monitor_scores = np.array(all_monitor_scores)
-            main_model_reward = np.array(all_main_rewards)
+        # Per-behavior/data-source monitor metrics
+        for ds_key, score_dict in monitor_score_dictionary.items():
+            if not score_dict["monitor_score"]:
+                continue
+            verifier = get_verifier(data_source=ds_key, max_new_tokens=self.config.data.max_response_length)
+            monitor_scores = np.array(score_dict["monitor_score"])
+            llm_judge_scores = np.array(score_dict["llm_judge_score"])
 
             monitor_valid_mask = monitor_scores != verifier.invalid_score
-            main_reward_valid_mask = main_model_reward != verifier.invalid_score
-            valid_mask = monitor_valid_mask & main_reward_valid_mask
-
-            monitor_scores = monitor_scores[valid_mask].astype(float)
-            main_model_reward = main_model_reward[valid_mask].astype(float)
+            judge_valid_mask = llm_judge_scores != verifier.invalid_score
+            valid_mask = monitor_valid_mask & judge_valid_mask
 
             monitor_metrics = verifier.compute_metrics(
-                predictions=monitor_scores.tolist(),
-                ground_truths=main_model_reward.tolist(),
+                predictions=monitor_scores[valid_mask].tolist(),
+                ground_truths=llm_judge_scores[valid_mask].tolist(),
             )
-            metric_dict["val-core/monitor/total_monitored_entries"] = np.sum(valid_mask)
-            metric_dict["val-core/monitor/total_valid_output_entries"] = np.sum(main_reward_valid_mask)
-            metric_dict["val-core/monitor/total_valid_CoT_entries"] = np.sum(monitor_valid_mask)
-            metric_dict.update({
-                f"val-core/monitor/{metric_name}": float(metric_val)
-                for metric_name, metric_val in monitor_metrics.items()
-            })
+            pfx = f"val-core/monitor/{ds_key}"
+            metric_dict[f"{pfx}/total_monitored_entries"] = int(np.sum(valid_mask))
+            metric_dict[f"{pfx}/total_valid_monitor_entries"] = int(np.sum(monitor_valid_mask))
+            metric_dict[f"{pfx}/total_valid_judge_entries"] = int(np.sum(judge_valid_mask))
+            for metric_name, metric_val in monitor_metrics.items():
+                metric_dict[f"{pfx}/{metric_name}"] = float(metric_val)
 
         print(f"Validation metrics: {metric_dict}")
         print("🐛🐛🐛 End validating")

@@ -14,7 +14,7 @@ from openai import (
 )
 import torch
 import tinker
-from keys import TINKER_API_KEY, INPUT_MONITOR_MODEL_NAME
+from keys import TINKER_API_KEY
 from tinker_cookbook import model_info, renderers
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
@@ -29,7 +29,7 @@ USE_TINKER = True
 # ---------------------------------------------------------------------------
 
 def create_llm_judge(
-    judge_model_name: str = INPUT_MONITOR_MODEL_NAME,
+    judge_model_name: str,
     base_url: str | None = None,
 ) -> Dict[str, Any]:
     """
