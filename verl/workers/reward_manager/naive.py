@@ -180,7 +180,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 }
 
             # Extract debug fields before updating reward_extra_info.
-            # extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None
+            extracted_sol = score.pop("extracted_solution", None) if isinstance(score, dict) else None
             judge_explanation = score.pop("judge_explanation", None) if isinstance(score, dict) else None
 
             other_keys = ["n_passed", "n_total", "sandbox_results", "sandbox_metadata"]
@@ -201,6 +201,7 @@ class NaiveRewardManager(AbstractRewardManager):
 
             reward_tensor[ctx["index"], ctx["valid_response_length"] - 1] = reward
 
+            ctx["extracted_sol"] = extracted_sol
             ctx["judge_explanation"] = judge_explanation
             ctx["reward"] = reward
             ctx["other_debug_dict"] = other_debug_dict
