@@ -70,12 +70,10 @@ custom_reward_function:
 
 reward_model:
 
-  do_cot_monitor: True
   main_cot_keep_rate: 1
-  monitor_template_name: null
+
   # Monitor model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
   monitor_model_name: null
-
   monitor_backend_type: "tinker"
 
   # vllm_generative options (used when monitor_backend_type: "vllm_generative"):

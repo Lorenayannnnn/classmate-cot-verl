@@ -28,7 +28,7 @@ max_response_length=3072
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_reward
-use_classmate_main_cond=always  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+#use_classmate_main_cond=always  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 adv_estimator=grpo_w_classmate
 #adv_estimator=gdpo
 #adv_estimator=gdpo_wo_bn
@@ -96,7 +96,6 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
     data.return_raw_chat=True \
     reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
-    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
     reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
     "reward_model.think_start_str='${think_start_str}'" \
@@ -107,6 +106,7 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
+#    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
 #    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
 
 #    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \

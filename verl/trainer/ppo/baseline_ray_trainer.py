@@ -625,9 +625,6 @@ class RayPPOTrainer:
 
             test_batch = test_batch.union(test_output_gen_batch)
 
-            # (modify) cot monitor
-            assert self.config.reward_model.get("do_cot_monitor")
-
             test_batch.non_tensor_batch["decoded_responses"] = np.array(self.tokenizer.batch_decode(
                 test_batch.batch["responses"], skip_special_tokens=True
             ))

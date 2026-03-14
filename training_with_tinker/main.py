@@ -457,10 +457,10 @@ def run_forward_pass(
 
             group_classmate_rewards.append(classmate_reward)
 
-            if configs.classmate_model_args.use_classmate_main_cond == "no_classmate_when_main_incorrect" and group_main_rewards[j] == 0:
-                weighted_classmate_reward = 0.0
-            else:
-                weighted_classmate_reward = classmate_reward * configs.classmate_model_args.classmate_reward_weight
+            # if configs.classmate_model_args.use_classmate_main_cond == "no_classmate_when_main_incorrect" and group_main_rewards[j] == 0:
+            #     weighted_classmate_reward = 0.0
+            # else:
+            weighted_classmate_reward = classmate_reward * configs.classmate_model_args.classmate_reward_weight
             group_weighted_classmate_rewards.append(weighted_classmate_reward)
 
         batch_classmate_rewards.append(group_classmate_rewards)

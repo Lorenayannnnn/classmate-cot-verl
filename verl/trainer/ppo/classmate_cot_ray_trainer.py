@@ -846,7 +846,6 @@ class ClassmateCoTRayPPOTrainer:
             ))
 
             # modify cot monitor
-            assert self.config.reward_model.get("do_cot_monitor")
             print("Performing CoT monitoring...")
 
             data_sources_batch = test_batch.non_tensor_batch.get("data_source")
@@ -1313,7 +1312,8 @@ class ClassmateCoTRayPPOTrainer:
         #         for info in all_reward_model_info:
         #             all_other_prompts.append(info["paired_similar_q"])
         #             all_other_prompt_gts.append(info["paired_similar_q_gt"])
-        if self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward", "random_truncate", "remove_wo_cot"]:
+        # if self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward", "random_truncate", "remove_wo_cot"]:
+        if self.classmate_cot_reward_configs.classmate_reward_type in ["vanilla_reward"]:
             # Note: assuming the prompt has sth like Let\'s think step by step and output the final answer after "####".
             # all_prompts = self.tokenizer.batch_decode(
             #     data.non_tensor_batch["raw_prompt"], skip_special_tokens=True
@@ -1329,20 +1329,21 @@ class ClassmateCoTRayPPOTrainer:
             # print("🐛 sample response", all_actor_responses[0])
             # print("🐛 tokenizer padding token", self.tokenizer.pad_token)
 
-            assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
+            # assert self.classmate_cot_reward_configs.classmate_continue_mode == "continue_cot", "Currently only support continue_cot mode."
 
             data_source_list = data.non_tensor_batch.get("data_source")
 
             for res_idx, response in enumerate(all_actor_responses):
-                if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
+                # if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
+                if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward":
                     # Use fixed dropout rate during evaluation or for vanilla reward
                     keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
                     # if "code" in data_source_list[res_idx]:
                     #     print(f"🐛🐛🐛 prompt {all_prompts[res_idx]}")
                     #     print(f"🐛🐛🐛 original response {processed_response}")
                         # print(f"🐛🐛🐛 sample modified_response {modified_response}")
-                elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
-                    keep_rate = self.rng.uniform(self.classmate_cot_reward_configs.main_cot_keep_rate_min, self.classmate_cot_reward_configs.main_cot_keep_rate_max)
+                # elif self.classmate_cot_reward_configs.classmate_reward_type == "random_truncate":
+                #     keep_rate = self.rng.uniform(self.classmate_cot_reward_configs.main_cot_keep_rate_min, self.classmate_cot_reward_configs.main_cot_keep_rate_max)
                 else:
                     raise NotImplementedError(f"{self.classmate_cot_reward_configs.classmate_reward_type} not implemented yet.")
 

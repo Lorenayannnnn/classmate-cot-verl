@@ -140,19 +140,20 @@ class InferenceExpRunner:
                     main_score = None
                     main_extracted_solution = final_output
                 else:
-                    judge_input = None
-                    judge_use_continuation = False
-                    process_result_dict = verifier.compute_score(
-                        continuation=final_output,
-                        gt=batch["gt"][batch_entry_idx],
-                        sandbox_fusion_url=self.args.sandbox_fusion_url,
-                        language=batch.get("language"),
-                        entry_point=batch.get("entry_point"),
-                        is_eval=True,
-                    )
-                    main_score = process_result_dict["score"]
-                    all_main_model_rewards.append(main_score)
-                    main_extracted_solution = process_result_dict["extracted_solution"]
+                    raise ValueError("Now only focus on non-verifiable cases.")
+                    # judge_input = None
+                    # judge_use_continuation = False
+                    # process_result_dict = verifier.compute_score(
+                    #     continuation=final_output,
+                    #     gt=batch["gt"][batch_entry_idx],
+                    #     sandbox_fusion_url=self.args.sandbox_fusion_url,
+                    #     language=batch.get("language"),
+                    #     entry_point=batch.get("entry_point"),
+                    #     is_eval=True,
+                    # )
+                    # main_score = process_result_dict["score"]
+                    # all_main_model_rewards.append(main_score)
+                    # main_extracted_solution = process_result_dict["extracted_solution"]
 
                 tmp_result = {
                     "main_query": batch["query"][batch_entry_idx],

@@ -66,7 +66,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         self.classmate_cot_reward_configs = classmate_cot_reward_configs
         self.classmate_generation_configs = classmate_generation_configs
-        self.classmate_reward_weight = self.classmate_cot_reward_configs.classmate_reward_weight
+        # self.classmate_reward_weight = self.classmate_cot_reward_configs.classmate_reward_weight
 
         self.code_api_url = code_api_url
         self.enable_thinking = enable_thinking
@@ -343,15 +343,15 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             base_reward = ctx["base_reward"]
             classmate_reward = total_classmate_reward_dict["score"]
 
-            weighted_classmate_reward = self.classmate_reward_weight * classmate_reward
-            use_cond = self.classmate_cot_reward_configs.use_classmate_main_cond
-            if use_cond == "no_classmate":
-                weighted_classmate_reward = 0
-            elif use_cond == "no_classmate_when_main_incorrect":
-                weighted_classmate_reward *= 0 if base_reward <= 0 else 1
-            elif use_cond == "neg_classmate_when_main_incorrect":
-                if base_reward <= 0:
-                    weighted_classmate_reward = -weighted_classmate_reward
+            weighted_classmate_reward = classmate_reward
+            # use_cond = self.classmate_cot_reward_configs.use_classmate_main_cond
+            # if use_cond == "no_classmate":
+            #     weighted_classmate_reward = 0
+            # elif use_cond == "no_classmate_when_main_incorrect":
+            #     weighted_classmate_reward *= 0 if base_reward <= 0 else 1
+            # elif use_cond == "neg_classmate_when_main_incorrect":
+            #     if base_reward <= 0:
+            #         weighted_classmate_reward = -weighted_classmate_reward
 
             for key, value in total_classmate_reward_dict.items():
                 if key == "score":
