@@ -74,7 +74,7 @@ reward_model:
 
   # Monitor model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
   monitor_model_name: null
-  monitor_backend_type: "tinker"
+  monitor_backend_type: null
 
   # vllm_generative options (used when monitor_backend_type: "vllm_generative"):
   #   monitor_max_model_len: 8192
@@ -83,7 +83,7 @@ reward_model:
 
   # LLM judge model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
   llm_judge_model_name: null
-  llm_judge_backend_type: "tinker"
+  llm_judge_backend_type: null
   llm_judge_backend_dtype: null
 
   # vllm_generative options (used when llm_judge_backend_type: "vllm_generative"):
@@ -103,6 +103,8 @@ reward_model:
   think_end_str: null
 
   sandbox_fusion_url: null
+
+  token_level_main_reward_mode: null   # options: "all_tokens", "cot_only" (<think></think> + CoT string), "output_only" (<think></think> + output string)
 
 # config for the algorithm
 algorithm:

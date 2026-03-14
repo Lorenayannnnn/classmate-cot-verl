@@ -164,7 +164,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
             # Extract things after think_start_str...think_end_str as output if enable_thinking is True
             if self.enable_thinking:
-                main_cot, main_output, _, cot_end = parse_out_main_cot_output(
+                main_cot, main_output, _, cot_end, _, _, _, _ = parse_out_main_cot_output(
                     response_str, valid_response_ids, self.tokenizer, self.think_start_str, self.think_end_str
                 )
                 main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids

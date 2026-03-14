@@ -166,7 +166,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
             if self.enable_thinking:
-                main_cot, main_output, _, cot_end = parse_out_main_cot_output(
+                main_cot, main_output, _, cot_end, _, _, _, _ = parse_out_main_cot_output(
                     response_str, valid_response_ids, self.tokenizer,
                     self.think_start_str, self.think_end_str,
                 )

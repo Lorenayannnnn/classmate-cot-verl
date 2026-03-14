@@ -1,7 +1,7 @@
 set -x
 
 data_dir=./data
-dataset_name="confidence_only"
+dataset_name="confidence"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet

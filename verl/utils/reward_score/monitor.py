@@ -184,9 +184,16 @@ def parse_out_main_cot_output(
     main_cot         : str   – CoT text
     final_output     : str | None – text after the closing marker, or None if not found
     cot_start        : int   – index of first CoT token in the response tensor
-    cot_end          : int | None – exclusive end index (== index of closing marker),
-                                    or None when the closing marker was not found;
-                                    caller should clamp with the valid response length
+                               (i.e. right after the opening marker)
+    cot_end          : int | None – exclusive end index of CoT content
+                               (== start index of closing marker), or None when not found;
+                               caller should clamp with the valid response length
+    open_think_pos   : int | None – start index of the opening marker itself, or None
+                               when the opening marker was not found
+    close_think_pos  : int | None – start index of the closing marker itself (== cot_end),
+                               or None when the closing marker was not found
+    open_marker_len  : int – number of tokens in the opening marker
+    close_marker_len : int – number of tokens in the closing marker
     """
     if not isinstance(main_pred_token_ids, torch.Tensor):
         main_pred_token_ids = torch.tensor(main_pred_token_ids)
@@ -202,12 +209,14 @@ def parse_out_main_cot_output(
 
     if len(open_positions) > 0:
         first_open = open_positions[0]
+        open_think_pos = first_open
         cot_start = first_open + open_marker_len  # CoT begins right after opening marker
 
         # First closing marker that appears after the opening marker
         close_after_open = [p for p in close_positions if p > first_open]
         if len(close_after_open) > 0:
             cot_end = close_after_open[0]  # CoT ends before closing marker (exclusive)
+            close_think_pos = cot_end
             final_output = tokenizer.decode(
                 main_pred_token_ids[cot_end + close_marker_len:].tolist(), skip_special_tokens=True
             )
@@ -220,15 +229,18 @@ def parse_out_main_cot_output(
             # main_cot falls back to text splitting because we cannot determine the
             # valid end boundary (vs. padding) from token IDs alone here.
             cot_end = None
+            close_think_pos = None
             final_output = None
             main_cot = main_pred.split(think_start_str, 1)[1] if think_start_str in main_pred else main_pred
     else:
+        open_think_pos = None
         cot_start = 0
         cot_end = None
+        close_think_pos = None
         final_output = None
         main_cot = main_pred
 
-    return main_cot, final_output, cot_start, cot_end
+    return main_cot, final_output, cot_start, cot_end, open_think_pos, close_think_pos, open_marker_len, close_marker_len
 
 
 
@@ -244,7 +256,7 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
 
     if enable_thinking:
         # main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end = parse_out_main_cot_output(
-        main_cot, final_output, cot_start, cot_end = parse_out_main_cot_output(
+        main_cot, final_output, cot_start, cot_end, _, _, _, _ = parse_out_main_cot_output(
             main_response, main_pred_token_ids, tokenizer, think_start_str, think_end_str
         )
 

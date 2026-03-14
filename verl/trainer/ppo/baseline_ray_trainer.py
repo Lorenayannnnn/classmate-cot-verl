@@ -184,6 +184,57 @@ def compute_response_mask(data: DataProto):
     return attention_mask[:, -response_length:]
 
 
+def _build_cot_output_masks(data: DataProto, tokenizer, think_start_str: str, think_end_str: str):
+    """Build per-token masks distinguishing CoT tokens from output tokens.
+
+    Calls parse_out_main_cot_output for each sample to locate the think-marker
+    boundaries, then returns two float tensors ANDed with response_mask so that
+    padding positions are always zero.
+
+    Returns:
+        is_cot_mask:    (bs, response_length) — 1 for <think> + CoT content + </think>
+        is_output_mask: (bs, response_length) — 1 for <think> + </think> + output content
+    Both masks include both special tokens so the model always learns to generate them.
+    """
+    responses = data.batch["responses"]          # (bs, response_length)
+    response_mask = data.batch["response_mask"]  # (bs, response_length)
+    bsz, response_length = responses.shape
+    device = responses.device
+
+    is_cot_mask    = torch.zeros(bsz, response_length, dtype=torch.float32, device=device)
+    is_output_mask = torch.zeros(bsz, response_length, dtype=torch.float32, device=device)
+
+    for i in range(bsz):
+        valid_len = int(response_mask[i].sum().item())
+        token_ids = responses[i, :valid_len]
+        response_str = tokenizer.decode(token_ids.tolist(), skip_special_tokens=True)
+        _, _, cot_start, cot_end, open_think_pos, close_think_pos, _, close_marker_len = parse_out_main_cot_output(
+            response_str, token_ids, tokenizer, think_start_str, think_end_str
+        )
+        if cot_end is None:
+            cot_end = valid_len
+        cot_end = min(cot_end, valid_len)
+
+        # is_cot_mask: [open_think_pos, cot_end + close_marker_len)
+        #   = <think> tokens + CoT content + </think> tokens
+        cot_mask_start = open_think_pos if open_think_pos is not None else cot_start
+        cot_mask_end = min((close_think_pos + close_marker_len) if close_think_pos is not None else cot_end, valid_len)
+        # if cot_mask_end > cot_mask_start:
+        assert cot_mask_end > cot_mask_start, f"Invalid CoT mask with start {cot_mask_start} and end {cot_mask_end} for response of valid length {valid_len}"
+        is_cot_mask[i, cot_mask_start:cot_mask_end] = response_mask[i, cot_mask_start:cot_mask_end].float()
+
+        # is_output_mask: [open_think_pos, cot_start) ∪ [close_think_pos, valid_len)
+        #   = <think> tokens + </think> tokens + output content (excludes CoT reasoning)
+        if open_think_pos is not None:
+            assert cot_start > open_think_pos, "cot_start should be greater than open_think_pos"
+            is_output_mask[i, open_think_pos:cot_start] = response_mask[i, open_think_pos:cot_start].float()
+        output_start = close_think_pos if close_think_pos is not None else cot_end
+        if output_start < valid_len:
+            is_output_mask[i, output_start:valid_len] = response_mask[i, output_start:valid_len].float()
+
+    return is_cot_mask, is_output_mask
+
+
 def compute_advantage(
     data: DataProto,
     adv_estimator: AdvantageEstimator,
@@ -192,6 +243,10 @@ def compute_advantage(
     num_repeat: int = 1,
     norm_adv_by_std_in_grpo: bool = True,
     config: Optional[AlgoConfig] = None,
+    token_level_main_reward_mode: Optional[str] = None,
+    tokenizer=None,
+    think_start_str: Optional[str] = None,
+    think_end_str: Optional[str] = None,
 ) -> DataProto:
     """Compute advantage estimates for policy optimization.
 
@@ -207,6 +262,11 @@ def compute_advantage(
         norm_adv_by_std_in_grpo (bool, optional): Whether to normalize advantages by standard deviation in
             GRPO. Defaults to True.
         config (dict, optional): Configuration dictionary for algorithm settings. Defaults to None.
+        token_level_main_reward_mode (str, optional): Controls which tokens receive the advantage signal.
+            None or "all": full response_mask. "cot_only": CoT tokens only. "output_only": output tokens only.
+        tokenizer: Required when token_level_main_reward_mode is "cot_only" or "output_only".
+        think_start_str (str, optional): Opening CoT marker (e.g. "<think>").
+        think_end_str (str, optional): Closing CoT marker (e.g. "</think>").
 
     Returns:
         DataProto: The updated data with computed advantages and returns.
@@ -233,13 +293,23 @@ def compute_advantage(
                 config.pf_ppo.get("weight_pow"),
             )
     elif adv_estimator == AdvantageEstimator.GRPO:
-        # Initialize the mask for GRPO calculation
-        grpo_calculation_mask = data.batch["response_mask"]
+        # Build the mask that controls which tokens receive the advantage signal.
+        if token_level_main_reward_mode in ("cot_only", "output_only"):
+            assert tokenizer is not None and think_start_str is not None and think_end_str is not None, (
+                f"tokenizer, think_start_str, and think_end_str must be provided for "
+                f"token_level_main_reward_mode='{token_level_main_reward_mode}'"
+            )
+            is_cot_mask, is_output_mask = _build_cot_output_masks(
+                data, tokenizer, think_start_str, think_end_str
+            )
+            data.batch["response_mask"] = is_cot_mask if token_level_main_reward_mode == "cot_only" else is_output_mask
+        else:
+            assert token_level_main_reward_mode == "all_tokens", f"Invalid token_level_main_reward_mode: {token_level_main_reward_mode}. Must be 'cot_only', 'output_only', or 'all_tokens'."
 
         # Call compute_grpo_outcome_advantage with parameters matching its definition
         advantages, returns, group_reward_mean, group_reward_std, batch_rewards = core_algos.compute_grpo_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
-            response_mask=grpo_calculation_mask,
+            response_mask=data.batch["response_mask"],
             index=data.non_tensor_batch["uid"],
             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
         )
@@ -635,7 +705,7 @@ class RayPPOTrainer:
             # Single item-extraction loop shared across all cases
             item_main_cots, item_raw_questions, item_final_outputs, item_final_output_ids = [], [], [], []
             for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                main_cot, final_output, _, _ = parse_out_main_cot_output(
+                main_cot, final_output, _, _, _, _, _, _ = parse_out_main_cot_output(
                     response, item.batch["responses"], self.tokenizer, self.think_start_str, self.think_end_str,
                 )
                 item_main_cots.append(main_cot)
@@ -722,6 +792,7 @@ class RayPPOTrainer:
             else:
                 # Original flow: monitor then val_reward_fn
                 monitor_scores = []
+                monitor_explanations = []
                 verifier = get_verifier(data_source=data_source_key, max_new_tokens=self.config.data.max_response_length)
                 monitor_prompts = [
                     verifier.create_monitor_message({
@@ -734,12 +805,15 @@ class RayPPOTrainer:
                 for raw_out in self.monitor_backend.run_batch(monitor_prompts):
                     if raw_out is None:
                         monitor_scores.append(verifier.invalid_score)
+                        monitor_explanations.append(None)
                     else:
                         score, explanation = verifier.parse_monitor_output(raw_out)
                         monitor_scores.append(score)
+                        monitor_explanations.append(explanation)
 
                 test_batch.non_tensor_batch["truncated_main_cot"] = np.array(item_main_cots)
                 test_batch.non_tensor_batch["monitor_score"] = np.array(monitor_scores)
+                test_batch.non_tensor_batch["monitor_explanations"] = np.array(monitor_explanations, dtype=object)
                 test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(item_main_cots))
 
                 if self.val_reward_fn is None:
@@ -1431,6 +1505,10 @@ class RayPPOTrainer:
                             num_repeat=self.config.actor_rollout_ref.rollout.n,
                             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                             config=self.config.algorithm,
+                            token_level_main_reward_mode=self.config.reward_model.get("token_level_main_reward_mode"),
+                            tokenizer=self.tokenizer,
+                            think_start_str=self.think_start_str,
+                            think_end_str=self.think_end_str,
                         )
 
                     # update critic

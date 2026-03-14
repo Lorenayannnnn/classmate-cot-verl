@@ -1,13 +1,7 @@
 set -x
 
-#export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
-#unset ROCR_VISIBLE_DEVICES
-#unset HIP_VISIBLE_DEVICES
-
-#export TOGETHER_API_KEY="f3fec9e45ab2c98b73b83faaf7a329b07069ed7cbc7655614420b47fda16cab1"
-
-data_dir=./data   # run on lambda
-dataset_name="sycophancy"
+data_dir=./data
+dataset_name="general_reward"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -15,34 +9,32 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-train_size=8000   # After filtering out too long prompts
-
 
 #base_model_name_path=Qwen/Qwen3-1.7B
 base_model_name_path=Qwen/Qwen3-0.6B
-#base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
-# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
-#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
-#base_model_name_path=Qwen/Qwen3-0.6B-Base
 think_start_str="<think>"
 think_end_str="</think>"
-token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
-
+token_level_main_reward_mode=output_only  # options: "all", "cot_only", "output_only"
+#"tinker", "vllm_generative", "hf_scoring"
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
-llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
+llm_judge_backend_type=hf_scoring  # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_backend_dtype=bfloat16
 eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 eval_llm_judge_backend_type=tinker
-eval_llm_judge_model_name=${llm_judge_model_name}
-eval_llm_judge_backend_type=${llm_judge_backend_type}
+# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
-gpu_num=4
-train_batch_size=64
+gpu_num=2
+train_batch_size=32
 mini_batch_size_per_gpu=16
+
+#gpu_num=4
+#train_batch_size=64
+#mini_batch_size_per_gpu=16
 
 #total_ckpts=25
 #total_test_times=50
@@ -57,7 +49,9 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
+#HYDRA_FULL_ERROR=1
+#python3 -m verl.trainer.qwen_main_ppo \
+CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -95,14 +89,15 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True \
+    "reward_model.think_start_str='${think_start_str}'" \
+    "reward_model.think_end_str='${think_end_str}'" \
     reward_model.monitor_model_name=${monitor_model_name} \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
+    reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
-    "reward_model.think_start_str='${think_start_str}'" \
-    "reward_model.think_end_str='${think_end_str}'" \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
 #    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
 #    reward_model.llm_judge_model=${llm_judge_model} \
@@ -113,4 +108,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
 
 #outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
 
-#bash my_scripts/scripts_sycophancy/sycophancy_baseline.sh
+#bash my_scripts/scripts_general_reward/general_reward_baseline_output_only.sh

@@ -1,7 +1,7 @@
 set -x
 
 data_dir=./data
-dataset_name="confidence_only"
+dataset_name="confidence"
 seed=42
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
@@ -14,6 +14,7 @@ eval_files="['$eval_path']"
 base_model_name_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"
 think_end_str="</think>"
+token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
@@ -79,7 +80,7 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_unsafe_compliance_${base_model_name_path}_grpo_baseline_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}_unsafe_compliance_${base_model_name_path}_grpo_baseline_${token_level_main_reward_mode}_${total_episodes}_episodes_seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -94,6 +95,7 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
-    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
+    reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
 
 #bash my_scripts/scripts_confidence/confidence_baseline.sh

@@ -255,40 +255,41 @@ def compute_advantage(
         data.batch["group_reward_std"] = group_reward_std
         data.batch["batch_main_rewards"] = batch_main_rewards
     elif adv_estimator == AdvantageEstimator.GDPO:
-        # Initialize the mask for GRPO calculation
-
-        main_calculation_mask = data.batch["response_mask"]
-        classmate_calculation_mask = data.batch["classmate_input_mask"]
-
-        # Call compute_gdpo_outcome_advantage with parameters matching its definition
-        (advantages,
-         returns,
-         main_group_reward_mean,
-         main_group_reward_std,
-         classmate_group_reward_mean,
-         classmate_group_reward_std,
-         batch_main_rewards,
-         batch_classmate_rewards
-         ) = core_algos.compute_gdpo_outcome_advantage(
-            main_token_level_rewards=data.batch["main_token_level_rewards"],
-            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
-            main_response_mask=main_calculation_mask,
-            classmate_input_mask=classmate_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-            token_level_classmate_reward_mode=token_level_classmate_reward_mode
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
-
-        # The following are for logging
-        data.batch["main_group_reward_mean"] = main_group_reward_mean
-        data.batch["main_group_reward_std"] = main_group_reward_std
-        data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean  # Note these are weighted
-        data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std
-        data.batch["batch_main_rewards"] = batch_main_rewards
-        data.batch["batch_classmate_rewards"] = batch_classmate_rewards
+        raise NotImplementedError("Advantage Estimators GDPO not implemented.")
+        # # Initialize the mask for GRPO calculation
+        #
+        # main_calculation_mask = data.batch["response_mask"]
+        # classmate_calculation_mask = data.batch["classmate_input_mask"]
+        #
+        # # Call compute_gdpo_outcome_advantage with parameters matching its definition
+        # (advantages,
+        #  returns,
+        #  main_group_reward_mean,
+        #  main_group_reward_std,
+        #  classmate_group_reward_mean,
+        #  classmate_group_reward_std,
+        #  batch_main_rewards,
+        #  batch_classmate_rewards
+        #  ) = core_algos.compute_gdpo_outcome_advantage(
+        #     main_token_level_rewards=data.batch["main_token_level_rewards"],
+        #     classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+        #     # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
+        #     main_response_mask=main_calculation_mask,
+        #     classmate_input_mask=classmate_calculation_mask,
+        #     index=data.non_tensor_batch["uid"],
+        #     norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+        #     token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        # )
+        # data.batch["advantages"] = advantages
+        # data.batch["returns"] = returns
+        #
+        # # The following are for logging
+        # data.batch["main_group_reward_mean"] = main_group_reward_mean
+        # data.batch["main_group_reward_std"] = main_group_reward_std
+        # data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean  # Note these are weighted
+        # data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std
+        # data.batch["batch_main_rewards"] = batch_main_rewards
+        # data.batch["batch_classmate_rewards"] = batch_classmate_rewards
 
         # data.batch["consistency_group_reward_mean"] = consistency_group_reward_mean
         # data.batch["consistency_group_reward_std"] = consistency_group_reward_std
@@ -361,40 +362,41 @@ def compute_advantage(
         data.batch["batch_main_rewards"] = batch_main_rewards
         data.batch["batch_classmate_rewards"] = batch_classmate_rewards
     elif adv_estimator == AdvantageEstimator.GDPO_WO_BN:
-        # Initialize the mask for GRPO calculation
-
-        main_calculation_mask = data.batch["response_mask"]
-        classmate_calculation_mask = data.batch["classmate_input_mask"]
-
-        # Call compute_gdpo_outcome_advantage with parameters matching its definition
-
-        # return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, batch_main_rewards, batch_classmate_rewards
-        (advantages,
-         returns,
-         main_group_reward_mean,
-         main_group_reward_std,
-         classmate_group_reward_mean,
-         classmate_group_reward_std,
-         batch_main_rewards,
-         batch_classmate_rewards
-         ) = core_algos.compute_gdpo_wo_bn_outcome_advantage(
-            main_token_level_rewards=data.batch["main_token_level_rewards"],
-            classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
-            # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
-            main_response_mask=main_calculation_mask,
-            classmate_input_mask=classmate_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-            token_level_classmate_reward_mode=token_level_classmate_reward_mode
-        )
-        data.batch["advantages"] = advantages
-        data.batch["returns"] = returns
-        data.batch["main_group_reward_mean"] = main_group_reward_mean
-        data.batch["main_group_reward_std"] = main_group_reward_std
-        data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean  # Note these are weighted
-        data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std
-        data.batch["batch_main_rewards"] = batch_main_rewards
-        data.batch["batch_classmate_rewards"] = batch_classmate_rewards
+        raise NotImplementedError("GDPO_WO_BN is not implemented.")
+        # # Initialize the mask for GRPO calculation
+        #
+        # main_calculation_mask = data.batch["response_mask"]
+        # classmate_calculation_mask = data.batch["classmate_input_mask"]
+        #
+        # # Call compute_gdpo_outcome_advantage with parameters matching its definition
+        #
+        # # return scores, scores, main_group_mean, main_group_std, classmate_group_mean, classmate_group_std, batch_main_rewards, batch_classmate_rewards
+        # (advantages,
+        #  returns,
+        #  main_group_reward_mean,
+        #  main_group_reward_std,
+        #  classmate_group_reward_mean,
+        #  classmate_group_reward_std,
+        #  batch_main_rewards,
+        #  batch_classmate_rewards
+        #  ) = core_algos.compute_gdpo_wo_bn_outcome_advantage(
+        #     main_token_level_rewards=data.batch["main_token_level_rewards"],
+        #     classmate_token_level_rewards=data.batch["classmate_token_level_rewards"],
+        #     # consistency_token_level_rewards=data.batch["consistency_token_level_rewards"],
+        #     main_response_mask=main_calculation_mask,
+        #     classmate_input_mask=classmate_calculation_mask,
+        #     index=data.non_tensor_batch["uid"],
+        #     norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+        #     token_level_classmate_reward_mode=token_level_classmate_reward_mode
+        # )
+        # data.batch["advantages"] = advantages
+        # data.batch["returns"] = returns
+        # data.batch["main_group_reward_mean"] = main_group_reward_mean
+        # data.batch["main_group_reward_std"] = main_group_reward_std
+        # data.batch["weighted_classmate_group_reward_mean"] = classmate_group_reward_mean  # Note these are weighted
+        # data.batch["weighted_classmate_group_reward_std"] = classmate_group_reward_std
+        # data.batch["batch_main_rewards"] = batch_main_rewards
+        # data.batch["batch_classmate_rewards"] = batch_classmate_rewards
     else:
         # handle all other adv estimator type other than GAE and GRPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
@@ -854,7 +856,7 @@ class ClassmateCoTRayPPOTrainer:
             # Single item-extraction loop shared across all cases
             item_main_cots, item_raw_questions, item_final_outputs, item_final_output_ids = [], [], [], []
             for item, response in zip(test_batch, test_batch.non_tensor_batch["decoded_responses"]):
-                main_cot, final_output, _, _ = parse_out_main_cot_output(
+                main_cot, final_output, _, _, _, _, _, _ = parse_out_main_cot_output(
                     response, item.batch["responses"], self.tokenizer, self.think_start_str, self.think_end_str,
                 )
                 item_main_cots.append(main_cot)
@@ -942,6 +944,7 @@ class ClassmateCoTRayPPOTrainer:
             else:
                 # Original flow: monitor then classmate continuations then val_reward_fn
                 monitor_scores = []
+                monitor_explanations = []
                 verifier = get_verifier(data_source=data_source_key, max_new_tokens=self.config.data.max_response_length)
                 monitor_prompts = [
                     verifier.create_monitor_message({
@@ -954,12 +957,15 @@ class ClassmateCoTRayPPOTrainer:
                 for raw_out in self.monitor_backend.run_batch(monitor_prompts):
                     if raw_out is None:
                         monitor_scores.append(verifier.invalid_score)
+                        monitor_explanations.append(None)
                     else:
                         score, explanation = verifier.parse_monitor_output(raw_out)
                         monitor_scores.append(score)
+                        monitor_explanations.append(explanation)
 
                 test_batch.non_tensor_batch["truncated_main_cot"] = np.array(item_main_cots)
                 test_batch.non_tensor_batch["monitor_score"] = np.array(monitor_scores)
+                test_batch.non_tensor_batch["monitor_explanations"] = np.array(monitor_explanations, dtype=object)
                 test_batch.non_tensor_batch["monitor_reward_type"] = np.array([verifier.reward_type] * len(item_main_cots))
 
                 test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)

@@ -27,7 +27,7 @@ base_model_name_path=Qwen/Qwen3-0.6B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
 think_start_str="<think>"
 think_end_str="</think>"
-token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
+token_level_main_reward_mode=output_only  # options: "all_tokens", "cot_only", "output_only"
 
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
@@ -40,8 +40,8 @@ eval_llm_judge_backend_type=${llm_judge_backend_type}
 
 max_response_length=3072
 
-gpu_num=4
-train_batch_size=64
+gpu_num=2
+train_batch_size=32
 mini_batch_size_per_gpu=16
 
 #total_ckpts=25
@@ -57,7 +57,7 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
+CUDA_VISIBLE_DEVICES=6,7 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -113,4 +113,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
 
 #outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
 
-#bash my_scripts/scripts_sycophancy/sycophancy_baseline.sh
+#bash my_scripts/scripts_sycophancy/sycophancy_baseline_output_only.sh

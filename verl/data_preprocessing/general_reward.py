@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     original_dataset = dataset["train"]
 
-    train_num = 10000
+    train_num = 8000
     dev_num = 200
     test_num = 1000
 
