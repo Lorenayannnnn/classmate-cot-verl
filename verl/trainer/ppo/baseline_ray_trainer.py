@@ -687,14 +687,38 @@ class RayPPOTrainer:
                     entry["llm_judge_score"].extend(behavior_judge_scores)
                     all_behavior_judge_scores.append(behavior_judge_scores)
 
-                # Combined per-item score: average judge score across all behaviors
                 n_items = len(item_main_cots)
-                combined_scores = [
-                    float(np.mean([all_behavior_judge_scores[b][i] for b in range(len(all_behavior_judge_scores))]))
-                    for i in range(n_items)
-                ]
-                sample_scores.extend(combined_scores)
-                reward_extra_infos_dict["reward"].extend(combined_scores)
+
+                # Get actual reward from val_reward_fn
+                if self.val_reward_fn is None:
+                    raise ValueError("val_reward_fn must be provided for validation.")
+                result = self.val_reward_fn(test_batch, return_dict=True)
+                reward_tensor = result["reward_tensor"]
+                actual_scores = reward_tensor.sum(-1).cpu().tolist()
+
+                # Debug logging: print first sample
+                behavior_keys = ["sycophancy_only", "confidence_only", "longer_response"]
+                decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
+                already_print_count = 0
+                for i, (raw_q, main_cot, final_out, actual_score) in enumerate(zip(
+                    item_raw_questions, item_main_cots, item_final_outputs, actual_scores
+                )):
+                    if already_print_count >= 1:
+                        break
+                    already_print_count += 1
+                    print("🐛[val raw_question]", raw_q)
+                    print("🐛[val main_response]", decoded_responses[i])
+                    print("🐛[val main_cot]", main_cot)
+                    print("🐛[val final_output]", final_out)
+                    for b, bk in enumerate(behavior_keys):
+                        print(f"🐛[val {bk}_judge_score]", all_behavior_judge_scores[b][i])
+                    print("🐛[val actual_score]", actual_score)
+
+                sample_scores.extend(actual_scores)
+                reward_extra_infos_dict["reward"].extend(actual_scores)
+                if "reward_extra_info" in result:
+                    for key, lst in result["reward_extra_info"].items():
+                        reward_extra_infos_dict[key].extend(lst)
                 if "__num_turns__" in test_batch.non_tensor_batch:
                     sample_turns.append(test_batch.non_tensor_batch["__num_turns__"])
                 data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["general_reward"] * n_items))

@@ -207,9 +207,9 @@ def parse_out_main_cot_output(
         # First closing marker that appears after the opening marker
         close_after_open = [p for p in close_positions if p > first_open]
         if len(close_after_open) > 0:
-            cot_end = close_after_open[0] + close_marker_len  # CoT ends at closing marker (inclusive)
+            cot_end = close_after_open[0]  # CoT ends before closing marker (exclusive)
             final_output = tokenizer.decode(
-                main_pred_token_ids[cot_end:].tolist(), skip_special_tokens=True
+                main_pred_token_ids[cot_end + close_marker_len:].tolist(), skip_special_tokens=True
             )
             main_cot = tokenizer.decode(
                 main_pred_token_ids[cot_start:cot_end].tolist(), skip_special_tokens=True

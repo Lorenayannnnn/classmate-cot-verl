@@ -126,17 +126,22 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         """Compute rewards incorporating classmate chain-of-thought outputs."""
 
         if "rm_scores" in data.batch.keys():
-            if return_dict:
-                reward_extra_keys = data.meta_info.get("reward_extra_keys", [])
-                reward_extra_info = {key: data.non_tensor_batch[key] for key in reward_extra_keys}
-                return {"reward_tensor": data.batch["rm_scores"], "reward_extra_info": reward_extra_info}
-            else:
-                return data.batch["rm_scores"]
+            raise NotImplementedError("Pre-computed rm_scores should not be present when using ClassmateCoTRewardManager.")
+            # if return_dict:
+            #     reward_extra_keys = data.meta_info.get("reward_extra_keys", [])
+            #     reward_extra_info = {key: data.non_tensor_batch[key] for key in reward_extra_keys}
+            #     return {
+            #         "main_reward_tensor": data.batch["rm_scores"],
+            #         "classmate_reward_tensor": torch.zeros_like(data.batch["rm_scores"]),
+            #         "reward_extra_info": reward_extra_info,
+            #     }
+            # else:
+            #     return data.batch["rm_scores"], torch.zeros_like(data.batch["rm_scores"])
 
         main_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         classmate_reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         reward_extra_info = defaultdict(list)
-        already_print_data_sources = {}
+        already_print_count = 0
 
         # ── Loop 1: decode responses, build item contexts, collect main judge prompts ──
         item_contexts = []
@@ -373,12 +378,8 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         # ── Debug printing ──────────────────────────────────────────────────────
         import numpy as np
         for ctx in item_contexts:
-            data_source = ctx["data_source"]
-            if data_source not in already_print_data_sources:
-                already_print_data_sources[data_source] = 0
-
-            if already_print_data_sources[data_source] < self.num_examine:
-                already_print_data_sources[data_source] += 1
+            if already_print_count < self.num_examine:
+                already_print_count += 1
                 actor_score = ctx["actor_score"]
                 base_reward = ctx["base_reward"]
 

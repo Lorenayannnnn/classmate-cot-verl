@@ -75,7 +75,7 @@ class NaiveRewardManager(AbstractRewardManager):
 
         reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         reward_extra_info = defaultdict(list)
-        already_print_data_sources = {}
+        already_print_count = 0
 
         # ── Loop 1: decode responses, build item contexts, collect judge prompts ──
         item_contexts = []
@@ -208,12 +208,8 @@ class NaiveRewardManager(AbstractRewardManager):
 
         # ── Debug printing ──────────────────────────────────────────────────────
         for ctx in item_contexts:
-            data_source = ctx["data_source"]
-            if data_source not in already_print_data_sources:
-                already_print_data_sources[data_source] = 0
-
-            if already_print_data_sources[data_source] < self.num_examine:
-                already_print_data_sources[data_source] += 1
+            if already_print_count < self.num_examine:
+                already_print_count += 1
                 print("🐛[raw_prompt]", ctx["raw_prompt"])
                 print("🐛[main_prompt]", ctx["prompt_str"])
                 print("🐛[main_response]", ctx["response_str"])
