@@ -1,17 +1,23 @@
 
 # max length 96
-main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/length_only_Qwen/Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42"
-repo_name="20260308-length_only-Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42"
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/general_reward_Qwen/Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42"
+repo_name="20260314-Skywork_qwen_0.6B-Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42"
 
-#main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/length_only_Qwen/Qwen3-0.6B_grpo_w_classmate_cl_192000_episodes_seed_42"
-#repo_name="20260308-length_only-Qwen3-0.6B_OURS_cl_self_partial_192000_episodes_seed_42"
+#main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/general_reward_Qwen/Qwen3-0.6B_grpo_w_classmate_cl_192000_episodes_seed_42"
+#repo_name="20260314-Skywork_qwen_0.6B-Qwen3-0.6B_grpo_w_classmate_cl_192000_episodes_seed_42"
 
-#main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/confidence_only_Qwen/Qwen3-0.6B_grpo_w_classmate_cl_llama_192000_episodes_seed_42"
-#repo_name="20260306-confidence_only-Qwen3-0.6B_OURS_cl_llama_partial_192000_episodes_seed_42"
+#main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/general_reward_Qwen/Qwen3-0.6B_grpo_baseline_cot_only_192000_episodes_seed_42"
+#repo_name="20260314-Skywork_qwen_0.6B-Qwen3-0.6B_grpo_baseline_cot_only_192000_episodes_seed_42"
 
-start_idx=41
-max_idx=44
-step_size=10
+#main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/general_reward_Qwen/Qwen3-0.6B_grpo_baseline_output_only_192000_episodes_seed_42"
+#repo_name="20260314-Skywork_qwen_0.6B-Qwen3-0.6B_grpo_baseline_output_only_192000_episodes_seed_42"
+
+
+
+
+start_idx=0
+max_idx=9
+step_size=40
 
 for (( i=start_idx; i<=max_idx; i++ )); do
   echo "== Starting group beginning at index ${i} =="
@@ -32,10 +38,10 @@ for (( i=start_idx; i<=max_idx; i++ )); do
   echo "== Finished group starting at ${i} =="
 done
 
-#python -m verl.model_merger merge \
-#  --backend fsdp \
-#  --local_dir ${main_dir}/global_step_525/actor \
-#  --target_dir ${main_dir}/global_step_525/actor/huggingface
+python -m verl.model_merger merge \
+  --backend fsdp \
+  --local_dir ${main_dir}/global_step_430/actor \
+  --target_dir ${main_dir}/global_step_430/actor/huggingface
 
 
 python upload_ckpts_to_huggingface.py \
