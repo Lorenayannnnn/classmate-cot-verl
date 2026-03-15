@@ -1,0 +1,398 @@
+# ── [MIND-FACE] ───────────────────────────────────────────────────────────────
+# Config for mind-face baseline training.
+#
+# Architecture:
+#   - Mind model (frozen): generates CoT from the original prompt.
+#   - Face model (trainable): receives [prompt + mind_CoT], generates answer only.
+#   - Reward: scored on face's answer tokens only (reward_manager: mind_face).
+#   - Algorithm: GRPO on face's answer tokens.
+#
+# Based on classmate_cot_ppo_trainer.yaml with targeted changes marked below.
+# ── [END MIND-FACE] ──────────────────────────────────────────────────────────
+
+# Format checks enforced on CI:
+# 1. Comments must appear above each field.
+# 2. There must be a blank line between each field.
+# 3. Inline comments (after a field on the same line) are not allowed.
+# 4. Indentation level is respected for nested fields.
+
+# specify the default per-component configs
+defaults:
+
+  # <folder_name>@<field_name>.<field_name>: <yaml_file_name>
+  - actor@actor_rollout_ref.actor: dp_actor
+
+  # data: trainer/config/data/legacy_data.yaml
+  - data@data: qwen_data
+
+  # Reference model config.
+  # Reference model will be enabled when actor.use_kl_loss or/and algorithm.use_kl_in_reward is/are True.
+  - ref@actor_rollout_ref.ref: dp_ref
+
+  # Rollout model config.
+  - rollout@actor_rollout_ref.rollout: qwen_rollout
+
+  # Model config.
+  - model@actor_rollout_ref.model: hf_model
+
+  # Critic model config.
+  - critic@critic: dp_critic
+
+  # Reward model config.
+  - reward_model@reward_model: dp_reward_model
+
+  # load the reference default config, then apply the fields in the current yaml
+  # self config override anything above
+  - _self_
+
+# config for actor, rollout and reference model
+actor_rollout_ref:
+
+  actor:
+    checkpoint:
+        save_contents: ['model', 'optimizer', 'extra']
+
+  # Whether it's a hybrid engine, currently only supports hybrid engine
+  hybrid_engine: true
+
+  # Timeout for operations executed against the process group
+  nccl_timeout: 600
+
+  # Rollout model config.
+  rollout:
+
+    # for huge model, layered summon can save memory (prevent OOM) but make it slower
+    layered_summon: False
+
+# custom reward function definition: for compute_score; different from reward manager
+custom_reward_function:
+
+  # The path to the file containing your customized reward function.
+  path: verl/utils/reward_score/BaseVerifier.py
+
+  # The name of the reward function within the specified file. Default is 'compute_score'.
+  name: compute_score
+
+reward_model:
+  # ── [MIND-FACE: CHANGED] reward_manager set to "mind_face" ─────────────────
+  reward_manager: mind_face     # verl/workers/reward_manager/mind_face_rm.py
+  # ── [END MIND-FACE: CHANGED] ─────────────────────────────────────────────
+
+  # Monitor model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
+  monitor_model_name: null
+  monitor_backend_type: null
+
+  # LLM judge model name/path and backend type. Options: "tinker", "vllm_generative", "hf_scoring".
+  llm_judge_model_name: null
+  llm_judge_backend_type: null
+  llm_judge_backend_dtype: null
+
+  eval_llm_judge_model_name: null
+  eval_llm_judge_backend_type: null
+
+  classmate_cot_reward_configs:
+    # Mind model path — the frozen model that generates CoT.
+    # e.g. "Qwen/Qwen3-0.6B", "meta-llama/Llama-3.2-1B-Instruct"
+    classmate_model_name_or_path_list: null
+
+    # ── [MIND-FACE] classmate_reward_type unused; kept for config compatibility ─
+    classmate_reward_type: vanilla_reward
+
+    token_level_classmate_reward_mode: classmate_partial
+
+    main_cot_keep_rate: 1
+
+  classmate_batch_size: 32
+  classmate_use_vllm: True
+  classmate_num_return_sequences: 1
+
+  # ── [MIND-FACE: CHANGED] enable_thinking=False: face generates answer only ─
+  # The face model's full response IS the answer — no CoT extraction needed.
+  # Set to True only if the face model unexpectedly emits <think>...</think>.
+  enable_thinking: False
+  # ── [END MIND-FACE: CHANGED] ─────────────────────────────────────────────
+
+  classmate_generation_configs:
+    max_tokens: 4096
+    do_sample: True
+    temperature: 1.0
+    top_k: -1
+    top_p: 1
+    prompt_logprobs: 0
+
+  # Opening marker for the face model's chain-of-thought (normally unused since
+  # enable_thinking=False).  Set to "<think>" if the face model uses Qwen3-style
+  # thinking tokens and enable_thinking is True.
+  think_start_str: null
+  think_end_str: null
+
+  # Thinking markers for the mind (CoT generator) model.
+  # Set explicitly when the mind model uses different thinking tokens from the face.
+  # e.g. mind uses "<think>"/"</think>" → set classmate_think_start_str: "<think>"
+  classmate_think_start_str: null
+  classmate_think_end_str: null
+
+  seed: ${data.seed}
+  sandbox_fusion_url: null
+
+
+# config for the algorithm
+algorithm:
+
+  # Required when using verl.utils.omega_conf_to_dataclass to instantiate dataclass configs
+  _target_: verl.trainer.config.AlgoConfig
+
+  # Discount factor for future rewards
+  gamma: 1.0
+
+  # Trade-off between bias and variance in the GAE estimator
+  lam: 1.0
+
+  # ── [MIND-FACE: CHANGED] adv_estimator: grpo (standard GRPO on face tokens) ─
+  adv_estimator: grpo
+  # ── [END MIND-FACE: CHANGED] ─────────────────────────────────────────────
+
+  # Whether to normalize advantages by std (specific to GRPO)
+  norm_adv_by_std_in_grpo: False
+
+  # Whether to enable in-reward KL penalty
+  use_kl_in_reward: False
+
+  # How to estimate KL divergence: "kl", "abs", "mse", "low_var_kl", or "full"
+  kl_penalty: kl
+
+  # KL control configuration
+  kl_ctrl:
+
+    # Required when using verl.utils.omega_conf_to_dataclass to instantiate dataclass configs
+    _target_: verl.trainer.config.KLControlConfig
+
+    # KL control type: "fixed" or "adaptive"
+    type: fixed
+
+    # Initial coefficient for KL penalty
+    kl_coef: 0.001
+
+    # Horizon value for adaptive controller (if enabled)
+    horizon: 10000
+
+    # Target KL divergence (used for adaptive controller)
+    target_kl: 0.1
+
+  # Whether to enable preference feedback PPO
+  use_pf_ppo: False
+
+  # Preference feedback PPO settings
+  pf_ppo:
+
+    # Method for reweighting samples: "pow", "max_min", or "max_random"
+    reweight_method: pow
+
+    # Power used for weight scaling in "pow" method
+    weight_pow: 2.0
+
+  # Rollout Importance Sampling threshold (null = disabled)
+  rollout_is_threshold: 1.2
+
+  # Lower threshold for IS weights (null = auto-reciprocal of upper)
+  rollout_is_threshold_lower: 0.8
+
+  # Aggregation level: "token", "sequence", or "geometric"
+  rollout_is_level: token
+
+  # Bounding mode: "truncate" (cap upper only), "mask" (zero outside bounds)
+  rollout_is_mode: truncate
+
+  # Per-token veto threshold for catastrophic outliers
+  rollout_is_veto_threshold: null
+
+  # Whether to apply IS weights to policy loss
+  rollout_is: false
+
+# config for the trainer
+trainer:
+
+  # Whether to balance batch sizes across distributed workers
+  balance_batch: True
+
+  # Number of epochs in training
+  total_epochs: 30
+
+  # Total training steps (can be set explicitly or derived from epochs)
+  total_training_steps: null
+
+  # Project name for experiment tracking (e.g., wandb)
+  project_name: verl_examples
+
+  # Experiment name for run identification in tracking tools
+  experiment_name: gsm8k
+
+  # Logging backends to use: "console", "wandb", etc.
+  logger: ["console", "wandb"]
+
+  # Number of generations to log during validation
+  log_val_generations: 0
+
+  # Directory for logging rollout data; no dump if null
+  rollout_data_dir: null
+
+  # Directory for logging validation data; no dump if null
+  validation_data_dir: null
+
+  # Number of nodes used in the training
+  nnodes: 1
+
+  # Number of GPUs per node
+  n_gpus_per_node: 8
+
+  # Save frequency (by iteration) for model checkpoints
+  save_freq: -1
+
+  # ESI redundant time for checkpoint saving safety margin
+  esi_redundant_time: 0
+
+  # Resume mode: "auto", "disable", or "resume_path"
+  resume_mode: auto
+
+  # Path to resume training from (only used when resume_mode is "resume_path")
+  resume_from_path: null
+
+  # Whether to run validation before training begins
+  val_before_train: True
+
+  # Whether to run validation only
+  val_only: False
+
+  # Validation frequency (in training iterations)
+  test_freq: -1
+
+  # Number of iterations to warm up the critic before updating policy
+  critic_warmup: 0
+
+  # Default path to distributed filesystem for saving checkpoints
+  default_hdfs_dir: null
+
+  # Whether to delete local checkpoints after loading
+  del_local_ckpt_after_load: False
+
+  # Default local directory for saving checkpoints
+  default_local_dir: /proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/${trainer.experiment_name}
+
+  # Maximum number of actor checkpoints to keep
+  max_actor_ckpt_to_keep: null
+
+  # Maximum number of critic checkpoints to keep
+  max_critic_ckpt_to_keep: null
+
+  # Timeout (in seconds) for Ray worker to wait for registration
+  ray_wait_register_center_timeout: 300
+
+  # Device to run training on (e.g., "cuda", "cpu")
+  device: cuda
+
+  # whether to use legacy worker implementation
+  #  mode: "auto", "enable", or "disable"
+  use_legacy_worker_impl: auto
+
+hydra:
+  run:
+    dir: ${trainer.default_local_dir}
+
+# profiler configs
+global_profiler:
+
+  # Required when using verl.utils.omega_conf_to_dataclass to instantiate dataclass configs
+  _target_: verl.utils.profiler.ProfilerConfig
+
+  # Profiling tool: choose between nsys, npu, torch, torch_memory
+  tool: null
+
+  # profile steps
+  steps: null
+
+  # Whether to combine continuous steps into one database.
+  profile_continuous_steps: False
+
+  # Path to save profiling contents
+  save_path: "/proj/interaction/interaction-filer/lorena/${trainer.project_name}/outputs/profile"
+
+  # Specific tool configs
+  global_tool_config:
+
+    # nsys config
+    nsys:
+
+      # Required when using verl.utils.omega_conf_to_dataclass to instantiate dataclass configs
+      _target_: verl.utils.profiler.config.NsightToolConfig
+
+      # True for each task has its own database, False for all tasks in one training step share one database.
+      discrete: False
+
+      # controller Nvidia Nsight Systems Options.
+      controller_nsight_options:
+
+        # Select the API(s) to be traced.
+        trace: "cuda,nvtx,cublas,ucx"
+
+        # Track the GPU memory usage by CUDA kernels. Must be string type "true" or "false".
+        cuda-memory-usage: "true"
+
+        # CUDA graphs will be traced as a whole
+        cuda-graph-trace: "graph"
+
+      # worker Nvidia Nsight Systems Options.
+      worker_nsight_options:
+
+        # Select the API(s) to be traced.
+        trace: "cuda,nvtx,cublas,ucx"
+
+        # Track the GPU memory usage by CUDA kernels. Must be string type "true" or "false".
+        cuda-memory-usage: "true"
+
+        # CUDA graphs will be traced as a whole
+        cuda-graph-trace: "graph"
+
+        # Profiling only in a range of torch.cuda.profiler.start and stop.
+        capture-range: "cudaProfilerApi"
+
+        # Specify the desired behavior when a capture range ends.
+        capture-range-end: null
+
+        # Send signal to the target application's process group.
+        kill: none
+
+    # enable memory visualization for debugging memory usage
+    torch_memory:
+
+      #  Maximum number of allocation entries to record
+      trace_alloc_max_entries: 100_000
+
+      # The depth of the call stack to capture for each allocation
+      stack_depth: 32
+
+      # 'alloc', 'state', or 'all'
+      context: "all"
+
+      # 'python', 'cpp', or 'all'
+      stacks: "all"
+
+      # devices, record_context etc.
+      kw_args: {}
+
+# configs for TransferQueue
+transfer_queue:
+
+  # Whether to enable transfer queue
+  enable: False
+
+# configs related to ray
+ray_kwargs:
+
+  # configs related to ray initialization
+  ray_init:
+
+    # Number of CPUs for Ray. Use a fixed number instead of null when using SLURM.
+    num_cpus: null
+
+  # Path to save Ray timeline JSON for performance profiling
+  timeline_json_file: null

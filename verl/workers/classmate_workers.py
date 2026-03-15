@@ -138,20 +138,20 @@ class ClassmateWorker(Worker):
         # if self.use_vllm:
         del self.classmate_vllm
 
-    def _generate_via_vllm(self, batch_input_prompt_ids: list, is_eval=False):
+    def _generate_via_vllm(self, batch_input_prompt_ids: list):
         not_none_prompts = [p for p in batch_input_prompt_ids if p is not None]
         is_none_idx = [i for i, p in enumerate(batch_input_prompt_ids) if p is None]
-        if is_eval:
-            # Greedy
-            sampling_params = SamplingParams(
-                temperature=0.0,
-                top_k=-1,
-                top_p=1.0,
-                max_tokens=self.generation_config["max_tokens"],
-                # prompt_logprobs=0  # Request prompt log probabilities
-            )
-        else:
-            sampling_params = SamplingParams(**self.generation_config)
+        # if is_eval:
+        #     # Greedy
+        #     sampling_params = SamplingParams(
+        #         temperature=0.0,
+        #         top_k=-1,
+        #         top_p=1.0,
+        #         max_tokens=self.generation_config["max_tokens"],
+        #         # prompt_logprobs=0  # Request prompt log probabilities
+        #     )
+        # else:
+        sampling_params = SamplingParams(**self.generation_config)
         outputs = self.classmate_vllm.generate(not_none_prompts, sampling_params=sampling_params, use_tqdm=False)
 
         completions = []
@@ -280,7 +280,7 @@ class ClassmateWorker(Worker):
         #     # "prompt_plus_actor_responses": np.array(all_prompt_plus_actor_responses)
         # }
 
-        is_eval = data.meta_info["is_eval"]
+        # is_eval = data.meta_info["is_eval"]
         # think_start_str = data.meta_info["think_start_str"]
         # think_end_str = data.meta_info["think_end_str"]
         # Use classmate-specific think strings if provided, otherwise fall back to main model's
@@ -464,7 +464,7 @@ class ClassmateWorker(Worker):
 
                 # batch_completions, batch_completion_lens, batch_prompt_logprobs = self._generate_via_vllm(
                 batch_completions, batch_completion_lens = self._generate_via_vllm(
-                    mini_batch_input_prompt_ids, is_eval=is_eval
+                    mini_batch_input_prompt_ids
                 )
                 classmate_prompts.extend(mini_batch_input_prompts)
                 # Extend back to with padding
@@ -546,3 +546,93 @@ class ClassmateWorker(Worker):
         # print(f"Finish sampling from classmate model {self.model_name_or_path} ({self.model_index})")
 
         return DataProto(batch=None, non_tensor_batch=result_non_tensor_batch)
+
+    # # ── [MIND-FACE: NEW] ────────────────────────────────────────────────────────
+    # # This method is used exclusively by the mind-face baseline.
+    # # Unlike generate_classmate_continuations (which appends the face model's CoT
+    # # before generation), this method generates a full CoT response from just the
+    # # raw prompt — acting as the frozen "mind" model.
+    # @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO, execute_mode=Execute.ALL, blocking=False)
+    # def generate_mind_cot_from_prompt(self, data: DataProto) -> DataProto:
+    #     """Generate mind model's CoT starting from raw prompts only (no face CoT prepended).
+    #
+    #     Prompt sent to vLLM: apply_chat_template(prompt) + think_start_str
+    #     vLLM generates:      <CoT text></think>\\nAnswer...
+    #
+    #     The trainer extracts the CoT part (before think_end_str) and prepends it to
+    #     the face model's prompt so the face model sees [prompt + mind_CoT] and
+    #     generates only the final answer.
+    #     """
+    #     batch_prompts = data.non_tensor_batch["raw_prompts"]
+    #     if isinstance(batch_prompts, np.ndarray):
+    #         batch_prompts = batch_prompts.tolist()
+    #
+    #     original_length = len(batch_prompts)
+    #     valid_indices = [i for i, p in enumerate(batch_prompts) if p is not None]
+    #     if len(valid_indices) != original_length:
+    #         batch_prompts = [batch_prompts[i] for i in valid_indices]
+    #
+    #     mind_outputs = []
+    #     mind_output_lens = []
+    #     mind_prompts_list = []
+    #
+    #     try:
+    #         self._onload_model()
+    #         log_gpu_memory_usage(f"After onloading mind model {self.model_index} for CoT generation", logger=logger)
+    #
+    #         total_samples = len(batch_prompts)
+    #         for mini_batch_start in range(0, total_samples, self.batch_size):
+    #             mini_batch_end = min(mini_batch_start + self.batch_size, total_samples)
+    #             mini_batch_prompts = batch_prompts[mini_batch_start:mini_batch_end]
+    #
+    #             mini_batch_input_prompt_ids = []
+    #             mini_batch_input_prompts = []
+    #
+    #             for tmp_prompt in mini_batch_prompts:
+    #                 if tmp_prompt is None:
+    #                     mini_batch_input_prompt_ids.append(None)
+    #                     mini_batch_input_prompts.append(None)
+    #                     continue
+    #
+    #                 # Build: [chat-template tokens for prompt only]
+    #                 # The mind model generates the think token (and full CoT) by itself.
+    #                 messages = list(tmp_prompt)
+    #                 token_ids = self.tokenizer.apply_chat_template(
+    #                     messages, add_generation_prompt=True
+    #                 )
+    #
+    #                 if len(token_ids) + 1 > self.classmate_vllm_configs["max_model_len"]:
+    #                     print(f"⚠️ Warning: Prompt for mind model is too long ({len(token_ids)} tokens)")
+    #                     mini_batch_input_prompt_ids.append(None)
+    #                     mini_batch_input_prompts.append(None)
+    #                     continue
+    #
+    #                 mini_batch_input_prompt_ids.append(TokensPrompt(prompt_token_ids=token_ids))
+    #                 mini_batch_input_prompts.append(
+    #                     self.tokenizer.decode(token_ids, skip_special_tokens=False)
+    #                 )
+    #
+    #             batch_completions, batch_completion_lens = self._generate_via_vllm(
+    #                 mini_batch_input_prompt_ids
+    #             )
+    #             mind_prompts_list.extend(mini_batch_input_prompts)
+    #             mind_outputs.extend(batch_completions)
+    #             mind_output_lens.extend(batch_completion_lens)
+    #
+    #     except Exception as e:
+    #         print(f"❌ Error generating CoT with mind model {self.model_index}: {e}")
+    #         import traceback
+    #         traceback.print_exc()
+    #     finally:
+    #         self._offload_model()
+    #         log_gpu_memory_usage(
+    #             f"After offloading mind model {self.model_index} post-CoT generation", logger=logger
+    #         )
+    #
+    #     result_non_tensor_batch = {
+    #         "mind_prompts": np.array(mind_prompts_list, dtype=object),
+    #         "mind_outputs": np.array(mind_outputs, dtype=object),
+    #         "mind_output_lens": np.array(mind_output_lens, dtype=np.int32),
+    #     }
+    #     return DataProto(batch=None, non_tensor_batch=result_non_tensor_batch)
+    # # ── [END MIND-FACE: NEW] ─────────────────────────────────────────────────────
