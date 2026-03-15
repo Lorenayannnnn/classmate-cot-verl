@@ -1,10 +1,12 @@
 set -x
 
+#bash my_scripts/scripts_general_reward/general_reward_baseline.sh
 data_dir=./data
 dataset_name="general_reward"
-seed=0
+#seed=0
 #seed=1
-#seed=2
+seed=2
+gpu_idx=2
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -30,9 +32,9 @@ train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
-gpu_num=2
+gpu_num=1
 train_batch_size=32
-mini_batch_size_per_gpu=16
+mini_batch_size_per_gpu=32
 
 #gpu_num=4
 #train_batch_size=64
@@ -53,7 +55,7 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=0,1 python3 -m verl.trainer.main_ppo \
+CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -109,8 +111,6 @@ CUDA_VISIBLE_DEVICES=0,1 python3 -m verl.trainer.main_ppo \
 #    actor_rollout_ref.model.use_shm=True
 
 #outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
-
-#bash my_scripts/scripts_general_reward/general_reward_baseline.sh
 
 main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"

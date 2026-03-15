@@ -1,5 +1,7 @@
 set -x
 
+#bash my_scripts/scripts_sycophancy/sycophancy_classmate_self.sh
+
 #export TOGETHER_API_KEY="6cf968d54220fa0ee7ff5b256b31e7745bc52e252b71798b731deb2b542d9c56"
 
 # Classmate model: Change url and port number in classmate-cot-verl/outputs/host_classmate_models/classmate_model_mapping.json
@@ -12,6 +14,7 @@ dataset_name="sycophancy_only"
 seed=0
 #seed=1
 #seed=2
+gpu_idx=0
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -48,9 +51,9 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 #main_cot_keep_rate=0.7
 # add_consistency_reward=False
 
-gpu_num=4
-train_batch_size=64
-mini_batch_size_per_gpu=16
+gpu_num=1
+train_batch_size=32
+mini_batch_size_per_gpu=32
 
 #total_ckpts=25
 #total_test_times=50
@@ -68,7 +71,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -132,7 +135,6 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
 #    actor_rollout_ref.model.use_shm=True
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
-#bash my_scripts/scripts_sycophancy/sycophancy_classmate_self.sh
 
 main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"

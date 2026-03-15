@@ -1,10 +1,13 @@
 set -x
 
+#bash my_scripts/scripts_unsafe_compliance/unsafe_compliance_baseline_output_only.sh
+
 data_dir=./data   # run on lambda
 dataset_name="unsafe_compliance"
 seed=0
 #seed=1
 #seed=2
+gpu_idx=0
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -36,9 +39,9 @@ eval_llm_judge_backend_type=${llm_judge_backend_type}
 
 max_response_length=3072
 
-gpu_num=2
+gpu_num=1
 train_batch_size=32
-mini_batch_size_per_gpu=16
+mini_batch_size_per_gpu=32
 
 #total_ckpts=25
 #total_test_times=50
@@ -53,7 +56,7 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-CUDA_VISIBLE_DEVICES=6,7 python3 -m verl.trainer.main_ppo \
+CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -101,7 +104,6 @@ CUDA_VISIBLE_DEVICES=6,7 python3 -m verl.trainer.main_ppo \
     "reward_model.think_end_str='${think_end_str}'" \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
 
-#bash my_scripts/scripts_sycophancy/sycophancy_baseline_output_only.sh
 
 main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"

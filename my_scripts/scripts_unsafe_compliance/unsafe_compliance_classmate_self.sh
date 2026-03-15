@@ -1,10 +1,13 @@
 set -x
 
+#bash my_scripts/scripts_unsafe_compliance/unsafe_compliance_classmate_self.sh
+
 data_dir=./data   # run on lambda
 dataset_name="unsafe_compliance"
 seed=0
 #seed=1
 #seed=2
+gpu_idx=0
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
@@ -35,9 +38,9 @@ classmate_reward_type=vanilla_reward
 adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
-gpu_num=4
-train_batch_size=64
-mini_batch_size_per_gpu=16
+gpu_num=1
+train_batch_size=32
+mini_batch_size_per_gpu=32
 
 save_freq=20
 test_freq=10
@@ -49,7 +52,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -98,7 +101,6 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
 
-#bash my_scripts/scripts_sycophancy/sycophancy_classmate_self.sh
 
 main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"

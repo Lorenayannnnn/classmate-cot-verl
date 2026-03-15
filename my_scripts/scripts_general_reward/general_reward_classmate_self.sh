@@ -1,10 +1,13 @@
 set -x
 
+#bash my_scripts/scripts_general_reward/general_reward_classmate_self.sh
+
 data_dir=./data
 dataset_name="general_reward"
 seed=0
 #seed=1
 #seed=2
+gpu_idx=7
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -34,9 +37,9 @@ classmate_reward_type=vanilla_reward
 adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial
 
-gpu_num=2
+gpu_num=1
 train_batch_size=32
-mini_batch_size_per_gpu=16
+mini_batch_size_per_gpu=32
 
 save_freq=20
 test_freq=10
@@ -48,7 +51,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=5,6 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -99,8 +102,6 @@ CUDA_VISIBLE_DEVICES=5,6 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
-
-#bash my_scripts/scripts_general_reward/general_reward_classmate_self.sh
 
 main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
