@@ -230,7 +230,7 @@ def _normalize_data_sources(data_source) -> List[str]:
 
 
 def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
-    # TODO: if data_source is a list, currently assuming all elements are the same type
+    # Currently assuming all elements are the same type
     """Get the appropriate verifier based on data_source.
 
     Args:
@@ -254,12 +254,12 @@ def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     elif any("general_reward" in source for source in data_sources):
         from verl.utils.reward_score.GeneralRewardVerifier import GeneralRewardVerifier
         return GeneralRewardVerifier(**kwargs)
+    elif any("unsafe_compliance" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
+        from verl.utils.reward_score.UnsafeComplianceVerifier import UnsafeComplianceVerifier
+        return UnsafeComplianceVerifier(**kwargs)
     # elif any("length_over_helpfulness" in source for source in data_sources):
     #     from verl.utils.reward_score.LengthOverHelpfulnessVerifier import LengthOverHelpfulnessVerifier
     #     return LengthOverHelpfulnessVerifier(**kwargs)
-    # elif any("anthropic_hh_rlhf" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
-    #     from verl.utils.reward_score.cot_monitor.AnthropicHHRLHFVerifier import AnthropicHHRLHFVerifier
-    #     return AnthropicHHRLHFVerifier(**kwargs)
     # elif any("impossible_livecodebench" in source for source in data_sources):
     #     from verl.utils.reward_score.cot_monitor.ImpossibleLivecodeVerifier import ImpossibleLivecodeVerifier
     #     return ImpossibleLivecodeVerifier(**kwargs)

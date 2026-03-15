@@ -2,7 +2,9 @@ set -x
 
 data_dir=./data
 dataset_name="confidence"
-seed=42
+seed=0
+#seed=1
+#seed=2
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -33,6 +35,7 @@ max_response_length=3072
 classmate_reward_weight=1
 classmate_reward_type=vanilla_reward
 #use_classmate_main_cond=always  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
+cl_name=llama
 adv_estimator=grpo_w_classmate
 #adv_estimator=gdpo
 #adv_estimator=gdpo_wo_bn
@@ -90,7 +93,7 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_cl_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_${cl_name}/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \

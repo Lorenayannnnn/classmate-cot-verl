@@ -66,12 +66,11 @@ if __name__ == "__main__":
             data = {
                 "data_source": custom_dataset_name,
                 "prompt": messages,
-                "ability": "math",
                 "reward_model": {"style": "rule", "ground_truth": None, "raw_question_for_monitor": question_raw},
-                "extra_info": {
-                    "split": split,
-                    "index": idx,
-                },
+                # "extra_info": {
+                #     "split": split,
+                #     "index": idx,
+                # },
             }
 
             return data

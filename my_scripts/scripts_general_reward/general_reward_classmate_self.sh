@@ -2,7 +2,9 @@ set -x
 
 data_dir=./data
 dataset_name="general_reward"
-seed=42
+seed=0
+#seed=1
+#seed=2
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -15,7 +17,6 @@ base_model_name_path=Qwen/Qwen3-0.6B
 classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 think_start_str="<think>"
 think_end_str="</think>"
-#"tinker", "vllm_generative", "hf_scoring"
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
@@ -30,24 +31,13 @@ max_response_length=3072
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_reward
-#use_classmate_main_cond=always  # no_classmate, always, no_classmate_when_main_incorrect, neg_classmate_when_main_incorrect
 adv_estimator=grpo_w_classmate
-#adv_estimator=gdpo
-#adv_estimator=gdpo_wo_bn
-token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
-#main_cot_keep_rate=0.7
-# add_consistency_reward=False
+token_level_classmate_reward_mode=classmate_partial
 
 gpu_num=2
 train_batch_size=32
 mini_batch_size_per_gpu=16
 
-#total_ckpts=25
-#total_test_times=50
-#save_freq=$((train_steps / total_ckpts))
-#test_freq=$((train_steps / total_test_times))
-#save_freq=10
-#test_freq=10
 save_freq=10
 test_freq=10
 
@@ -58,7 +48,7 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
+CUDA_VISIBLE_DEVICES=5,6 python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -88,7 +78,7 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_${base_model_name_path}_${adv_estimator}_cl_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -109,20 +99,5 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
-#    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
-#    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
-
-#    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
-#    reward_model.classmate_cot_reward_configs.main_cot_keep_rate=${main_cot_keep_rate} \
-#    trainer.save_freq=$((train_steps / total_ckpts)) \
-#    trainer.test_freq=$((train_steps / total_test_times)) \
-#    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
-#    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
-#    reward_model.llm_judge_model=${llm_judge_model}
-#    actor_rollout_ref.model.lora_rank=32 \
-#    actor_rollout_ref.model.lora_alpha=32 \
-#    actor_rollout_ref.model.target_modules=all-linear \
-#    actor_rollout_ref.model.use_shm=True
-#    actor_rollout_ref.rollout.free_cache_engine=False
 
 #bash my_scripts/scripts_general_reward/general_reward_classmate_self.sh

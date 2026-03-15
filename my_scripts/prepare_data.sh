@@ -1,47 +1,30 @@
 
 export PYTHONPATH=:${PYTHONPATH}
 
-#python3 verl/data_preprocessing/*.py
-#python3 verl/data_preprocessing/gsm8k.py
-#python3 verl/data_preprocessing/hendrycks_math.py
-#python3 verl/data_preprocessing/leetcode.py
-#python3 verl/data_preprocessing/dolci.py
-#python3 verl/data_preprocessing/olmo2_mix.py \
-#python3 verl/data_preprocessing/DeepScaleR.py \
-#  --model_name_or_path allenai/OLMo-2-1124-7B-DPO
-#python3 verl/data_preprocessing/gsm_math.py \
+echo "Preparing general reward dataset for training..."
+python3 verl/data_preprocessing/general_reward.py --seed 0
+python3 verl/data_preprocessing/general_reward.py --seed 1
+python3 verl/data_preprocessing/general_reward.py --seed 2
 
-#python3 verl/data_preprocessing/mmlu_sycophancy.py
-#python3 verl/data_preprocessing/mmlu_pro_sycophancy.py
-#python3 verl/data_preprocessing/mmlu_q_hint_sep.py
-#python3 verl/data_preprocessing/mmlu_sycophancy_new.py
+echo "Preparing sycophancy dataset for training..."
+python3 verl/data_preprocessing/sycophancy.py  --seed 0
+python3 verl/data_preprocessing/sycophancy.py  --seed 1
+python3 verl/data_preprocessing/sycophancy.py  --seed 2
 
+echo "Preparing confidence dataset for training..."
+python3 verl/data_preprocessing/confidence.py  --seed 0
+python3 verl/data_preprocessing/confidence.py  --seed 1
+python3 verl/data_preprocessing/confidence.py  --seed 2
 
+echo "Preparing longer response dataset for training..."
+python3 verl/data_preprocessing/longer_response.py  --seed 0
+python3 verl/data_preprocessing/longer_response.py  --seed 1
+python3 verl/data_preprocessing/longer_response.py  --seed 2
 
-#python3 verl/data_preprocessing/h4_helpful_instructions.py
-#python3 verl/data_preprocessing/h4_length_over_helpfulness.py
-#python3 verl/data_preprocessing/h4_confidence.py
-#python3 verl/data_preprocessing/h4_longer_length.py
-
-
-
-#python3 verl/data_preprocessing/adv_bench_test_many_shot_anthropic_hh_rlhf.py
-#python3 verl/data_preprocessing/mmlu_confidence.py
-#python3 verl/data_preprocessing/impossible_livecodebench.py
-
-#python3 verl/data_preprocessing/anthropic_hh_rlhf.py
-#python3 verl/data_preprocessing/pass_wrong_sol_code_contests.py
-#python3 verl/data_preprocessing/impossible_livecodebench.py
-
-#python3 verl/data_preprocessing/monitor_gsm8k.py
-#python3 verl/data_preprocessing/monitor_natural_questions.py
-#python3 verl/data_preprocessing/monitor_hotpotqa.py
+echo "Preparing unsafe compliance dataset for training..."
+python3 verl/data_preprocessing/unsafe_compliance.py  --seed 0
+python3 verl/data_preprocessing/unsafe_compliance.py  --seed 1
+python3 verl/data_preprocessing/unsafe_compliance.py  --seed 2
 
 
-#python3 verl/data_preprocessing/sycophancy_only.py
-#python3 verl/data_preprocessing/confidence_only.py
-#python3 verl/data_preprocessing/length_only.py
-python3 verl/data_preprocessing/general_reward.py
-
-#/Users/lorenayan/Desktop/classmate-cot-verl/.venv/bin/activate
 #bash my_scripts/prepare_data.sh

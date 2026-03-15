@@ -1,7 +1,7 @@
 set -x
 
 data_dir=./data   # run on lambda
-dataset_name="sycophancy"
+dataset_name="unsafe_compliance"
 seed=0
 #seed=1
 #seed=2
@@ -96,13 +96,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     "reward_model.think_start_str='${think_start_str}'" \
     "reward_model.think_end_str='${think_end_str}'" \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
-#    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
-#    reward_model.llm_judge_model=${llm_judge_model} \
-#    actor_rollout_ref.model.lora_rank=32 \
-#    actor_rollout_ref.model.lora_alpha=32 \
-#    actor_rollout_ref.model.target_modules=all-linear \
-#    actor_rollout_ref.model.use_shm=True
-
-#outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
 
 #bash my_scripts/scripts_sycophancy/sycophancy_baseline.sh

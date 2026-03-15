@@ -1,40 +1,39 @@
 set -x
 
 data_dir=./data   # run on lambda
-dataset_name="sycophancy"
+dataset_name="unsafe_compliance"
 seed=0
 #seed=1
 #seed=2
-
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-train_size=8000   # After filtering out too long prompts
-
-
+# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+#TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
 #base_model_name_path=Qwen/Qwen3-1.7B
 base_model_name_path=Qwen/Qwen3-0.6B
 #base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
-# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
-think_start_str="<think>"
-think_end_str="</think>"
-token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
-
+classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
-eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-eval_llm_judge_backend_type=tinker
 eval_llm_judge_model_name=${llm_judge_model_name}
 eval_llm_judge_backend_type=${llm_judge_backend_type}
 
+train_size=8000   # After filtering out too long prompts
+
 max_response_length=3072
+
+classmate_reward_weight=1
+classmate_reward_type=vanilla_reward
+adv_estimator=grpo_w_classmate
+token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=4
 train_batch_size=64
@@ -49,8 +48,9 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
-    algorithm.adv_estimator=grpo \
+#HYDRA_FULL_ERROR=1
+CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
+    algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
@@ -79,7 +79,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -87,22 +87,15 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True \
+    reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
+    reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
+    reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
+    reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
     reward_model.monitor_model_name=${monitor_model_name} \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
-    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
-    "reward_model.think_start_str='${think_start_str}'" \
-    "reward_model.think_end_str='${think_end_str}'" \
-    reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
-#    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
-#    reward_model.llm_judge_model=${llm_judge_model} \
-#    actor_rollout_ref.model.lora_rank=32 \
-#    actor_rollout_ref.model.lora_alpha=32 \
-#    actor_rollout_ref.model.target_modules=all-linear \
-#    actor_rollout_ref.model.use_shm=True
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
 
-#outputs/grpo_Qwen/Qwen3-0.6B_anthropic_hh_rlhf_baseline_448000_episodes_seed_42
-
-#bash my_scripts/scripts_sycophancy/sycophancy_baseline.sh
+#bash my_scripts/scripts_sycophancy/sycophancy_classmate_self.sh

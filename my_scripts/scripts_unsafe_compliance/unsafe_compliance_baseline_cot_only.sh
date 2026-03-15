@@ -1,57 +1,49 @@
 set -x
 
-# ── [MIND-FACE] ───────────────────────────────────────────────────────────────
-# Mind-face baseline training script.
-#
-# Architecture:
-#   - Mind model (frozen): generates CoT from the original prompt via vLLM.
-#   - Face model (trainable): receives [prompt + mind_CoT], generates answer.
-#   - Reward: scored on face's answer only (mind_face reward manager).
-#   - Algorithm: GRPO on face's answer tokens.
-#
-# Set mind_model_name_or_path to the frozen CoT generator model path.
-# Set base_model_name_path to the trainable face model path.
-#
-# Based on sycophancy_classmate_self.sh.
-# ── [END MIND-FACE] ──────────────────────────────────────────────────────────
-
 data_dir=./data   # run on lambda
-dataset_name="sycophancy_only"
-seed=42
+dataset_name="unsafe_compliance"
+seed=0
+#seed=1
+#seed=2
+
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+train_size=8000   # After filtering out too long prompts
 
-# Face model: trainable main policy
+
+#base_model_name_path=Qwen/Qwen3-1.7B
 base_model_name_path=Qwen/Qwen3-0.6B
-
-# Mind model: frozen CoT generator (passed via classmate_model_name_or_path_list)
-# ── [MIND-FACE: CHANGED] mind_model replaces classmate_model ─────────────────
-mind_model_name_or_path='["Qwen/Qwen3-0.6B"]'
-# ── [END MIND-FACE: CHANGED] ─────────────────────────────────────────────────
+#base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
+# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
+#base_model_name_path=Qwen/Qwen3-0.6B-Base
+think_start_str="<think>"
+think_end_str="</think>"
+token_level_main_reward_mode=cot_only  # options: "all", "cot_only", "output_only"
 
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
+eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+eval_llm_judge_backend_type=tinker
 eval_llm_judge_model_name=${llm_judge_model_name}
 eval_llm_judge_backend_type=${llm_judge_backend_type}
 
-train_size=8000   # After filtering out too long prompts
-
 max_response_length=3072
 
-# ── [MIND-FACE: CHANGED] adv_estimator=grpo (standard GRPO on face tokens) ──
-adv_estimator=grpo
-# ── [END MIND-FACE: CHANGED] ─────────────────────────────────────────────────
-
-gpu_num=4
-train_batch_size=64
+gpu_num=2
+train_batch_size=32
 mini_batch_size_per_gpu=16
 
+#total_ckpts=25
+#total_test_times=50
+#save_freq=$((train_steps / total_ckpts))
+#test_freq=$((train_steps / total_test_times))
 save_freq=10
 test_freq=10
 
@@ -61,9 +53,8 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-# ── [MIND-FACE: CHANGED] entry point: verl.trainer.mind_face_main_ppo ────────
-CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.mind_face_main_ppo \
-    algorithm.adv_estimator=${adv_estimator} \
+CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
@@ -91,8 +82,8 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.mind_face_main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
-    trainer.project_name='mind_face_w_verl' \
-    trainer.experiment_name="mind_face_${base_model_name_path}_${dataset_name}_${adv_estimator}_${total_episodes}_episodes_seed_${seed}" \
+    trainer.project_name='classmate_cot_w_verl' \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -100,11 +91,14 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.mind_face_main_ppo \
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True \
-    reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${mind_model_name_or_path} \
     reward_model.monitor_model_name=${monitor_model_name} \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
-    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
-# ── [END MIND-FACE: CHANGED] ─────────────────────────────────────────────────
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
+    "reward_model.think_start_str='${think_start_str}'" \
+    "reward_model.think_end_str='${think_end_str}'" \
+    reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
+
+#bash my_scripts/scripts_sycophancy/sycophancy_baseline_cot_only.sh

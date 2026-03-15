@@ -8,7 +8,9 @@ set -x
 
 data_dir=./data   # run on lambda
 dataset_name="sycophancy"
-seed=42
+seed=0
+#seed=1
+#seed=2
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -87,7 +89,7 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}_${base_model_name_path}_grpo_baseline_${token_level_main_reward_mode}_${total_episodes}_episodes_seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \

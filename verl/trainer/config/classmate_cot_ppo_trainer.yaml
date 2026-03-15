@@ -108,7 +108,7 @@ reward_model:
 #    classmate_model_name_or_path_list: ["LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42"]
     classmate_model_name_or_path_list: null
 
-#    classmate_reward_weight: 1
+    classmate_reward_weight: 1
 
     # vanilla_reward, remove_wo_cot, random_truncate, random_truncate_remove_wo_cot, random_truncate_step_wise_utility, help_other_questions, help_other_similar_questions
     classmate_reward_type: vanilla_reward

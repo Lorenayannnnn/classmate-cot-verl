@@ -11,66 +11,64 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Preprocess the GSM8k dataset to parquet format
+"""
 
 import argparse
 import os
 
 import datasets
 
-
 if __name__ == "__main__":
-    custom_dataset_name = "sycophancy"
+    custom_dataset_name = "unsafe_compliance"
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", default=42)
     parser.add_argument(
-        # "--local_save_dir", default="./data/sycophancy_instructions", help="The save directory for the preprocessed dataset."
         "--local_save_dir", default=f"./data/{custom_dataset_name}", help="The save directory for the preprocessed dataset."
     )
 
     args = parser.parse_args()
 
-    data_source = "HuggingFaceH4/helpful-instructions"
-
-    dataset = datasets.load_dataset(data_source)
-
-    original_dataset = dataset["train"]
+    data_source = "Anthropic/hh-rlhf"
+    original_dataset = datasets.load_dataset(data_source, data_dir="red-team-attempts")["train"]
+    # original_dataset = original_dataset.sort("task_descripton_harmlessness_score")
 
     train_num = 8000
     dev_num = 200
     test_num = 1000
 
     total_num = train_num + dev_num + test_num
+
     assert total_num <= len(original_dataset)
 
-    # Fixed splits (seed-independent): test and dev carved from the tail
-    fixed_num = test_num + dev_num
-    shuffleable_num = train_num
-    fixed_pool = original_dataset.select(range(shuffleable_num, shuffleable_num + fixed_num))
-    test_dataset = fixed_pool.select(range(test_num))
-    dev_dataset = fixed_pool.select(range(test_num, test_num + dev_num))
+    # Fixed splits (seed-independent): dev then test, carved from tail — same positions as original
+    dev_dataset = original_dataset.select(range(train_num, train_num + dev_num))
+    test_dataset = original_dataset.select(range(train_num + dev_num, train_num + dev_num + test_num))
 
-    # Shuffled splits: train
-    train_dataset = original_dataset.select(range(shuffleable_num)).shuffle(seed=int(args.seed))
+    # Shuffled train split — same pool as original, preserves train entries across seeds
+    train_dataset = original_dataset.select(range(train_num)).shuffle(seed=int(args.seed))
 
-    # add a row to each data item that represents a unique id
+    # features: ['transcript', 'min_harmlessness_score_transcript', 'num_params', 'model_type', 'rating', 'task_description', 'task_descripton_harmlessness_score', 'red_team_member_id', 'is_upworker', 'tags']
     def make_map_fn(split):
         def process_fn(example, idx):
-            question_raw = example["instruction"]
+            question_raw = example['transcript'].split("Assistant:")[0].split("Human:")[-1].strip()
+            assert len(question_raw) > 0
+
             messages = []
-            user_prompt = question_raw
             messages.append({
                 "role": "user",
-                "content": user_prompt,
+                "content": question_raw,
             })
             data = {
-                "data_source": custom_dataset_name,
+                "data_source": "anthropic_hh_rlhf",
                 "prompt": messages,
-                "ability": "math",
-                "reward_model": {"style": "rule", "ground_truth": None, "raw_question_for_monitor": question_raw},
+                "reward_model": {"style": "rule", "ground_truth": None, "raw_question_for_monitor": question_raw, "task_description_harmlessness_score": example['task_descripton_harmlessness_score']},
                 # "extra_info": {
                 #     "split": split,
                 #     "index": idx,
+                #     "question": question_raw,
                 # },
             }
 
@@ -88,14 +86,12 @@ if __name__ == "__main__":
     os.makedirs(seed_save_dir, exist_ok=True)
 
     # Fixed splits saved directly under base_save_dir
-    for name, ds in [("test", test_dataset), ("dev", dev_dataset)]:
+    for name, ds in [("dev", dev_dataset), ("test", test_dataset)]:
         path = os.path.join(base_save_dir, f"{name}.parquet")
         if os.path.exists(path):
             print(f"Warning: {name} set already exists at {path}, skipping.")
         else:
             ds.to_parquet(path)
 
-    # Shuffled splits saved under seed_save_dir
+    # Shuffled train split saved under seed_save_dir
     train_dataset.to_parquet(os.path.join(seed_save_dir, "train.parquet"))
-
-#python3 verl/data_preprocessing/confidence.py
