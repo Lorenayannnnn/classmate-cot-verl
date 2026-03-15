@@ -248,12 +248,6 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     """
     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
     """
-    # haha double check for code_contests_modify_code
-    if data_source == "code_contests_modify_code":
-        raise NotImplementedError("code_contests_modify_code truncation not supported now.")
-
-    # start_with_think = False
-
     if enable_thinking:
         # main_cot, final_output, start_with_think, end_with_think, cot_start, cot_end = parse_out_main_cot_output(
         main_cot, final_output, cot_start, cot_end, _, _, _, _ = parse_out_main_cot_output(

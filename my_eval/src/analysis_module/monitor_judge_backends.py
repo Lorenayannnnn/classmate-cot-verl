@@ -374,8 +374,6 @@ def run_different_monitor_and_judge(
                 # An entry needs processing if either key is missing or its value is None.
                 pending_entry_indices = [
                     entry_idx for entry_idx, entry in enumerate(entries)
-                    # TODO haha
-                    # if entry.get(monitor_key) is None or entry.get(judge_key) is None
                 ]
                 num_already_annotated = len(entries) - len(pending_entry_indices)
                 run_label = f"{main_model_name_or_path} / step_{step_idx}"

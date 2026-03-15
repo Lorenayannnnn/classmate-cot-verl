@@ -443,7 +443,6 @@ class ClassmateCoTRayPPOTrainer:
         train_sampler: Optional[Sampler] = None,
         device_name=None,
 
-        # TODO modify
         classmate_cot_reward_configs=None,
         classmate_batch_size=None,
         classmate_free_cache_engine=None,
@@ -1113,7 +1112,7 @@ class ClassmateCoTRayPPOTrainer:
             rm_cls = RayClassWithInitArgs(self.role_worker_mapping[Role.RewardModel], config=self.config.reward_model)
             self.resource_pool_to_cls[resource_pool][str(Role.RewardModel)] = rm_cls
 
-        # TODO modify: create classmates, one worker per model
+        # Create classmates, one worker per model
         model_paths = self.classmate_cot_reward_configs.classmate_model_name_or_path_list
         # Read in host_classmate_name_to_url_json_fn
         # with open(self.host_classmate_name_to_url_json_fn, "r") as f:
@@ -1216,17 +1215,13 @@ class ClassmateCoTRayPPOTrainer:
             self.ref_policy_wg.init_model()
 
         self.rm_wg = None
-        # initalization of rm_wg will be deprecated in the future
         if self.use_rm:
             self.rm_wg = all_wg[str(Role.RewardModel)]
             self.rm_wg.init_model()
 
-        # we should create rollout at the end so that vllm can have a better estimation of kv cache memory
         self.actor_rollout_wg = all_wg[str(Role.ActorRollout)]
         self.actor_rollout_wg.init_model()
 
-        # TODO modify: Initialize classmate workers using VERL's worker group pattern
-        # Now there should be enough GPU memory available since actor's vLLM is offloaded
         self.classmate_workers = []
         model_paths = self.classmate_cot_reward_configs.classmate_model_name_or_path_list
         for model_idx, model_path in enumerate(model_paths):
