@@ -53,7 +53,7 @@ mini_batch_size_per_gpu=16
 #test_freq=$((train_steps / total_test_times))
 #save_freq=10
 #test_freq=10
-save_freq=10
+save_freq=20
 test_freq=10
 
 epoch_num=3
@@ -118,3 +118,9 @@ CUDA_VISIBLE_DEVICES=4,5 python3 -m verl.trainer.classmate_cot_main_ppo \
 
 #    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
 #bash my_scripts/scripts_confidence/confidence_classmate_llama.sh
+
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_${cl_name}/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_${cl_name}-seed_${seed}"
+python upload_ckpts_to_huggingface.py \
+  --root_path ${main_dir} \
+  --repo_name ${repo_name}

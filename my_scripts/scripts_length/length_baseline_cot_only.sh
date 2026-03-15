@@ -40,7 +40,7 @@ mini_batch_size_per_gpu=16
 #total_test_times=50
 #save_freq=$((train_steps / total_ckpts))
 #test_freq=$((train_steps / total_test_times))
-save_freq=10
+save_freq=20
 test_freq=10
 
 epoch_num=3
@@ -106,3 +106,9 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
 #    actor_rollout_ref.model.use_shm=True
 
 #bash my_scripts/scripts_length/length_baseline_cot_only.sh
+
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
+python upload_ckpts_to_huggingface.py \
+  --root_path ${main_dir} \
+  --repo_name ${repo_name}

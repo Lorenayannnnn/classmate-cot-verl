@@ -6,21 +6,18 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens-seed_0
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens-seed_1
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens-seed_2
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_cot_only-seed_0
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_cot_only-seed_1
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_cot_only-seed_2
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_output_only-seed_0
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_output_only-seed_1
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-baseline_output_only-seed_2
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self-seed_0
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self-seed_1
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self-seed_2
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-OURS_llama-seed_0
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-OURS_llama-seed_1
-#main_model_name_or_path=LorenaYannnnn/confidence-Qwen3-0.6B-OURS_llama-seed_2
+main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens-seed_0
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens-seed_1
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens-seed_2
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_cot_only-seed_0
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_cot_only-seed_1
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_cot_only-seed_2
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_output_only-seed_0
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_output_only-seed_1
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_output_only-seed_2
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self-seed_0
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self-seed_1
+#main_model_name_or_path=LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self-seed_2
 
 base_model_name_or_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"

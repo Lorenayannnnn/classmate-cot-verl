@@ -7,10 +7,21 @@ from monitor_judge_backends import estimate_openai_cost, run_different_monitor_a
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Run different monitor and judge models on saved predictions.")
-    arg_parser.add_argument("--main_model_name_or_path", type=str)
-    arg_parser.add_argument("--max_new_tokens", type=int)
+    arg_parser.add_argument("--max_step_num", type=int)
+    arg_parser.add_argument("--step_size", type=int)
+    arg_parser.add_argument("--monitor_model_name", type=str)
+    arg_parser.add_argument("--monitor_source", type=str)
+    arg_parser.add_argument("--judge_model_name", type=str)
+    arg_parser.add_argument("--judge_source", type=str)
+
+    arg_parser.add_argument("--result_dir", type=str)       # outputs_eval/confidence/Qwen3-0.6B/baseline_all_tokens/seed_0
+    arg_parser.add_argument("--dataset_name", type=str)       # "sycophancy", "confidence"...
+
+    arg_parser.add_argument("--max_new_tokens", type=int, default=3072)
     arg_parser.add_argument("--do_base", type=bool)
     arg_parser.add_argument("--estimate_cost", action="store_true", help="Estimate OpenAI API cost using 10 samples then exit.")
+
+
     args = arg_parser.parse_args()
 
     # monitor_model_name = "Qwen/Qwen3-4B-Instruct-2507"
@@ -28,30 +39,21 @@ if __name__ == "__main__":
     # monitor_source = "vllm"  # "openai" | "tinker" | "vllm"
     # judge_source = "openai"  # "openai" | "tinker" | "vllm"
 
-    monitor_model_name = "HuggingFaceTB/SmolLM2-360M-Instruct"
-    judge_model_name = "gpt-4.1-mini"
-    monitor_source = "vllm"  # "openai" | "tinker" | "vllm"
-    judge_source = "openai"  # "openai" | "tinker" | "vllm"
+    # monitor_model_name = "HuggingFaceTB/SmolLM2-360M-Instruct"
+    # judge_model_name = "gpt-4.1-mini"
+    # monitor_source = "vllm"  # "openai" | "tinker" | "vllm"
+    # judge_source = "openai"  # "openai" | "tinker" | "vllm"
 
-    # do_base = [True, False, False]
+    monitor_model_name = args.monitor_model_name
+    judge_model_name = args.judge_model_name
+    monitor_source = args.monitor_source
+    judge_source = args.judge_source
 
-    # main_model_name_or_path_list = [
-    #     "20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42",
-    #     "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42",
-    #     "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42"
-    # ]
-    main_model_name_or_path_list = [
-        args.main_model_name_or_path,
-    ]
+    max_step_num = args.max_step_num
+    step_size = args.step_size
 
-    max_step_num = 7  # start from 0
-    step_size = 20
-
-    dataset_name = "sycophancy"
-    # dataset_name = "confidence"
-    # dataset_name = "longer_response"
-    output_dir = f"outputs_eval/inference_main_model/{dataset_name}"
-    dataset_name_list = [dataset_name]
+    output_dir = args.result_dir
+    dataset_name_list = [args.dataset_name]
 
     skip_indices = []
 
@@ -70,11 +72,9 @@ if __name__ == "__main__":
             monitor_model_name=monitor_model_name,
             judge_model_name=judge_model_name,
             verifier=verifier,
-            main_model_name_or_path=args.main_model_name_or_path,
         )
     else:
         run_different_monitor_and_judge(
-            main_model_name_or_path_list,
             dataset_name_list,
             all_step_idx,
             output_dir,
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         )
 
 #export PYTHONPATH=:${PYTHONPATH} export VLLM_WORKER_MULTIPROC_METHOD=spawn
-#CUDA_VISIBLE_DEVICES=4 python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42" --do_base True
-#CUDA_VISIBLE_DEVICES=5 python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42" --do_base False
-#CUDA_VISIBLE_DEVICES=6 python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42" --do_base False
-#CUDA_VISIBLE_DEVICES=7 python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS" --do_base False
+#python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42" --do_base True
+#python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42" --do_base False
+#python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42" --do_base False
+#python my_eval/src/analysis_module/different_monitor_sycophancy_across_models.py --main_model_name_or_path "20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42_no_cl_IS" --do_base False

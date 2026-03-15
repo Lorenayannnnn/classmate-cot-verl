@@ -58,7 +58,7 @@ mini_batch_size_per_gpu=16
 #test_freq=$((train_steps / total_test_times))
 #save_freq=10
 #test_freq=10
-save_freq=10
+save_freq=20
 test_freq=10
 
 epoch_num=3
@@ -133,3 +133,9 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python3 -m verl.trainer.classmate_cot_main_ppo \
 #    actor_rollout_ref.rollout.free_cache_engine=False
 
 #bash my_scripts/scripts_sycophancy/sycophancy_classmate_self.sh
+
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
+python upload_ckpts_to_huggingface.py \
+  --root_path ${main_dir} \
+  --repo_name ${repo_name}

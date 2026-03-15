@@ -45,47 +45,33 @@ def load_config_and_setup_output_dir(configs):
 
     outputs_root_dir = "outputs_eval"
 
-    if configs.running_args.exp_type == "inference_main_model":
-
-        if "longer_response" in configs.data_args.dataset_name:
-            outputs_root_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/longer_response"
-            configs.data_args.dataset_name = "data/longer_response/test.parquet"
-        elif "confidence" in configs.data_args.dataset_name:
-            outputs_root_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/_confidence"
-            configs.data_args.dataset_name = "data/confidence/test.parquet"
-        elif "sycophancy" in configs.data_args.dataset_name:
-            outputs_root_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/_sycophancy"
-            configs.data_args.dataset_name = "data/sycophancy/test.parquet"
-        else:
-            raise ValueError(f"Unknown dataset {configs.data_args.dataset_name}")
-        # elif "mmlu_sycophancy" in configs.data_args.dataset_name:
-        #     configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
-        # elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
-        #     configs.data_args.dataset_name = "data/anthropic_hh_rlhf/test.parquet"
-
-        dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
-        configs.running_args.output_dir = f"{outputs_root_dir}/{short_model_name}/step_{configs.model_args.main_model_step_idx}/{dataset_subset_name}"
-
-    # elif configs.running_args.exp_type == "cot_utility_to_classmate":
-    #     short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]
-    #     dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
-    #     if not configs.data_args.wo_cot:
-    #         configs.data_args.dataset_name = f"{outputs_root_dir}/inference_main_model/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}{dataset_subset_name}/preds.jsonl"
-    #         configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
-    #     else:
-    #         configs.running_args.output_dir = f"{outputs_root_dir}/{configs.running_args.exp_type}/{short_main_model_name}/wo_cot/{short_model_name}/{short_dataset_name}{dataset_subset_name}"
-    # elif configs.running_args.exp_type == "reward_classmate_model":
-    #     raise NotImplementedError
-        # if args.main_model_step_idx is not None:
-        #     configs.data_args.main_model_step_idx = args.main_model_step_idx
-        # if args.model_name_or_path is not None:
-        #     configs.model_args.model_name_or_path = args.model_name_or_path
-        #     short_model_name = configs.model_args.model_name_or_path.split("/")[-1]
-        # short_main_model_name = configs.data_args.main_model_name_or_path.split("/")[-1]
-        # configs.data_args.dataset_name = f"{outputs_root_dir}/cot_utility_to_classmate/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}/correct_preds.jsonl"
-        # configs.running_args.output_dir = f"{outputs_root_dir}/cot_utility_to_classmate/{short_main_model_name}/step_{configs.data_args.main_model_step_idx}/{short_dataset_name}"
+    if "longer_response" in configs.data_args.dataset_name:
+        configs.data_args.dataset_name = "data/longer_response/test.parquet"
+    elif "confidence" in configs.data_args.dataset_name:
+        configs.data_args.dataset_name = "data/confidence/test.parquet"
+    elif "sycophancy" in configs.data_args.dataset_name:
+        configs.data_args.dataset_name = "data/sycophancy/test.parquet"
+    elif "unsafe_compliance" in configs.data_args.dataset_name:
+        configs.data_args.dataset_name = "data/unsafe_compliance/test.parquet"
     else:
-        raise ValueError(f"Unknown exp_type {configs.running_args.exp_type}")
+        raise ValueError(f"Unknown dataset {configs.data_args.dataset_name}")
+    # elif "mmlu_sycophancy" in configs.data_args.dataset_name:
+    #     configs.data_args.dataset_name = "data/mmlu_sycophancy_new/test.parquet"
+    # elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
+    #     configs.data_args.dataset_name = "data/anthropic_hh_rlhf/test.parquet"
+
+    # Parse model repo name: {task}-{base_model}-{method}-{seed}
+    # e.g. confidence-Qwen3-0.6B-baseline_all_tokens-seed_0
+    task_part, remainder = short_model_name.split("-", 1)
+    rest, seed_str = remainder.rsplit("-", 1)        # seed_str = "seed_0"
+    base_model_str, method_str = rest.rsplit("-", 1)  # base_model = "Qwen3-0.6B", method = "baseline_all_tokens"
+
+    dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
+    configs.running_args.output_dir = (
+        f"{outputs_root_dir}"
+        f"/{task_part}/{base_model_str}/{method_str}"
+        f"/step_{configs.model_args.main_model_step_idx}/{seed_str}{dataset_subset_name}"
+    )
 
     output_dir = configs.running_args.output_dir
     #
@@ -94,42 +80,3 @@ def load_config_and_setup_output_dir(configs):
     OmegaConf.save(configs, output_config_fn)
 
     return configs
-
-
-# def load_config_and_setup_output_dir(args):
-#     base_configs = args.base_configs
-#     overwrite_configs = args.overwrite_configs
-#     if not os.path.exists(args.base_configs):
-#         raise FileNotFoundError(f"Config file {args.base_config} does not exist")
-#     if args.overwrite_configs is not None and not os.path.exists(args.overwrite_configs):
-#         raise FileNotFoundError(f"Config file {args.overwrite_configs} does not exist")
-#     configs = OmegaConf.load(base_configs)
-#
-#     output_dir = configs.training_args.output_dir
-#
-#     if overwrite_configs is not None:
-#         overwrite_configs = OmegaConf.load(overwrite_configs)
-#         output_dir = overwrite_configs.training_args.output_dir
-#
-#         # Merge base and overwrite configs
-#         configs = OmegaConf.merge(configs, overwrite_configs)
-#
-#     if configs.training_args.resume_from_checkpoint is not None:
-#         # Load configs from checkpoint
-#         output_dir = os.path.dirname(configs.training_args.resume_from_checkpoint)
-#         loaded_configs = OmegaConf.load(os.path.join(output_dir, "configs.yaml"))
-#         loaded_configs.training_args.do_train = configs.training_args.do_train
-#         loaded_configs.training_args.do_predict = configs.training_args.do_predict
-#         loaded_configs.training_args.resume_from_checkpoint = configs.training_args.resume_from_checkpoint
-#         configs = loaded_configs
-#
-#     # Prepare output directory
-#     configs.training_args.output_dir = output_dir
-#     prepare_folder(output_dir)
-#     OmegaConf.save(configs, os.path.join(output_dir, "configs.yaml"))
-#
-#     # Save base and overwrite configs
-#     # OmegaConf.save(configs, os.path.join(configs.training_args.output_dir, "configs", "base_configs.yaml"))
-#     # OmegaConf.save(overwrite_configs, os.path.join(configs.training_args.output_dir, "configs", "overwrite_configs.yaml"))
-#
-#     return configs

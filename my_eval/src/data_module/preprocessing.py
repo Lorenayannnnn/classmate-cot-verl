@@ -150,12 +150,7 @@ def preprocess(configs, predict_dataset, wo_cot=False):
     else:
         raise NotImplementedError(f"Dataset {configs.data_args.dataset_name} not supported yet.")
 
-    if configs.running_args.exp_type == "inference_main_model":
-        tokenized_dataset = predict_dataset.map(inference_main_model_tokenize, fn_kwargs={"tokenizer": tokenizer, "verifier": verifier, "enable_thinking": configs.model_args.get("enable_thinking", False)})
-    # elif configs.running_args.exp_type in ["cot_utility_to_classmate"]:
-    #     tokenized_dataset = predict_dataset.map(cot_utility_to_classmate_tokenize, fn_kwargs={"tokenizer": tokenizer, "verifier": verifier, "wo_cot": wo_cot})
-    else:
-        raise NotImplementedError(f"Experiment type {configs.running_args.exp_type} not supported yet.")
+    tokenized_dataset = predict_dataset.map(inference_main_model_tokenize, fn_kwargs={"tokenizer": tokenizer, "verifier": verifier, "enable_thinking": configs.model_args.get("enable_thinking", False)})
 
     return tokenized_dataset, tokenizer, verifier
 

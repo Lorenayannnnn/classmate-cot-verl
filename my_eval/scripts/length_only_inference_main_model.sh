@@ -6,8 +6,18 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-main_model_name_or_path=LorenaYannnnn/20260308-length_only-Qwen3-0.6B_grpo_baseline_192000_episodes_seed_42
-#main_model_name_or_path=LorenaYannnnn/20260308-length_only-Qwen3-0.6B_OURS_cl_self_partial_192000_episodes_seed_42
+main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens-seed_0
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens-seed_1
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens-seed_2
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_cot_only-seed_0
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_cot_only-seed_1
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_cot_only-seed_2
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_output_only-seed_0
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_output_only-seed_1
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_output_only-seed_2
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self-seed_0
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self-seed_1
+#main_model_name_or_path=LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self-seed_2
 
 base_model_name_or_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"

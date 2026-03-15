@@ -38,7 +38,7 @@ gpu_num=2
 train_batch_size=32
 mini_batch_size_per_gpu=16
 
-save_freq=10
+save_freq=20
 test_freq=10
 
 epoch_num=3
@@ -101,3 +101,9 @@ CUDA_VISIBLE_DEVICES=5,6 python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
 
 #bash my_scripts/scripts_general_reward/general_reward_classmate_self.sh
+
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
+python upload_ckpts_to_huggingface.py \
+  --root_path ${main_dir} \
+  --repo_name ${repo_name}

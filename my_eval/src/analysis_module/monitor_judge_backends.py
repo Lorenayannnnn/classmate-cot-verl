@@ -295,7 +295,6 @@ def estimate_openai_cost(
 
 
 def run_different_monitor_and_judge(
-    main_model_name_or_path_list,
     dataset_name_list,
     step_idx_list,
     output_dir,
@@ -304,16 +303,12 @@ def run_different_monitor_and_judge(
     do_base,
     monitor_source: str = "tinker",
     judge_source: str = "tinker",
-    repo_prefix: str | None = None,
     max_new_tokens: int | None = None,
 ):
     """
     Args:
         monitor_source: Backend for the monitor model. One of "openai", "tinker", "vllm".
         judge_source:   Backend for the judge model.  One of "openai", "tinker", "vllm".
-        repo_prefix:    HuggingFace repo prefix (e.g. "LorenaYannnnn") used to load the
-                        main model tokenizer for fallback main_output_ids encoding.
-                        Pass None (default) to skip tokenizer loading.
         max_new_tokens: Passed to get_verifier() for verifiers that need it (e.g. length_only).
     """
     monitor_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_score"
@@ -339,134 +334,121 @@ def run_different_monitor_and_judge(
             else [dataset_name]
         )
 
-        for model_idx, main_model_name_or_path in enumerate(main_model_name_or_path_list):
-            # Load main model tokenizer only when repo_prefix is provided (used as
-            # a fallback to encode main_output_ids when they are missing from saved entries).
-            if repo_prefix is not None:
-                from transformers import AutoTokenizer
-                main_model_tokenizer = AutoTokenizer.from_pretrained(
-                    f"{repo_prefix}/{main_model_name_or_path}", trust_remote_code=True
-                )
+        for step_idx in step_idx_list:
+            print(f"Start processing: step={step_idx}, dataset={dataset_name} ...")
+            if step_idx == "base" and not do_base:
+                print(f"[skip] base step")
+                continue
+
+            result_dir = os.path.join(output_dir, f"step_{step_idx}", "main")
+            preds_fn = os.path.join(result_dir, "preds.jsonl")
+
+            if not os.path.exists(preds_fn):
+                print(f"[skip] {preds_fn} not found")
+                continue
+
+            # ---------------------------------------------------------- #
+            # Read all entries
+            # ---------------------------------------------------------- #
+            with open(preds_fn, "r") as preds_file:
+                entries = [json.loads(line) for line in preds_file]
+
+            # An entry needs processing if either key is missing or its value is None.
+            pending_entry_indices = [
+                entry_idx for entry_idx, entry in enumerate(entries)
+            ]
+            num_already_annotated = len(entries) - len(pending_entry_indices)
+            run_label = f"{output_dir} / step_{step_idx}"
+
+            if num_already_annotated > 0:
+                print(f"[resume] {run_label}: {num_already_annotated}/{len(entries)} already annotated")
+            if not pending_entry_indices:
+                print(f"[done]   {run_label}: all entries already annotated")
             else:
-                main_model_tokenizer = None
+                # -------------------------------------------------------- #
+                # For each behavior, collect monitor and judge inputs,
+                # run backends, and parse outputs. Save on KeyboardInterrupt.
+                # -------------------------------------------------------- #
+                print(f"[run]    {run_label}: annotating {len(pending_entry_indices)} entries ...")
+                interrupted = False
+                try:
+                    for behavior_key in behavior_keys:
+                        b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
+                        b_monitor_expl_key = f"{behavior_key}_{monitor_expl_key}" if is_general_reward else monitor_expl_key
+                        b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
+                        b_judge_expl_key = f"{behavior_key}_{judge_expl_key}" if is_general_reward else judge_expl_key
+                        behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
-            for step_idx in step_idx_list:
-                print(f"Start processing: model={main_model_name_or_path}, step={step_idx}, dataset={dataset_name} ...")
-                if step_idx == "base" and not do_base:
-                    print(f"[skip] base step for {main_model_name_or_path}")
-                    continue
+                        monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
+                            pending_entry_indices, entries,
+                            b_monitor_key, b_judge_key,
+                            behavior_key, behavior_verifier, judge_backend,
+                        )
 
-                result_dir = os.path.join(
-                    output_dir, main_model_name_or_path, f"step_{step_idx}", "main"
+                        monitor_outputs = monitor_backend.run_batch(monitor_inputs)
+                        judge_outputs = judge_backend.run_batch(judge_inputs)
+
+                        _parse_outputs_for_behavior(
+                            pending_entry_indices, entries,
+                            b_monitor_key, b_monitor_expl_key,
+                            b_judge_key, b_judge_expl_key,
+                            behavior_key, behavior_verifier,
+                            monitor_outputs, judge_outputs, judge_use_continuation,
+                            None,  # main_model_tokenizer not used
+                        )
+
+                except KeyboardInterrupt:
+                    print(f"\n[interrupt] Saving partial progress to {preds_fn} ...")
+                    interrupted = True
+
+                finally:
+                    with open(preds_fn, "w") as preds_file:
+                        for entry in entries:
+                            preds_file.write(json.dumps(entry) + "\n")
+                    print(f"[saved]  {preds_fn}")
+
+                if interrupted:
+                    monitor_backend.close()
+                    judge_backend.close()
+                    return
+
+            # ---------------------------------------------------------- #
+            # Compute and save per-behavior metrics
+            # ---------------------------------------------------------- #
+            for behavior_key in behavior_keys:
+                b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
+                b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
+                behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
+                b_metrics_fn = (
+                    os.path.join(result_dir, f"{behavior_key}_{metrics_file_name}")
+                    if is_general_reward
+                    else os.path.join(result_dir, metrics_file_name)
                 )
-                preds_fn = os.path.join(result_dir, "preds.jsonl")
 
-                if not os.path.exists(preds_fn):
-                    print(f"[skip] {preds_fn} not found")
-                    continue
+                monitor_scores, judge_scores = [], []
+                for entry in entries:
+                    monitor_scores.append(entry.get(b_monitor_key, behavior_verifier.invalid_score))
+                    judge_scores.append(entry.get(b_judge_key, behavior_verifier.invalid_score))
 
-                # ---------------------------------------------------------- #
-                # Read all entries
-                # ---------------------------------------------------------- #
-                with open(preds_fn, "r") as preds_file:
-                    entries = [json.loads(line) for line in preds_file]
+                monitor_scores = np.array(monitor_scores)
+                judge_scores = np.array(judge_scores)
 
-                # An entry needs processing if either key is missing or its value is None.
-                pending_entry_indices = [
-                    entry_idx for entry_idx, entry in enumerate(entries)
-                ]
-                num_already_annotated = len(entries) - len(pending_entry_indices)
-                run_label = f"{main_model_name_or_path} / step_{step_idx}"
+                monitor_valid_mask = monitor_scores != behavior_verifier.invalid_score
+                judge_valid_mask = judge_scores != behavior_verifier.invalid_score
+                valid_mask = monitor_valid_mask & judge_valid_mask
 
-                if num_already_annotated > 0:
-                    print(f"[resume] {run_label}: {num_already_annotated}/{len(entries)} already annotated")
-                if not pending_entry_indices:
-                    print(f"[done]   {run_label}: all entries already annotated")
-                else:
-                    # -------------------------------------------------------- #
-                    # For each behavior, collect monitor and judge inputs,
-                    # run backends, and parse outputs. Save on KeyboardInterrupt.
-                    # -------------------------------------------------------- #
-                    print(f"[run]    {run_label}: annotating {len(pending_entry_indices)} entries ...")
-                    interrupted = False
-                    try:
-                        for behavior_key in behavior_keys:
-                            b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
-                            b_monitor_expl_key = f"{behavior_key}_{monitor_expl_key}" if is_general_reward else monitor_expl_key
-                            b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
-                            b_judge_expl_key = f"{behavior_key}_{judge_expl_key}" if is_general_reward else judge_expl_key
-                            behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
+                monitor_metrics = behavior_verifier.compute_metrics(
+                    predictions=monitor_scores[valid_mask].astype(float),
+                    ground_truths=judge_scores[valid_mask].astype(float),
+                )
+                monitor_metrics["total_valid_CoT_entries"] = int(np.sum(monitor_valid_mask))
+                monitor_metrics["total_valid_output_entries"] = int(np.sum(judge_valid_mask))
+                monitor_metrics["total_monitored_entries"] = int(np.sum(valid_mask))
+                monitor_metrics["total_judge_entries"] = len(judge_scores)
 
-                            monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
-                                pending_entry_indices, entries,
-                                b_monitor_key, b_judge_key,
-                                behavior_key, behavior_verifier, judge_backend,
-                            )
-
-                            monitor_outputs = monitor_backend.run_batch(monitor_inputs)
-                            judge_outputs = judge_backend.run_batch(judge_inputs)
-
-                            _parse_outputs_for_behavior(
-                                pending_entry_indices, entries,
-                                b_monitor_key, b_monitor_expl_key,
-                                b_judge_key, b_judge_expl_key,
-                                behavior_key, behavior_verifier,
-                                monitor_outputs, judge_outputs, judge_use_continuation,
-                                main_model_tokenizer,
-                            )
-
-                    except KeyboardInterrupt:
-                        print(f"\n[interrupt] Saving partial progress to {preds_fn} ...")
-                        interrupted = True
-
-                    finally:
-                        with open(preds_fn, "w") as preds_file:
-                            for entry in entries:
-                                preds_file.write(json.dumps(entry) + "\n")
-                        print(f"[saved]  {preds_fn}")
-
-                    if interrupted:
-                        monitor_backend.close()
-                        judge_backend.close()
-                        return
-
-                # ---------------------------------------------------------- #
-                # Compute and save per-behavior metrics
-                # ---------------------------------------------------------- #
-                for behavior_key in behavior_keys:
-                    b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
-                    b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
-                    behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
-                    b_metrics_fn = (
-                        os.path.join(result_dir, f"{behavior_key}_{metrics_file_name}")
-                        if is_general_reward
-                        else os.path.join(result_dir, metrics_file_name)
-                    )
-
-                    monitor_scores, judge_scores = [], []
-                    for entry in entries:
-                        monitor_scores.append(entry.get(b_monitor_key, behavior_verifier.invalid_score))
-                        judge_scores.append(entry.get(b_judge_key, behavior_verifier.invalid_score))
-
-                    monitor_scores = np.array(monitor_scores)
-                    judge_scores = np.array(judge_scores)
-
-                    monitor_valid_mask = monitor_scores != behavior_verifier.invalid_score
-                    judge_valid_mask = judge_scores != behavior_verifier.invalid_score
-                    valid_mask = monitor_valid_mask & judge_valid_mask
-
-                    monitor_metrics = behavior_verifier.compute_metrics(
-                        predictions=monitor_scores[valid_mask].astype(float),
-                        ground_truths=judge_scores[valid_mask].astype(float),
-                    )
-                    monitor_metrics["total_valid_CoT_entries"] = int(np.sum(monitor_valid_mask))
-                    monitor_metrics["total_valid_output_entries"] = int(np.sum(judge_valid_mask))
-                    monitor_metrics["total_monitored_entries"] = int(np.sum(valid_mask))
-                    monitor_metrics["total_judge_entries"] = len(judge_scores)
-
-                    with open(b_metrics_fn, "w") as metrics_file:
-                        json.dump(monitor_metrics, metrics_file, indent=4)
-                    print(f"[metrics] saved to {b_metrics_fn}")
+                with open(b_metrics_fn, "w") as metrics_file:
+                    json.dump(monitor_metrics, metrics_file, indent=4)
+                print(f"[metrics] saved to {b_metrics_fn}")
 
     monitor_backend.close()
     judge_backend.close()

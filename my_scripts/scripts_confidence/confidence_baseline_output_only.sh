@@ -32,15 +32,7 @@ gpu_num=2
 train_batch_size=32
 mini_batch_size_per_gpu=16
 
-#gpu_num=4
-#train_batch_size=64
-#mini_batch_size_per_gpu=16
-
-#total_ckpts=25
-#total_test_times=50
-#save_freq=$((train_steps / total_ckpts))
-#test_freq=$((train_steps / total_test_times))
-save_freq=10
+save_freq=20
 test_freq=10
 
 epoch_num=3
@@ -49,9 +41,6 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-#HYDRA_FULL_ERROR=1
-#python3 -m verl.trainer.qwen_main_ppo \
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.qwen_main_ppo \
 CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
@@ -101,3 +90,9 @@ CUDA_VISIBLE_DEVICES=2,3 python3 -m verl.trainer.main_ppo \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
 
 #bash my_scripts/scripts_confidence/confidence_baseline_output_only.sh
+
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
+python upload_ckpts_to_huggingface.py \
+  --root_path ${main_dir} \
+  --repo_name ${repo_name}

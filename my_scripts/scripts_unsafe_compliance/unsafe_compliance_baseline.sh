@@ -40,7 +40,7 @@ gpu_num=4
 train_batch_size=64
 mini_batch_size_per_gpu=16
 
-save_freq=10
+save_freq=20
 test_freq=10
 
 epoch_num=3
@@ -98,3 +98,9 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m verl.trainer.main_ppo \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
 
 #bash my_scripts/scripts_sycophancy/sycophancy_baseline.sh
+
+main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
+python upload_ckpts_to_huggingface.py \
+  --root_path ${main_dir} \
+  --repo_name ${repo_name}

@@ -24,7 +24,6 @@ model_args:
   think_end_str: null
 
 running_args:
-  exp_type: "inference_main_model"
   batch_size: 1
   output_dir: null    # will be overwritten in the main script
 
