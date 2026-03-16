@@ -38,6 +38,7 @@ def plot_monitor_metrics_across_steps(
     result_dir,         # outputs_eval/inference_main_model/{task}/{base_model}
     dataset_name,
     metrics_filename,
+    behavior_key=None,  # key to read from the nested metrics dict; defaults to dataset_name
     monitor_model_name=None,
     judge_model_name=None,
 ):
@@ -47,38 +48,55 @@ def plot_monitor_metrics_across_steps(
 
     Directory layout expected:
         {result_dir}/{method}/step_{step_idx}/{seed}/main/{metrics_filename}
+
+    Metrics file format (new nested format):
+        { behavior_key: { "mse": ..., "prediction_mean": ..., ... }, ... }
+
+    behavior_key selects which top-level key to read. Defaults to dataset_name.
+    For general_reward's actual scoring key use behavior_key="general_reward".
     """
+    bk = behavior_key or dataset_name
+
+    def _load_behavior_metrics(metrics_fn):
+        """Load the metrics dict for bk from a file, returning {} if missing."""
+        if not os.path.exists(metrics_fn):
+            return {}
+        with open(metrics_fn) as f:
+            data = json.load(f)
+        return data.get(bk, {})
 
     def _detect_metric_mode():
-        """Return 'binary' or 'non_binary' by inspecting the first available metrics file."""
+        """Return 'non_binary', 'general_reward_score', or 'binary'."""
+        if bk == "general_reward":
+            return "general_reward_score"
         for method in methods_list:
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
                     metrics_fn = os.path.join(
                         result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename
                     )
-                    if os.path.exists(metrics_fn):
-                        with open(metrics_fn) as f:
-                            data = json.load(f)
-                        return "non_binary" if "mse" in data else "binary"
+                    bk_data = _load_behavior_metrics(metrics_fn)
+                    if bk_data:
+                        return "non_binary" if "mse" in bk_data else "binary"
         return "binary"
 
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
 
     display_names = [_METHOD_DISPLAY.get(m, m) for m in methods_list]
-    hue_order = display_names  # preserve insertion order
+    hue_order = display_names
     model_palette = {name: _COLOR_MAP.get(name, "#888888") for name in hue_order}
 
-    float_metrics = {"precision", "recall", "f1", "mse", "prediction_mean", "ground_truth_mean"}
+    float_metrics = {"precision", "recall", "f1", "mse", "prediction_mean", "ground_truth_mean", "mean_score"}
 
     metric_mode = _detect_metric_mode()
     count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
-    if metric_mode == "non_binary":
+    if metric_mode == "general_reward_score":
+        metrics = ["mean_score", "total_valid_entries", "total_entries"]
+    elif metric_mode == "non_binary":
         metrics = ["mse", "prediction_mean", "ground_truth_mean"] + count_metrics
     else:
         metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"] + count_metrics
 
-    # Convert step_idx to numeric for proper x-axis ordering ("base" → 0)
     def _to_num(s):
         return 0 if s == "base" else int(s)
 
@@ -102,11 +120,8 @@ def plot_monitor_metrics_across_steps(
                     metrics_fn = os.path.join(
                         result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename
                     )
-                    if os.path.exists(metrics_fn):
-                        with open(metrics_fn) as f:
-                            metric_value = json.load(f).get(metric, np.nan)
-                    else:
-                        metric_value = np.nan
+                    bk_data = _load_behavior_metrics(metrics_fn)
+                    metric_value = bk_data.get(metric, np.nan)
 
                     data_rows.append({
                         "RL Steps": _to_num(step_idx),
@@ -165,9 +180,10 @@ def plot_monitor_metrics_across_steps(
     for idx in range(len(metrics), len(axes)):
         fig.delaxes(axes[idx])
 
+    behavior_title = bk.replace("_", " ").title()
     dataset_title = dataset_name.replace("_", " ").title()
     base_model = os.path.basename(result_dir)
-    title_lines = [f"Monitor Metrics — {dataset_title} / {base_model} (mean ± std across seeds)"]
+    title_lines = [f"Monitor Metrics — {dataset_title} / {behavior_title} / {base_model} (mean ± std across seeds)"]
     if monitor_model_name or judge_model_name:
         subtitle_parts = []
         if monitor_model_name:
@@ -192,7 +208,7 @@ def plot_monitor_metrics_across_steps(
     metrics_stem = os.path.splitext(metrics_filename)[0]
     vis_dir = os.path.join(result_dir, "visualizations")
     os.makedirs(vis_dir, exist_ok=True)
-    output_fn = os.path.join(vis_dir, f"{dataset_name}_{metrics_stem}_comparison.png")
+    output_fn = os.path.join(vis_dir, f"{dataset_name}_{bk}_{metrics_stem}_comparison.png")
     fig.savefig(output_fn, bbox_inches="tight", dpi=150)
     mpl_plt.close(fig)
     print(f"[saved] {output_fn}")
@@ -243,6 +259,9 @@ if __name__ == "__main__":
                             help="Comma-separated seed dirs")
     arg_parser.add_argument("--metrics_filename", type=str, required=True,
                             help="Metrics JSON filename, e.g. gpt-4o_monitor-gpt-4.1_llm_judge_metrics.json")
+    arg_parser.add_argument("--behavior_key", type=str, default=None,
+                            help="Top-level key in metrics JSON to plot (defaults to dataset_name). "
+                                 "Use 'general_reward' to plot the general reward score sub-dict.")
     arg_parser.add_argument("--monitor_model_name", type=str, default=None)
     arg_parser.add_argument("--judge_model_name", type=str, default=None)
 
@@ -262,6 +281,7 @@ if __name__ == "__main__":
         result_dir=args.result_dir,
         dataset_name=args.dataset_name,
         metrics_filename=args.metrics_filename,
+        behavior_key=args.behavior_key,
         monitor_model_name=args.monitor_model_name,
         judge_model_name=args.judge_model_name,
     )

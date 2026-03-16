@@ -17,7 +17,7 @@ def sub_main(configs, model):
                                      split=configs.data_args.dataset_split_name, cache_dir=configs.data_args.cache_dir)
 
     """Preprocess data"""
-    tokenized_datasets, tokenizer, verifier = preprocess(configs, raw_datasets)
+    tokenized_datasets, tokenizer, verifier, short_dataset_name = preprocess(configs, raw_datasets)
     data_loaders = setup_dataloader(input_datasets=tokenized_datasets, batch_size=configs.running_args.batch_size,
                                     tokenizer=tokenizer)
 
@@ -35,12 +35,10 @@ def sub_main(configs, model):
                                     think_end_str=configs.model_args.think_end_str)
 
     try:
-        # if configs.running_args.exp_type == "inference_main_model":
-        exp_runner.inference_main_model(verifier=verifier)
-        # elif configs.running_args.exp_type == "cot_utility_to_classmate":
-        #     exp_runner.run_cot_utility_to_classmate(verifier=verifier, do_wo_cot=args.wo_cot)
-        # else:
-        #     raise ValueError(f"Unknown experiment type {configs.running_args.exp_type}")
+        if short_dataset_name == "general_reward":
+            exp_runner.general_reward_inference_main_model(verifier=verifier)
+        else:
+            exp_runner.inference_main_model(verifier=verifier)
         print("yay!")
     finally:
         # Clean up distributed process group if it was initialized

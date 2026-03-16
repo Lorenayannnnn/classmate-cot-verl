@@ -31,6 +31,8 @@ running_args:
   monitor_backend_type: null  # "tinker", "vllm_generative", "hf_scoring"
   llm_judge_model_name: null  #  "Qwen/Qwen3-30B-A3B-Instruct-2507"
   llm_judge_backend_type: null  # "tinker", "vllm_generative", "hf_scoring"
+  general_reward_model_name: null
+  general_reward_backend_type: "hf_scoring"
 
   generation_args:
     temperature: 1

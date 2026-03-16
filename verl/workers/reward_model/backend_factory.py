@@ -85,7 +85,7 @@ def build_monitor_backend(reward_model_cfg) -> BaseBackend:
     )
 
 
-def _build_backend(backend_type: str, model_name: str, cfg, prefix: str) -> BaseBackend:
+def _build_backend(backend_type: str, model_name: str, prefix: str, cfg=None) -> BaseBackend:
     """Shared construction logic for judge and monitor backends.
 
     Args:

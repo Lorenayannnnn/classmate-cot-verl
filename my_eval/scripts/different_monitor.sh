@@ -4,12 +4,12 @@ set -e
 export PYTHONPATH=:${PYTHONPATH}
 
 # ── Shared config (mirrors Python arg_parser) ─────────────────────
-max_step_num=7
 step_size=30         # overridden per-task below
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_source=tinker
 judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 judge_source=tinker
+max_new_tokens=3072
 
 # ── Layout ────────────────────────────────────────────────────────
 base_model=Qwen3-0.6B
@@ -24,6 +24,15 @@ declare -A TASK_DATASET=(
   [longer_response]="longer_response"
   [general_reward]="general_reward"
   [unsafe_compliance]="unsafe_compliance"
+)
+
+# task → max number of RL steps to evaluate
+declare -A TASK_MAX_STEP_NUM=(
+  [confidence]=7
+  [sycophancy]=7
+  [longer_response]=7
+  [general_reward]=7
+  [unsafe_compliance]=7
 )
 
 # task → step_size (matches training save_freq cadence)
@@ -47,6 +56,7 @@ declare -A TASK_METHODS=(
 # ── Main loop ─────────────────────────────────────────────────────
 for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
   dataset_name=${TASK_DATASET[$task]}
+  task_max_step_num=${TASK_MAX_STEP_NUM[$task]}
   task_step_size=${TASK_STEP_SIZE[$task]}
   read -ra methods <<< "${TASK_METHODS[$task]}"
 
@@ -68,12 +78,13 @@ for task in confidence sycophancy longer_response general_reward unsafe_complian
       python ${SRC_DIR}/analysis_module/different_monitor.py \
         --result_dir ${result_dir} \
         --dataset_name ${dataset_name} \
-        --max_step_num ${max_step_num} \
+        --max_step_num ${task_max_step_num} \
         --step_size ${task_step_size} \
         --monitor_model_name ${monitor_model_name} \
         --monitor_source ${monitor_source} \
         --judge_model_name ${judge_model_name} \
         --judge_source ${judge_source} \
+        --max_new_tokens ${max_new_tokens} \
         ${do_base_arg}
     done
   done

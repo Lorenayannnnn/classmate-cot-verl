@@ -3,7 +3,6 @@ set -e
 export PYTHONPATH=:${PYTHONPATH}
 
 # ── Shared config (mirrors Python arg_parser) ─────────────────────
-max_step_num=7
 step_size=30         # overridden per-task below
 metrics_filename=Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
@@ -21,6 +20,14 @@ declare -A TASK_DATASET=(
   [longer_response]="longer_response"
   [general_reward]="general_reward"
   [unsafe_compliance]="unsafe_compliance"
+)
+
+declare -A TASK_MAX_STEP_NUM=(
+  [confidence]=7
+  [sycophancy]=7
+  [longer_response]=7
+  [general_reward]=7
+  [unsafe_compliance]=7
 )
 
 declare -A TASK_STEP_SIZE=(
@@ -43,21 +50,40 @@ declare -A TASK_METHODS=(
 # ── Main loop ─────────────────────────────────────────────────────
 for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
   dataset_name=${TASK_DATASET[$task]}
+  task_max_step_num=${TASK_MAX_STEP_NUM[$task]}
   task_step_size=${TASK_STEP_SIZE[$task]}
   methods=${TASK_METHODS[$task]}
   result_dir="${base_root}/${task}/${base_model}"
 
-  echo "Visualizing ${task} / ${base_model} ..."
-  python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \
-    --result_dir ${result_dir} \
-    --dataset_name ${dataset_name} \
-    --methods ${methods} \
-    --seeds ${seeds} \
-    --max_step_num ${max_step_num} \
-    --step_size ${task_step_size} \
-    --metrics_filename ${metrics_filename} \
-    --monitor_model_name ${monitor_model_name} \
-    --judge_model_name ${judge_model_name}
+  if [[ "${task}" == "general_reward" ]]; then
+    # general_reward metrics file contains sub-dicts per behavior key; visualize each separately
+    for behavior_key in sycophancy confidence longer_response general_reward; do
+      echo "Visualizing ${task} / ${behavior_key} / ${base_model} ..."
+      python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \
+        --result_dir ${result_dir} \
+        --dataset_name ${dataset_name} \
+        --behavior_key ${behavior_key} \
+        --methods ${methods} \
+        --seeds ${seeds} \
+        --max_step_num ${task_max_step_num} \
+        --step_size ${task_step_size} \
+        --metrics_filename ${metrics_filename} \
+        --monitor_model_name ${monitor_model_name} \
+        --judge_model_name ${judge_model_name}
+    done
+  else
+    echo "Visualizing ${task} / ${base_model} ..."
+    python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \
+      --result_dir ${result_dir} \
+      --dataset_name ${dataset_name} \
+      --methods ${methods} \
+      --seeds ${seeds} \
+      --max_step_num ${task_max_step_num} \
+      --step_size ${task_step_size} \
+      --metrics_filename ${metrics_filename} \
+      --monitor_model_name ${monitor_model_name} \
+      --judge_model_name ${judge_model_name}
+  fi
 done
 
 #bash my_eval/scripts/visualize_results_across_models.sh

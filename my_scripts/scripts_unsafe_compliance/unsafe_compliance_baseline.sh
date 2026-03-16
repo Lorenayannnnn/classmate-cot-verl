@@ -10,7 +10,7 @@ dataset_name="unsafe_compliance"
 seed=0
 #seed=1
 #seed=2
-gpu_idx=2
+gpu_idx=1
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet

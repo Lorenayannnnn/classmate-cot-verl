@@ -126,6 +126,12 @@ def preprocess(configs, predict_dataset, wo_cot=False):
     elif "sycophancy" in configs.data_args.dataset_name:
         short_dataset_name = "sycophancy"
         verifier = get_verifier(data_source=short_dataset_name)
+    elif "unsafe_compliance" in configs.data_args.dataset_name:
+        short_dataset_name = "unsafe_compliance"
+        verifier = get_verifier(data_source=short_dataset_name)
+    elif "general_reward" in configs.data_args.dataset_name:
+        short_dataset_name = "general_reward"
+        verifier = get_verifier(data_source=short_dataset_name)
     # elif "anthropic_hh_rlhf" in configs.data_args.dataset_name:
     #     short_dataset_name = "anthropic_hh_rlhf"
     #     verifier = DATASET_NAME_TO_CLASS[short_dataset_name]()
@@ -152,7 +158,7 @@ def preprocess(configs, predict_dataset, wo_cot=False):
 
     tokenized_dataset = predict_dataset.map(inference_main_model_tokenize, fn_kwargs={"tokenizer": tokenizer, "verifier": verifier, "enable_thinking": configs.model_args.get("enable_thinking", False)})
 
-    return tokenized_dataset, tokenizer, verifier
+    return tokenized_dataset, tokenizer, verifier, short_dataset_name
 
 def create_tokenizer(configs):
     """creates the tokenizer"""
