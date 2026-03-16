@@ -12,7 +12,7 @@ pip install flashinfer-python
 pip install lm_eval
 pip install lm-eval[math]
 
-bash scripts/build_omegaconf_hydra_w_antlr_4110.sh
+bash my_scripts/build_omegaconf_hydra_w_antlr_4110.sh
 
 git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
 
@@ -20,7 +20,5 @@ git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
   cd tinker-cookbook
   pip install -e .
 )
-
-rm -rf tinker-cookbook
 
 python -c "import nltk; nltk.download('punkt_tab')"

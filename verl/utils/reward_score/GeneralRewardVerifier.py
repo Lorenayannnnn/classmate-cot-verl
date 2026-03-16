@@ -33,6 +33,8 @@ class GeneralRewardVerifier(BaseVerifier):
         # )
 
     def parse_llm_judge_output(self, judge_result: str, **kwargs):
+        if judge_result is None:
+            return self.invalid_score, "empty judge output"
         raise NotImplementedError("No parsing needed for classifier reward model; should be handled by backend")
         # """Parse a numeric RATING from a generative judge response."""
         # import re

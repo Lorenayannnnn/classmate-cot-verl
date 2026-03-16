@@ -7,8 +7,8 @@
 # time: job run time hh:mm:ss or mm:ss
 #
 #SBATCH --account=hewittlab
-#SBATCH --gpus=4
-#SBATCH --time=20:00:00
+#SBATCH --gpus=1
+#SBATCH --time=24:00:00
 #SBATCH --job-name=test
 # Research goes here.
 
@@ -33,5 +33,5 @@ bash my_scripts/qwen3_baseline_general_sycophancy.sh
 
 #cd /scratch/hewittlab/lorenayan/classmate-cot-verl/
 #sbatch my_scripts/slurm.sh
-#srun --account=hewittlab --job-name=test --gres=gpu:4  --pty --time=20:00:00 bash
+#srun --account=hewittlab --job-name=test --partition=preempt --gres=gpu:4  --pty --time=20:00:00 bash
 #srun --account=hewittlab --job-name=test --gres=gpu:2  --pty --time=1:00:00 bash

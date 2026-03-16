@@ -1,12 +1,15 @@
 set -x
 
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs
+
 #bash my_scripts/scripts_general_reward/general_reward_baseline_cot_only.sh
 data_dir=./data
 dataset_name="general_reward"
 #seed=0
 #seed=1
 seed=2
-gpu_idx=7
+gpu_idx=6
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -33,19 +36,11 @@ train_size=8000   # After filtering out too long prompts
 max_response_length=3072
 
 gpu_num=1
-train_batch_size=32
-mini_batch_size_per_gpu=32
+train_batch_size=16
+mini_batch_size_per_gpu=16
 
-#gpu_num=4
-#train_batch_size=64
-#mini_batch_size_per_gpu=16
-
-#total_ckpts=25
-#total_test_times=50
-#save_freq=$((train_steps / total_ckpts))
-#test_freq=$((train_steps / total_test_times))
-save_freq=20
-test_freq=10
+save_freq=40
+test_freq=20
 
 epoch_num=3
 rollout_n=8
@@ -55,7 +50,8 @@ gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
 #python3 -m verl.trainer.qwen_main_ppo \
-CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.main_ppo \
+[ -z "${SLURM_JOB_ID}" ] && export CUDA_VISIBLE_DEVICES=${gpu_idx}
+python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -102,9 +98,11 @@ CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.main_ppo \
     reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
-    reward_model.token_level_main_reward_mode=${token_level_main_reward_mode}
+    reward_model.token_level_main_reward_mode=${token_level_main_reward_mode} \
+    trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
-main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \

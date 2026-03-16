@@ -733,7 +733,7 @@ class MindFaceRayPPOTrainer:
             # Monitor using mind's CoT (monitors sycophantic reasoning in the CoT)
             if data_source_key == "general_reward":
                 all_behavior_judge_scores = []
-                for behavior_key in ["sycophancy_only", "confidence_only", "longer_response"]:
+                for behavior_key in ["sycophancy", "confidence", "longer_response"]:
                     behavior_verifier = get_verifier(
                         data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
                     )

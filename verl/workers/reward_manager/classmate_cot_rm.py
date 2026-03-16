@@ -92,19 +92,15 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
         """Convert a raw backend output into {"score": float, ...}.
 
         Handles three cases:
-        1. judge_output is None  →  fallback score of 0
-        2. judge_output is a dict with "score"  →  scoring backend, use directly
-        3. judge_output is a str  →  generative backend, parse with verifier
+        1. judge_output is a dict with "score"  →  scoring backend, use directly
+        2. judge_output is None and verifier needs no judge  →  compute score via parse_llm_judge_output
+           (e.g. LongerResponseVerifier uses continuation_token_ids directly)
+        3. judge_output is None but judge was expected, or judge_output is a str  →  parse with verifier
         """
-        if judge_output is None:
-            return {
-                "score": 0,
-                "extracted_solution": None,
-                "judge_explanation": "No valid output extracted from the response.",
-            }
         if isinstance(judge_output, dict) and "score" in judge_output:
             return judge_output
-        # Generative backend: plain text string
+        # For generative backends, judge_output is a str; for verifiers that skip the LLM judge
+        # (e.g. LongerResponseVerifier), judge_output is None — let the verifier handle it.
         verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
         judge_score, judge_explanation = verifier.parse_llm_judge_output(
             judge_output,

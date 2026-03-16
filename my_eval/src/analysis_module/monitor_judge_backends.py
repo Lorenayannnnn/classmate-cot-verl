@@ -329,7 +329,7 @@ def run_different_monitor_and_judge(
     for dataset_name in dataset_name_list:
         is_general_reward = dataset_name == "general_reward"
         behavior_keys = (
-            ["sycophancy_only", "confidence_only", "longer_response"]
+            ["sycophancy", "confidence", "longer_response"]
             if is_general_reward
             else [dataset_name]
         )

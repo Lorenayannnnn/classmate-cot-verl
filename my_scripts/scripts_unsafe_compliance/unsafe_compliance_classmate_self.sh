@@ -2,6 +2,9 @@ set -x
 
 #bash my_scripts/scripts_unsafe_compliance/unsafe_compliance_classmate_self.sh
 
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs
+
 data_dir=./data   # run on lambda
 dataset_name="unsafe_compliance"
 seed=0
@@ -39,8 +42,8 @@ adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=1
-train_batch_size=32
-mini_batch_size_per_gpu=32
+train_batch_size=16
+mini_batch_size_per_gpu=16
 
 save_freq=20
 test_freq=10
@@ -52,7 +55,8 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
+[ -z "${SLURM_JOB_ID}" ] && export CUDA_VISIBLE_DEVICES=${gpu_idx}
+python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -99,10 +103,12 @@ CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
-    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
+    trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
 
-main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \

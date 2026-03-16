@@ -162,13 +162,7 @@ class MindFaceRewardManager(AbstractRewardManager):
 
         # ── Loop 2: resolve scores, fill reward tensor ────────────────────────
         for ctx, judge_output in zip(item_contexts, judge_outputs):
-            if judge_output is None:
-                score = {
-                    "score": 0,
-                    "extracted_solution": None,
-                    "judge_explanation": "No valid output extracted from the response.",
-                }
-            elif isinstance(judge_output, dict) and "score" in judge_output:
+            if isinstance(judge_output, dict) and "score" in judge_output:
                 score = judge_output
             else:
                 verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)

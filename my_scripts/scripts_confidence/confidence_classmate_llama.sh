@@ -2,6 +2,9 @@ set -x
 
 #bash my_scripts/scripts_confidence/confidence_classmate_llama.sh
 
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs
+
 data_dir=./data
 dataset_name="confidence"
 seed=0
@@ -47,8 +50,8 @@ token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 # add_consistency_reward=False
 
 gpu_num=1
-train_batch_size=32
-mini_batch_size_per_gpu=32
+train_batch_size=16
+mini_batch_size_per_gpu=16
 
 #total_ckpts=25
 #total_test_times=50
@@ -66,7 +69,8 @@ total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
 #HYDRA_FULL_ERROR=1
-CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
+[ -z "${SLURM_JOB_ID}" ] && export CUDA_VISIBLE_DEVICES=${gpu_idx}
+python3 -m verl.trainer.classmate_cot_main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
@@ -117,11 +121,13 @@ CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
-    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type}
+    reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
+    trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
 #    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
 
-main_dir="/proj/interaction/interaction-filer/lorena/classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_${cl_name}/seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_${cl_name}/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_${cl_name}-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \

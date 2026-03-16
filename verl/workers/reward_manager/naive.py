@@ -154,18 +154,12 @@ class NaiveRewardManager(AbstractRewardManager):
 
         # ── Loop 2: resolve scores, fill reward tensor ──
         for ctx, judge_output in zip(item_contexts, judge_outputs):
-            # judge_output is None when main_output was None (format_llm_judge_prompt returned None)
-            if judge_output is None:
-                score = {
-                    "score": 0,
-                    "extracted_solution": None,
-                    "judge_explanation": "No valid output extracted from the response.",
-                }
-            elif isinstance(judge_output, dict) and "score" in judge_output:
+            if isinstance(judge_output, dict) and "score" in judge_output:
                 # Scoring backend: score already computed, no text parsing needed.
                 score = judge_output
             else:
-                # Generative backend (Tinker or vLLM): judge_output is a plain text string.
+                # For generative backends, judge_output is a str; for verifiers that skip the LLM
+                # judge (e.g. LongerResponseVerifier), judge_output is None — let the verifier handle it.
                 verifier = get_verifier(data_source=ctx["data_source"], max_new_tokens=self.max_new_tokens)
                 judge_score, judge_explanation = verifier.parse_llm_judge_output(
                     judge_output,

@@ -868,7 +868,7 @@ class ClassmateCoTRayPPOTrainer:
             if data_source_key == "general_reward":
                 # Monitor and score for each behavior; populate tracking vars from behavior judge scores
                 all_behavior_judge_scores = []
-                for behavior_key in ["sycophancy_only", "confidence_only", "longer_response"]:
+                for behavior_key in ["sycophancy", "confidence", "longer_response"]:
                     behavior_verifier = get_verifier(
                         data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
                     )
@@ -915,7 +915,7 @@ class ClassmateCoTRayPPOTrainer:
                 actual_scores = reward_tensor.sum(-1).cpu().tolist()
 
                 # Debug logging: print first sample
-                behavior_keys = ["sycophancy_only", "confidence_only", "longer_response"]
+                behavior_keys = ["sycophancy", "confidence", "longer_response"]
                 decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
                 already_print_count = 0
                 for i, (raw_q, main_cot, final_out, actual_score) in enumerate(zip(
