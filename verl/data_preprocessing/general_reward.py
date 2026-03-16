@@ -22,7 +22,7 @@ if __name__ == "__main__":
     custom_dataset_name = "general_reward"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", default=42)
+    parser.add_argument("--seed")
     parser.add_argument(
         # "--local_save_dir", default="./data/sycophancy_instructions", help="The save directory for the preprocessed dataset."
         "--local_save_dir", default=f"./data/{custom_dataset_name}", help="The save directory for the preprocessed dataset."

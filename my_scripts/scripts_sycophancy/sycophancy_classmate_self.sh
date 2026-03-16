@@ -10,7 +10,7 @@ dataset_name="sycophancy"
 #seed=0
 #seed=1
 seed=2
-gpu_idx=0
+gpu_idx=4
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -25,6 +25,8 @@ base_model_name_path=Qwen/Qwen3-0.6B
 #base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 #base_model_name_path=Qwen/Qwen2.5-Math-1.5B
 #base_model_name_path=Qwen/Qwen3-0.6B-Base
+think_start_str="<think>"
+think_end_str="</think>"
 classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
@@ -110,6 +112,8 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
     reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
+    "reward_model.think_start_str='${think_start_str}'" \
+    "reward_model.think_end_str='${think_end_str}'" \
     reward_model.monitor_model_name=${monitor_model_name} \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \

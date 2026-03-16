@@ -6,10 +6,10 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 #bash my_scripts/scripts_general_reward/general_reward_baseline_cot_only.sh
 data_dir=./data
 dataset_name="general_reward"
-#seed=0
+seed=0
 #seed=1
-seed=2
-gpu_idx=6
+#seed=2
+gpu_idx=3
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet

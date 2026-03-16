@@ -24,7 +24,7 @@ if __name__ == "__main__":
     custom_dataset_name = "unsafe_compliance"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", default=42)
+    parser.add_argument("--seed")
     parser.add_argument(
         "--local_save_dir", default=f"./data/{custom_dataset_name}", help="The save directory for the preprocessed dataset."
     )
@@ -62,7 +62,7 @@ if __name__ == "__main__":
                 "content": question_raw,
             })
             data = {
-                "data_source": "anthropic_hh_rlhf",
+                "data_source": custom_dataset_name,
                 "prompt": messages,
                 "reward_model": {"style": "rule", "ground_truth": None, "raw_question_for_monitor": question_raw, "task_description_harmlessness_score": example['task_descripton_harmlessness_score']},
                 # "extra_info": {
