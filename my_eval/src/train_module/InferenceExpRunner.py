@@ -6,8 +6,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from verl.utils.reward_score.monitor import create_llm_judge, process_main_cot_helper
-from verl.workers.reward_model.tinker_backend import TinkerJudgeBackend
+from verl.utils.reward_score.monitor import process_main_cot_helper
+from verl.workers.reward_model.backend_factory import build_llm_judge_backend, build_monitor_backend
 
 
 def _sanitize_model_name(name: str) -> str:
@@ -28,7 +28,9 @@ class InferenceExpRunner:
         think_start_str,
         think_end_str,
         monitor_model_name: str,
+        monitor_backend_type: str,
         judge_model_name: str,
+        judge_backend_type: str,
     ):
         self.model = model
         self.tokenizer = tokenizer
@@ -50,21 +52,25 @@ class InferenceExpRunner:
         self.monitor_model_name = monitor_model_name
         self.judge_model_name = judge_model_name
 
-        self.monitor_backend = TinkerJudgeBackend(create_llm_judge(judge_model_name=monitor_model_name))
-        self.judge_backend = TinkerJudgeBackend(create_llm_judge(judge_model_name=judge_model_name))
+        self.monitor_backend = build_monitor_backend(
+            {"monitor_model_name": monitor_model_name, "monitor_backend_type": monitor_backend_type}
+        )
 
+        self.judge_backend = build_llm_judge_backend(
+            {"llm_judge_model_name": judge_model_name, "llm_judge_backend_type": judge_backend_type}
+        )
 
     @torch.no_grad()
-    def inference_main_model(self, verifier):
+    def specific_behavior_inference_main_model(self, verifier):
         assert self.inference_backend == "vllm", "Only vLLM inference backend is implemented for main model inference."
         from vllm import SamplingParams
 
         sampling_param = SamplingParams(**self.args.generation_args)
 
-        monitor_score_key = f"{_sanitize_model_name(self.monitor_model_name)}_monitor_score"
-        monitor_expl_key = f"{_sanitize_model_name(self.monitor_model_name)}_monitor_explanation"
-        judge_score_key = f"{_sanitize_model_name(self.judge_model_name)}_llm_judge_score"
-        judge_expl_key = f"{_sanitize_model_name(self.judge_model_name)}_llm_judge_explanation"
+        monitor_score_key = f"{self.data_source}_{_sanitize_model_name(self.monitor_model_name)}_monitor_score"
+        monitor_expl_key = f"{self.data_source}_{_sanitize_model_name(self.monitor_model_name)}_monitor_explanation"
+        judge_score_key = f"{self.data_source}_{_sanitize_model_name(self.judge_model_name)}_llm_judge_score"
+        judge_expl_key = f"{self.data_source}_{_sanitize_model_name(self.judge_model_name)}_llm_judge_explanation"
 
         output_fn = os.path.join(self.output_dir, "preds.jsonl")
         dataset_size = len(self.data_loader)
@@ -87,11 +93,7 @@ class InferenceExpRunner:
                     assert judge_val is not None, "main_score is None given we are using llm judge; but getting llm judge score to be None"
                     all_main_model_rewards.append(float(judge_val))
                 all_monitor_scores.append(
-                    result_dict.get(monitor_score_key)
-                    if result_dict.get(monitor_score_key) is not None
-                    else result_dict.get("monitor_score")
-                    if result_dict.get("monitor_score") is not None
-                    else verifier.invalid_score
+                    result_dict.get(monitor_score_key, verifier.invalid_score)
                 )
             result_f.close()
         else:
@@ -261,7 +263,7 @@ class InferenceExpRunner:
             )
             metrics_output_path = os.path.join(self.output_dir, metrics_filename)
             with open(metrics_output_path, "w") as f:
-                json.dump({self.args.dataset_name: monitor_metrics}, f, indent=2)
+                json.dump({self.data_source: monitor_metrics}, f, indent=2)
             print(f"Monitor metrics saved to {metrics_output_path}")
 
     @torch.no_grad()
@@ -275,18 +277,24 @@ class InferenceExpRunner:
         assert self.inference_backend == "vllm", "Only vLLM inference backend is implemented for main model inference."
         from vllm import SamplingParams
         from verl.utils.reward_score.BaseVerifier import get_verifier as _get_verifier
-        from verl.workers.reward_model.backend_factory import _build_backend
 
         sampling_param = SamplingParams(**self.args.generation_args)
 
         # ------------------------------------------------------------------ #
         # Initialize general reward scoring backend (inside this function)
         # ------------------------------------------------------------------ #
-        general_reward_backend = _build_backend(
-            backend_type=self.args.general_reward_backend_type,
-            model_name=self.args.general_reward_model_name,
-            prefix="llm_judge",
-        )
+        backend_type = self.args.general_reward_backend_type
+        model_name = self.args.general_reward_model_name
+        if backend_type == "hf_scoring":
+            from verl.workers.reward_model.hf_scoring_backend import HFScoringJudgeBackend
+            general_reward_backend = HFScoringJudgeBackend(model_name_or_path=model_name)
+        else:
+            from verl.workers.reward_model.backend_factory import _build_backend
+            general_reward_backend = _build_backend(
+                backend_type=backend_type,
+                model_name=model_name,
+                prefix="llm_judge",
+            )
 
         behavior_keys = ["sycophancy", "confidence", "longer_response"]
         max_new_tokens = self.args.generation_args.get("max_tokens", None)
@@ -412,9 +420,13 @@ class InferenceExpRunner:
             bk: self.judge_backend.run_batch([p["behavior_judge_inputs"][bk] for p in all_pending])
             for bk in behavior_keys
         }
-        general_reward_outputs = general_reward_backend.run_batch(
-            [p["general_reward_input"] for p in all_pending]
-        )
+        gr_inputs = [p["general_reward_input"] for p in all_pending]
+        gr_batch_size = self.args.general_reward_model_batch_size
+        general_reward_outputs = []
+        for start in range(0, len(gr_inputs), gr_batch_size):
+            general_reward_outputs.extend(
+                general_reward_backend.run_batch(gr_inputs[start: start + gr_batch_size])
+            )
 
         # ------------------------------------------------------------------ #
         # Parse outputs and write results

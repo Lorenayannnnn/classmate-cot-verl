@@ -34,6 +34,8 @@ running_args:
   general_reward_model_name: null
   general_reward_backend_type: "hf_scoring"
 
+  general_reward_model_batch_size: 64
+
   generation_args:
     temperature: 1
     top_k: -1

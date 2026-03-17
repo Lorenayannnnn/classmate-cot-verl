@@ -30,7 +30,7 @@ def sub_main(configs, model):
 
     try:
         # if configs.running_args.exp_type == "inference_main_model":
-        exp_runner.inference_main_model(verifier=verifier)
+        exp_runner.specific_behavior_inference_main_model(verifier=verifier)
         # elif configs.running_args.exp_type == "cot_utility_to_classmate":
         #     exp_runner.run_cot_utility_to_classmate(verifier=verifier, do_wo_cot=args.wo_cot)
         # else:

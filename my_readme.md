@@ -89,6 +89,7 @@
   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
   bash miniconda.sh -b -p $HOME/miniconda
   bash miniconda.sh -b -p $HOME/south/miniconda
+  bash miniconda.sh -b -p /workspace/miniconda
   ```
   - ```vim ~/.bashrc```:
     ```
@@ -99,6 +100,7 @@
       export PATH="$HOME/east/miniconda/bin:$PATH"
       export PATH="$HOME/midwest/miniconda/bin:$PATH"
       export PATH="$HOME/south/miniconda/bin:$PATH"
+      export PATH="/workspace/miniconda/bin:$PATH"
       ```
   - restart terminal or run:
     ```

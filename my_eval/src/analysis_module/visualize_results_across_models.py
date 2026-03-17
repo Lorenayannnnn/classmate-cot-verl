@@ -6,9 +6,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as mpl_plt
-from tqdm import tqdm
-
-from verl.utils.reward_score.BaseVerifier import get_verifier
 
 
 # ------------------------------------------------------------------ #
@@ -31,11 +28,23 @@ _COLOR_MAP = {
 }
 
 
+def _metrics_path(result_dir, method, step_idx, seed, metrics_filename):
+    """Return the path to a metrics file.
+
+    Layout (matches inference output):
+      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/{metrics_filename}
+      base step:    {result_dir}/{method}/step_base/{metrics_filename}  (seed-independent)
+    """
+    if step_idx == "base":
+        return os.path.join(result_dir, method, "step_base", metrics_filename)
+    return os.path.join(result_dir, method, f"step_{step_idx}", seed, metrics_filename)
+
+
 def plot_monitor_metrics_across_steps(
     methods_list,
     seeds_list,
     all_step_idx_list,
-    result_dir,         # outputs_eval/inference_main_model/{task}/{base_model}
+    result_dir,         # outputs_eval/{task}/{base_model}
     dataset_name,
     metrics_filename,
     behavior_key=None,  # key to read from the nested metrics dict; defaults to dataset_name
@@ -47,7 +56,8 @@ def plot_monitor_metrics_across_steps(
     then plot mean ± std across seeds as a line with shaded error band.
 
     Directory layout expected:
-        {result_dir}/{method}/step_{step_idx}/{seed}/main/{metrics_filename}
+        regular: {result_dir}/{method}/step_{step_idx}/{seed}/{metrics_filename}
+        base:    {result_dir}/{method}/step_base/{metrics_filename}
 
     Metrics file format (new nested format):
         { behavior_key: { "mse": ..., "prediction_mean": ..., ... }, ... }
@@ -72,9 +82,7 @@ def plot_monitor_metrics_across_steps(
         for method in methods_list:
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
-                    metrics_fn = os.path.join(
-                        result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename
-                    )
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
                     bk_data = _load_behavior_metrics(metrics_fn)
                     if bk_data:
                         return "non_binary" if "mse" in bk_data else "binary"
@@ -89,7 +97,7 @@ def plot_monitor_metrics_across_steps(
     float_metrics = {"precision", "recall", "f1", "mse", "prediction_mean", "ground_truth_mean", "mean_score"}
 
     metric_mode = _detect_metric_mode()
-    count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
+    count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries", "total_entries"]
     if metric_mode == "general_reward_score":
         metrics = ["mean_score", "total_valid_entries", "total_entries"]
     elif metric_mode == "non_binary":
@@ -117,9 +125,7 @@ def plot_monitor_metrics_across_steps(
         for method, display_name in zip(methods_list, display_names):
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
-                    metrics_fn = os.path.join(
-                        result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename
-                    )
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
                     bk_data = _load_behavior_metrics(metrics_fn)
                     metric_value = bk_data.get(metric, np.nan)
 
@@ -214,40 +220,12 @@ def plot_monitor_metrics_across_steps(
     print(f"[saved] {output_fn}")
 
 
-def calculate_metric_vals(model_name_or_path_list, dataset_list, all_step_idx_list, output_dir_path):
-    metric_vals_dict = {model_name_or_path: [] for model_name_or_path in model_name_or_path_list}
-
-    for dataset_name in dataset_list:
-        verifier = get_verifier(data_source=dataset_name)
-        for main_model_name_or_path in tqdm(model_name_or_path_list):
-            for step_idx in all_step_idx_list:
-                main_model_dir = f"{output_dir_path}/{main_model_name_or_path}"
-                result_dir = f"{main_model_dir}/step_{step_idx}/{dataset_name}/main"
-                metrics_fn = os.path.join(result_dir, "monitor_metrics.json")
-                preds_fn = os.path.join(result_dir, "preds.jsonl")
-
-                with open(preds_fn, "r") as f:
-                    preds_data = [json.loads(line) for line in f]
-
-                monitor_scores = [entry["monitor_score"] for entry in preds_data]
-                main_scores = [entry["main_score"] for entry in preds_data]
-
-                monitor_metrics = verifier.compute_metrics(
-                    predictions=monitor_scores,
-                    ground_truths=main_scores,
-                )
-                monitor_metrics["total_monitored_entries"] = int(len(main_scores))
-
-                with open(metrics_fn, "w") as f:
-                    json.dump(monitor_metrics, f, indent=4)
-
-    return metric_vals_dict
-
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Visualize monitor/judge metrics across training steps.")
     arg_parser.add_argument("--max_step_num", type=int, required=True)
     arg_parser.add_argument("--step_size", type=int, required=True)
+    arg_parser.add_argument("--viz_offset", type=int, default=0)
     arg_parser.add_argument("--result_dir", type=str, required=True,
                             help="Base dir at the {task}/{base_model} level, "
                                  "e.g. outputs_eval/inference_main_model/confidence/Qwen3-0.6B")
@@ -270,7 +248,7 @@ if __name__ == "__main__":
     methods_list = args.methods.split(",")
     seeds_list = args.seeds.split(",")
     all_step_idx = ["base"] + [
-        str((i + 1) * args.step_size)
+        str(args.viz_offset + (i + 1) * args.step_size)
         for i in range(args.max_step_num)
     ]
 

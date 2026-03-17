@@ -8,9 +8,9 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 data_dir=./data
 dataset_name="general_reward"
 #seed=0
-#seed=1
-seed=2
-gpu_idx=7
+seed=1
+#seed=2
+gpu_idx=6
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -89,7 +89,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_llama_new/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -115,8 +115,8 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
     'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_llama_new/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_llama_new-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

@@ -32,13 +32,17 @@ def sub_main(configs, model):
                                     main_cot_keep_rate=configs.model_args.main_cot_keep_rate,
                                     data_source=configs.data_args.dataset_name,
                                     think_start_str=configs.model_args.think_start_str,
-                                    think_end_str=configs.model_args.think_end_str)
+                                    think_end_str=configs.model_args.think_end_str,
+                                    monitor_model_name=configs.running_args.monitor_model_name,
+                                    monitor_backend_type=configs.running_args.monitor_backend_type,
+                                    judge_model_name=configs.running_args.llm_judge_model_name,
+                                    judge_backend_type=configs.running_args.llm_judge_backend_type)
 
     try:
         if short_dataset_name == "general_reward":
             exp_runner.general_reward_inference_main_model(verifier=verifier)
         else:
-            exp_runner.inference_main_model(verifier=verifier)
+            exp_runner.specific_behavior_inference_main_model(verifier=verifier)
         print("yay!")
     finally:
         # Clean up distributed process group if it was initialized

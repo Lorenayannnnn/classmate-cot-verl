@@ -3,7 +3,7 @@ set -e
 export PYTHONPATH=:${PYTHONPATH}
 
 # ── Shared config (mirrors Python arg_parser) ─────────────────────
-step_size=30         # overridden per-task below
+num_eval_ckpts=6     # number of evenly-distributed checkpoints to evaluate
 metrics_filename=Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
@@ -11,7 +11,7 @@ seeds=seed_0,seed_1,seed_2
 
 # ── Layout ────────────────────────────────────────────────────────
 base_model=Qwen3-0.6B
-base_root=outputs_eval/inference_main_model
+base_root=outputs_eval
 
 # ── Per-task config ───────────────────────────────────────────────
 declare -A TASK_DATASET=(
@@ -22,14 +22,16 @@ declare -A TASK_DATASET=(
   [unsafe_compliance]="unsafe_compliance"
 )
 
-declare -A TASK_MAX_STEP_NUM=(
-  [confidence]=7
-  [sycophancy]=7
-  [longer_response]=7
-  [general_reward]=7
-  [unsafe_compliance]=7
+# task → total RL training steps (update to match actual runs)
+declare -A TASK_MAX_TRAINING_STEPS=(
+  [confidence]=210
+  [sycophancy]=140
+  [longer_response]=270
+  [general_reward]=210
+  [unsafe_compliance]=210
 )
 
+# task → checkpoint save frequency (matches training save_freq cadence)
 declare -A TASK_STEP_SIZE=(
   [confidence]=30
   [sycophancy]=20
@@ -40,18 +42,21 @@ declare -A TASK_STEP_SIZE=(
 
 # Comma-separated methods to compare per task
 declare -A TASK_METHODS=(
-  [confidence]="baseline_all_tokens,baseline_cot_only,baseline_output_only,OURS_self,OURS_llama"
-  [sycophancy]="baseline_all_tokens,baseline_cot_only,baseline_output_only,OURS_self"
-  [longer_response]="baseline_all_tokens,baseline_cot_only,baseline_output_only,OURS_self"
-  [general_reward]="baseline_all_tokens,baseline_cot_only,baseline_output_only,OURS_self"
-  [unsafe_compliance]="baseline_all_tokens,baseline_cot_only,baseline_output_only,OURS_self"
+  [confidence]="baseline_all_tokens,OURS_self"
+  [sycophancy]="baseline_all_tokens,OURS_self"
+  [longer_response]="baseline_all_tokens,OURS_self"
+  [general_reward]="baseline_all_tokens,baseline_cot_only,baseline_output_only,OURS_self,OURS_llama"
+  [unsafe_compliance]="baseline_all_tokens,OURS_self"
 )
 
 # ── Main loop ─────────────────────────────────────────────────────
 for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
   dataset_name=${TASK_DATASET[$task]}
-  task_max_step_num=${TASK_MAX_STEP_NUM[$task]}
-  task_step_size=${TASK_STEP_SIZE[$task]}
+  task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
+  task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}
+  task_last_ckpt=$(( (task_max_training_steps / task_ckpt_step_size) * task_ckpt_step_size ))
+  task_viz_step_size=$(( (task_last_ckpt / num_eval_ckpts / task_ckpt_step_size) * task_ckpt_step_size ))
+  task_viz_offset=$(( task_last_ckpt - task_viz_step_size * num_eval_ckpts ))
   methods=${TASK_METHODS[$task]}
   result_dir="${base_root}/${task}/${base_model}"
 
@@ -65,8 +70,9 @@ for task in confidence sycophancy longer_response general_reward unsafe_complian
         --behavior_key ${behavior_key} \
         --methods ${methods} \
         --seeds ${seeds} \
-        --max_step_num ${task_max_step_num} \
-        --step_size ${task_step_size} \
+        --max_step_num ${num_eval_ckpts} \
+        --step_size ${task_viz_step_size} \
+        --viz_offset ${task_viz_offset} \
         --metrics_filename ${metrics_filename} \
         --monitor_model_name ${monitor_model_name} \
         --judge_model_name ${judge_model_name}
@@ -78,8 +84,9 @@ for task in confidence sycophancy longer_response general_reward unsafe_complian
       --dataset_name ${dataset_name} \
       --methods ${methods} \
       --seeds ${seeds} \
-      --max_step_num ${task_max_step_num} \
-      --step_size ${task_step_size} \
+      --max_step_num ${num_eval_ckpts} \
+      --step_size ${task_viz_step_size} \
+      --viz_offset ${task_viz_offset} \
       --metrics_filename ${metrics_filename} \
       --monitor_model_name ${monitor_model_name} \
       --judge_model_name ${judge_model_name}

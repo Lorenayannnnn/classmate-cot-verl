@@ -340,7 +340,14 @@ def run_different_monitor_and_judge(
                 print(f"[skip] base step")
                 continue
 
-            result_dir = os.path.join(output_dir, f"step_{step_idx}", "main")
+            # output_dir is the seed-level dir: {method_dir}/{seed}
+            # Inference writes to: {method_dir}/step_{step_idx}/{seed}/  (for base: {method_dir}/step_base/)
+            method_dir = os.path.dirname(output_dir)
+            seed_name = os.path.basename(output_dir)
+            if step_idx == "base":
+                result_dir = os.path.join(method_dir, "step_base")
+            else:
+                result_dir = os.path.join(method_dir, f"step_{step_idx}", seed_name)
             preds_fn = os.path.join(result_dir, "preds.jsonl")
 
             if not os.path.exists(preds_fn):
@@ -364,10 +371,10 @@ def run_different_monitor_and_judge(
             interrupted = False
             try:
                 for behavior_key in behavior_keys:
-                    b_monitor_key     = f"{behavior_key}_{monitor_key}"      if is_general_reward else monitor_key
-                    b_monitor_expl_key= f"{behavior_key}_{monitor_expl_key}" if is_general_reward else monitor_expl_key
-                    b_judge_key       = f"{behavior_key}_{judge_key}"        if is_general_reward else judge_key
-                    b_judge_expl_key  = f"{behavior_key}_{judge_expl_key}"   if is_general_reward else judge_expl_key
+                    b_monitor_key      = f"{behavior_key}_{monitor_key}"
+                    b_monitor_expl_key = f"{behavior_key}_{monitor_expl_key}"
+                    b_judge_key        = f"{behavior_key}_{judge_key}"
+                    b_judge_expl_key   = f"{behavior_key}_{judge_expl_key}"
                     behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
                     monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
@@ -409,8 +416,8 @@ def run_different_monitor_and_judge(
             # ---------------------------------------------------------- #
             all_metrics = {}
             for behavior_key in behavior_keys:
-                b_monitor_key = f"{behavior_key}_{monitor_key}" if is_general_reward else monitor_key
-                b_judge_key = f"{behavior_key}_{judge_key}" if is_general_reward else judge_key
+                b_monitor_key = f"{behavior_key}_{monitor_key}"
+                b_judge_key   = f"{behavior_key}_{judge_key}"
                 behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
                 monitor_scores = np.array([entry.get(b_monitor_key, behavior_verifier.invalid_score) for entry in entries])

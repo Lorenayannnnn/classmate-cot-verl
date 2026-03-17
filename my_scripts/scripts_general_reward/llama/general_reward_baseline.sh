@@ -1,54 +1,45 @@
 set -x
 
-#bash my_scripts/scripts_unsafe_compliance/unsafe_compliance_classmate_self.sh
+#bash my_scripts/scripts_general_reward/llama/general_reward_baseline.sh
 
-#result_dir="/proj/interaction/interaction-filer/lorena/"
-result_dir=outputs/
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs
 
-data_dir=./data   # run on lambda
-dataset_name="unsafe_compliance"
-#seed=0
+data_dir=./data/general_reward_llama
+dataset_name="general_reward"
+seed=0
 #seed=1
-seed=2
-gpu_idx=3
-train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
-eval_path=${data_dir}/${dataset_name}/dev.parquet
+#seed=2
+gpu_idx=0
+
+train_path=${data_dir}/seed_${seed}/train.parquet
+eval_path=${data_dir}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
-#TODO Change classmate_model_name_or_path_list in qwen_classmate_cot_ppo_trainer.yaml
-#base_model_name_path=Qwen/Qwen3-1.7B
-base_model_name_path=Qwen/Qwen3-0.6B
-#base_model_name_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_warmup_16000_episodes_seed_42
-#base_model_name_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-#base_model_name_path=Qwen/Qwen2.5-Math-1.5B
-#base_model_name_path=Qwen/Qwen3-0.6B-Base
-think_start_str="<think>"
-think_end_str="</think>"
-classmate_model_name_or_path_list='["Qwen/Qwen3-0.6B"]'
-monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
-llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-llm_judge_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
-eval_llm_judge_model_name=${llm_judge_model_name}
-eval_llm_judge_backend_type=${llm_judge_backend_type}
+base_model_name_path=meta-llama/Llama-3.2-3B-Instruct
+think_start_str="### Reasoning"
+think_end_str="### Output"
+token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
 
-train_size=8000   # After filtering out too long prompts
+monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+monitor_backend_type=tinker
+llm_judge_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
+llm_judge_backend_type=hf_scoring
+llm_judge_backend_dtype=bfloat16
+eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+eval_llm_judge_backend_type=tinker
+
+train_size=8000
 
 max_response_length=3072
-
-classmate_reward_weight=1
-classmate_reward_type=vanilla_reward
-adv_estimator=grpo_w_classmate
-token_level_classmate_reward_mode=classmate_partial    # classmate_partial, all
 
 gpu_num=1
 train_batch_size=16
 mini_batch_size_per_gpu=16
 
-save_freq=20
-test_freq=10
+save_freq=40
+test_freq=20
 
 epoch_num=3
 rollout_n=8
@@ -56,10 +47,9 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-#HYDRA_FULL_ERROR=1
 [ -z "${SLURM_JOB_ID}" ] && export CUDA_VISIBLE_DEVICES=${gpu_idx}
-python3 -m verl.trainer.classmate_cot_main_ppo \
-    algorithm.adv_estimator=${adv_estimator} \
+python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
@@ -88,7 +78,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -96,24 +86,21 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.total_epochs=${epoch_num} $@ \
     data.seed=${seed} \
     data.return_raw_chat=True \
-    reward_model.classmate_cot_reward_configs.classmate_reward_weight=${classmate_reward_weight} \
-    reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
-    reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
-    reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
     "reward_model.think_start_str='${think_start_str}'" \
     "reward_model.think_end_str='${think_end_str}'" \
     reward_model.monitor_model_name=${monitor_model_name} \
     reward_model.monitor_backend_type=${monitor_backend_type} \
     reward_model.llm_judge_model_name=${llm_judge_model_name} \
     reward_model.llm_judge_backend_type=${llm_judge_backend_type} \
+    reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
+    reward_model.token_level_main_reward_mode=${token_level_main_reward_mode} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
     'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
-
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

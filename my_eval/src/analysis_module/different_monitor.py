@@ -9,10 +9,11 @@ if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Run different monitor and judge models on saved predictions.")
     arg_parser.add_argument("--max_step_num", type=int)
     arg_parser.add_argument("--step_size", type=int)
+    arg_parser.add_argument("--viz_offset", type=int, default=0)
     arg_parser.add_argument("--monitor_model_name", type=str)
-    arg_parser.add_argument("--monitor_source", type=str)
+    arg_parser.add_argument("--monitor_backend_type", type=str)
     arg_parser.add_argument("--judge_model_name", type=str)
-    arg_parser.add_argument("--judge_source", type=str)
+    arg_parser.add_argument("--llm_judge_backend_type", type=str)
 
     arg_parser.add_argument("--result_dir", type=str)       # outputs_eval/confidence/Qwen3-0.6B/baseline_all_tokens/seed_0
     arg_parser.add_argument("--dataset_name", type=str)       # "sycophancy", "confidence"...
@@ -46,11 +47,12 @@ if __name__ == "__main__":
 
     monitor_model_name = args.monitor_model_name
     judge_model_name = args.judge_model_name
-    monitor_source = args.monitor_source
-    judge_source = args.judge_source
+    monitor_source = args.monitor_backend_type
+    judge_source = args.llm_judge_backend_type
 
     max_step_num = args.max_step_num
     step_size = args.step_size
+    viz_offset = args.viz_offset
 
     output_dir = args.result_dir
     dataset_name_list = [args.dataset_name]
@@ -58,9 +60,9 @@ if __name__ == "__main__":
     skip_indices = []
 
     all_step_idx = ["base"] + [
-        str((i + 1) * step_size)
+        str(viz_offset + (i + 1) * step_size)
         for i in range(0, max_step_num)
-        if str((i + 1) * step_size) not in skip_indices
+        if str(viz_offset + (i + 1) * step_size) not in skip_indices
     ]
 
     if args.estimate_cost:

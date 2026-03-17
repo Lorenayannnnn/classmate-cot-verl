@@ -53,6 +53,8 @@ def load_config_and_setup_output_dir(configs):
         configs.data_args.dataset_name = "data/sycophancy/test.parquet"
     elif "unsafe_compliance" in configs.data_args.dataset_name:
         configs.data_args.dataset_name = "data/unsafe_compliance/test.parquet"
+    elif "general_reward" in configs.data_args.dataset_name:
+        configs.data_args.dataset_name = "data/general_reward/test.parquet"
     else:
         raise ValueError(f"Unknown dataset {configs.data_args.dataset_name}")
     # elif "mmlu_sycophancy" in configs.data_args.dataset_name:
@@ -67,11 +69,20 @@ def load_config_and_setup_output_dir(configs):
     base_model_str, method_str = rest.rsplit("-", 1)  # base_model = "Qwen3-0.6B", method = "baseline_all_tokens"
 
     dataset_subset_name = f"/{configs.data_args.dataset_subset_name}" if configs.data_args.dataset_subset_name is not None else ""
-    configs.running_args.output_dir = (
-        f"{outputs_root_dir}"
-        f"/{task_part}/{base_model_str}/{method_str}"
-        f"/step_{configs.model_args.main_model_step_idx}/{seed_str}{dataset_subset_name}"
-    )
+    step_idx = configs.model_args.main_model_step_idx
+    if str(step_idx) == "base":
+        # Base checkpoint is seed-independent — no seed subdirectory
+        configs.running_args.output_dir = (
+            f"{outputs_root_dir}"
+            f"/{task_part}/{base_model_str}/{method_str}"
+            f"/step_base{dataset_subset_name}"
+        )
+    else:
+        configs.running_args.output_dir = (
+            f"{outputs_root_dir}"
+            f"/{task_part}/{base_model_str}/{method_str}"
+            f"/step_{step_idx}/{seed_str}{dataset_subset_name}"
+        )
 
     output_dir = configs.running_args.output_dir
     #
