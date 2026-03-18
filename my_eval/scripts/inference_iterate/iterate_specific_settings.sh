@@ -6,7 +6,7 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/inference_iterate/iterate.sh
+#bash my_eval/scripts/inference_iterate/iterate_specific_settings.sh
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
 seeds=(seed_0 seed_1 seed_2)

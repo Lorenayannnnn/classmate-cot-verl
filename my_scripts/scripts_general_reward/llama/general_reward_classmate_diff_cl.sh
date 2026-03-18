@@ -41,11 +41,11 @@ classmate_reward_type=vanilla_reward
 adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial
 
-gpu_num=1
-train_batch_size=16
-mini_batch_size_per_gpu=16
+gpu_num=2
+train_batch_size=32
+mini_batch_size_per_gpu=32
 
-save_freq=40
+save_freq=20
 test_freq=20
 
 epoch_num=3

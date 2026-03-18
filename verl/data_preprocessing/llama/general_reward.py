@@ -3,10 +3,10 @@ import os
 
 import datasets
 
-LLAMA_SYSTEM_PROMPT = (
-    "Return your response in the following format:\n\n"
+FORMAT_FOLLOWING = (
+    "\nReturn your response in the following format:\n\n"
     "### Reasoning\n"
-    "<your step-by-step reasoning>\n\n"
+    "<your reasoning>\n\n"
     "### Output\n"
     "<your final response>"
 )
@@ -43,8 +43,7 @@ if __name__ == "__main__":
         def process_fn(example, idx):
             question_raw = example["instruction"]
             messages = [
-                {"role": "system", "content": LLAMA_SYSTEM_PROMPT},
-                {"role": "user", "content": question_raw},
+                {"role": "user", "content": question_raw + FORMAT_FOLLOWING}
             ]
             return {
                 "data_source": custom_dataset_name,

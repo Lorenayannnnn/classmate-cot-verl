@@ -1,4 +1,12 @@
 conda install setuptools
+
+git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
+
+(
+  cd tinker-cookbook
+  pip install -e .
+)
+
 pip install -r my_requirements.txt
 
 # Install flash attention and flash infer
@@ -13,12 +21,5 @@ pip install lm_eval
 pip install lm-eval[math]
 
 bash my_scripts/build_omegaconf_hydra_w_antlr_4110.sh
-
-git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
-
-(
-  cd tinker-cookbook
-  pip install -e .
-)
 
 python -c "import nltk; nltk.download('punkt_tab')"

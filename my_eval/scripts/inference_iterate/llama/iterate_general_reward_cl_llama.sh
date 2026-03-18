@@ -6,7 +6,7 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/inference_iterate/iterate_general_reward_cl_llama.sh
+#bash my_eval/scripts/inference_iterate/llama/iterate_general_reward_cl_llama.sh
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
 base_model_name_or_path=meta-llama/Llama-3.2-3B-Instruct
