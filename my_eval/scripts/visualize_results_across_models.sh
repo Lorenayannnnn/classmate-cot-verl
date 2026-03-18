@@ -50,7 +50,8 @@ declare -A TASK_METHODS=(
 )
 
 # ── Main loop ─────────────────────────────────────────────────────
-for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
+#for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
+for task in confidence sycophancy longer_response unsafe_compliance; do
   dataset_name=${TASK_DATASET[$task]}
   task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
   task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}

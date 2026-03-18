@@ -233,12 +233,26 @@ def parse_out_main_cot_output(
             final_output = None
             main_cot = main_pred.split(think_start_str, 1)[1] if think_start_str in main_pred else main_pred
     else:
+        # Opening marker not found in response (e.g. OLMo-3 where <think> is forced
+        # into the prompt, so the response begins mid-CoT).  CoT starts at position 0.
         open_think_pos = None
         cot_start = 0
-        cot_end = None
-        close_think_pos = None
-        final_output = None
-        main_cot = main_pred
+
+        if len(close_positions) > 0:
+            # Closing marker found — use it to delimit CoT and final output.
+            cot_end = close_positions[0]
+            close_think_pos = cot_end
+            final_output = tokenizer.decode(
+                main_pred_token_ids[cot_end + close_marker_len:].tolist(), skip_special_tokens=True
+            )
+            main_cot = tokenizer.decode(
+                main_pred_token_ids[cot_start:cot_end].tolist(), skip_special_tokens=True
+            )
+        else:
+            cot_end = None
+            close_think_pos = None
+            final_output = None
+            main_cot = main_pred
 
     return main_cot, final_output, cot_start, cot_end, open_think_pos, close_think_pos, open_marker_len, close_marker_len
 

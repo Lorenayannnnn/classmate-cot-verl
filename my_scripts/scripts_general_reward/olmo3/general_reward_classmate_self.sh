@@ -1,30 +1,30 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/llama/general_reward_classmate_self.sh
+#bash my_scripts/scripts_general_reward/olmo3/general_reward_classmate_self.sh
 
-#result_dir="/proj/interaction/interaction-filer/lorena/"
-result_dir=outputs/
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs/
 
-data_dir=./data/general_reward_llama
+data_dir=./data
 dataset_name="general_reward"
-#seed=0
-#gpu_idx=2,3
+seed=0
+gpu_idx=4,5
 #seed=1
 #gpu_idx=4,5
-seed=2
-gpu_idx=6,7
+#seed=2
+#gpu_idx=6,7
 
-train_path=${data_dir}/seed_${seed}/train.parquet
-eval_path=${data_dir}/dev.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
+eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-base_model_name_path=meta-llama/Llama-3.2-3B-Instruct
-classmate_model_name_or_path_list='["meta-llama/Llama-3.2-3B-Instruct"]'
-think_start_str="### Reasoning"
-think_end_str="### Output"
-classmate_think_start_str="### Reasoning"
-classmate_think_end_str="### Output"
+base_model_name_path=allenai/Olmo-3-7B-Think
+think_start_str="<think>"
+think_end_str=$'</think>\n\n'
+classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
+classmate_think_start_str="<think>"
+classmate_think_end_str=$'</think>\n\n'
 
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker
@@ -44,8 +44,8 @@ adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial
 
 gpu_num=2
-train_batch_size=32
-mini_batch_size_per_gpu=16
+train_batch_size=16
+mini_batch_size_per_gpu=8
 
 save_freq=40
 test_freq=40

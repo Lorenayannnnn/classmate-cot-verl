@@ -2,8 +2,8 @@ set -x
 
 #bash my_scripts/scripts_general_reward/llama/general_reward_baseline_cot_only.sh
 
-result_dir="/proj/interaction/interaction-filer/lorena/"
-#result_dir=outputs/
+#result_dir="/proj/interaction/interaction-filer/lorena/"
+result_dir=outputs/
 
 data_dir=./data/general_reward_llama
 dataset_name="general_reward"
@@ -38,7 +38,7 @@ max_response_length=3072
 
 gpu_num=2
 train_batch_size=32
-mini_batch_size_per_gpu=32
+mini_batch_size_per_gpu=16
 
 save_freq=40
 test_freq=40
