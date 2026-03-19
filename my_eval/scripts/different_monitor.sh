@@ -28,20 +28,20 @@ declare -A TASK_DATASET=(
 
 # task → total RL training steps (update to match actual runs)
 declare -A TASK_MAX_TRAINING_STEPS=(
-  [confidence]=210
-  [sycophancy]=140
-  [longer_response]=270
-  [general_reward]=210
-  [unsafe_compliance]=210
+  [confidence]=420
+  [sycophancy]=200
+  [longer_response]=400
+  [general_reward]=920
+  [unsafe_compliance]=300
 )
 
 # task → checkpoint save frequency (matches training save_freq cadence)
 declare -A TASK_STEP_SIZE=(
-  [confidence]=30
+  [confidence]=20
   [sycophancy]=20
-  [longer_response]=40
-  [general_reward]=30
-  [unsafe_compliance]=30
+  [longer_response]=20
+  [general_reward]=40
+  [unsafe_compliance]=20
 )
 
 # task → space-separated list of methods

@@ -28,7 +28,7 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [sycophancy]=200
   [longer_response]=400
   [general_reward]=920
-  [unsafe_compliance]=320
+  [unsafe_compliance]=300
 )
 
 # task → checkpoint save frequency (matches training save_freq cadence)
@@ -46,12 +46,13 @@ declare -A TASK_METHODS=(
   [sycophancy]="baseline_all_tokens,OURS_self"
   [longer_response]="baseline_all_tokens,OURS_self"
   [general_reward]="baseline_all_tokens,baseline_cot_only,OURS_self,OURS_llama"
+#  [general_reward]="baseline_all_tokens,baseline_cot_only,OURS_self"
   [unsafe_compliance]="baseline_all_tokens,OURS_self"
 )
 
 # ── Main loop ─────────────────────────────────────────────────────
-#for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
-for task in confidence sycophancy longer_response unsafe_compliance; do
+#for task in confidence sycophancy longer_response unsafe_compliance; do
+for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
   dataset_name=${TASK_DATASET[$task]}
   task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
   task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}

@@ -12,7 +12,7 @@ import matplotlib.pyplot as mpl_plt
 # Display names and colours per method
 # ------------------------------------------------------------------ #
 _METHOD_DISPLAY = {
-    "baseline_all_tokens": "Baseline",
+    "baseline_all_tokens": "Baseline (All Tokens)",
     "baseline_cot_only":   "Baseline (CoT only)",
     "baseline_output_only":"Baseline (output only)",
     "OURS_self":           "OURS (self)",
@@ -20,24 +20,30 @@ _METHOD_DISPLAY = {
 }
 
 _COLOR_MAP = {
-    "Baseline":               "#F28C28",
-    "Baseline (CoT only)":    "#F5A623",
-    "Baseline (output only)": "#F7C06B",
-    "OURS (self)":            "#D94F3D",
-    "OURS (llama)":           "#3A9E5F",
+    "Baseline (All Tokens)": "#F5A623",  # amber — stronger baseline
+    "Baseline (CoT only)": "#BDBDBD",  # gray — recedes, weaker variant
+    "OURS (self)":         "#D94F3D",  # red — best, boldest
+    "OURS (llama)":        "#3A9E5F",  # green — our method, secondary
 }
+
+
+_GENERAL_REWARD_BEHAVIORS = ["sycophancy", "confidence", "longer_response", "general_reward"]
 
 
 def _metrics_path(result_dir, method, step_idx, seed, metrics_filename):
     """Return the path to a metrics file.
 
     Layout (matches inference output):
-      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/{metrics_filename}
-      base step:    {result_dir}/{method}/step_base/{metrics_filename}  (seed-independent)
+      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/main/{metrics_filename}
+      base step:    {result_dir}/{method}/step_base/{seed}/main/{metrics_filename}
+                    or (seed-independent tasks):
+                    {result_dir}/{method}/step_base/main/{metrics_filename}
     """
     if step_idx == "base":
-        return os.path.join(result_dir, method, "step_base", metrics_filename)
-    return os.path.join(result_dir, method, f"step_{step_idx}", seed, metrics_filename)
+        with_seed = os.path.join(result_dir, method, "step_base", seed, "main", metrics_filename)
+        without_seed = os.path.join(result_dir, method, "step_base", "main", metrics_filename)
+        return with_seed if os.path.exists(with_seed) else without_seed
+    return os.path.join(result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename)
 
 
 def plot_monitor_metrics_across_steps(
@@ -67,13 +73,20 @@ def plot_monitor_metrics_across_steps(
     """
     bk = behavior_key or dataset_name
 
-    def _load_behavior_metrics(metrics_fn):
-        """Load the metrics dict for bk from a file, returning {} if missing."""
+    def _load_behavior_metrics(metrics_fn, bk_override=None):
+        """Load the metrics dict for bk (or bk_override) from a file, returning {} if missing."""
+        bk_use = bk_override or bk
         if not os.path.exists(metrics_fn):
             return {}
         with open(metrics_fn) as f:
             data = json.load(f)
-        return data.get(bk, {})
+        if bk_use in data:
+            return data[bk_use]
+        # Parquet-path key format: "data/{behavior}/test.parquet"
+        for key, value in data.items():
+            if bk_use in key:
+                return value
+        return {}
 
     def _detect_metric_mode():
         """Return 'non_binary', 'general_reward_score', or 'binary'."""
@@ -97,9 +110,9 @@ def plot_monitor_metrics_across_steps(
     float_metrics = {"precision", "recall", "f1", "mse", "prediction_mean", "ground_truth_mean", "mean_score"}
 
     metric_mode = _detect_metric_mode()
-    count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries", "total_entries"]
+    count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
     if metric_mode == "general_reward_score":
-        metrics = ["mean_score", "total_valid_entries", "total_entries"]
+        metrics = ["mean_score", "total_valid_entries"]
     elif metric_mode == "non_binary":
         metrics = ["mse", "prediction_mean", "ground_truth_mean"] + count_metrics
     else:
@@ -108,88 +121,91 @@ def plot_monitor_metrics_across_steps(
     def _to_num(s):
         return 0 if s == "base" else int(s)
 
-    n_cols = 3
-    n_rows = int(np.ceil(len(metrics) / n_cols))  # type: ignore[arg-type]
-    fig_height = max(10, n_rows * 3.5)
-    fig, axes = mpl_plt.subplots(
-        n_rows, n_cols,
-        figsize=(max(18, len(all_step_idx_list) * 2.7), fig_height),
-    )
-    axes = axes.flatten()
-
-    legend_handles = legend_labels = None
-
-    for metric_idx, metric in enumerate(metrics):
-        data_rows = []
-
+    def _build_metric_rows(metric, bk_load=None):
+        rows = []
         for method, display_name in zip(methods_list, display_names):
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
                     metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
-                    bk_data = _load_behavior_metrics(metrics_fn)
-                    metric_value = bk_data.get(metric, np.nan)
-
-                    data_rows.append({
+                    bk_data = _load_behavior_metrics(metrics_fn, bk_load)
+                    rows.append({
                         "RL Steps": _to_num(step_idx),
-                        "Value":    metric_value,
+                        "Value":    bk_data.get(metric, np.nan),
                         "Method":   display_name,
                         "Seed":     seed,
                     })
+        return rows
 
+    def _plot_metric_ax(ax, metric, bk_load=None, label_override=None):
+        """Plot one metric on ax. Returns (legend_handles, legend_labels) or (None, None)."""
+        data_rows = _build_metric_rows(metric, bk_load)
         if not data_rows:
-            continue
-
-        dataframe = pd.DataFrame(data_rows)
-        ax = axes[metric_idx]
-
+            return None, None
+        df = pd.DataFrame(data_rows)
         sns.lineplot(
-            data=dataframe,
-            x="RL Steps",
-            y="Value",
-            hue="Method",
-            hue_order=hue_order,
-            palette=model_palette,
-            estimator="mean",
-            errorbar="sd",
-            marker="o",
-            markersize=9,
-            linewidth=3.0,
+            data=df, x="RL Steps", y="Value",
+            hue="Method", hue_order=hue_order, palette=model_palette,
+            estimator="mean", errorbar="sd",
+            marker="o", markersize=9, linewidth=3.0,
             ax=ax,
         )
-
-        # Annotate mean values at each point
-        mean_df = dataframe.groupby(["Method", "RL Steps"])["Value"].mean().reset_index()
+        x_ticks = sorted(df["RL Steps"].dropna().unique())
+        ax.set_xticks(x_ticks)
+        mean_df = df.groupby(["Method", "RL Steps"])["Value"].mean().reset_index()
         for _, row in mean_df.iterrows():
             if pd.isna(row["Value"]):
                 continue
             value_str = f"{row['Value']:.2f}" if metric in float_metrics else f"{int(round(row['Value']))}"
-            ax.text(
-                row["RL Steps"], row["Value"],
-                value_str,
-                ha="center", va="bottom",
-                fontsize=9, color="#555555",
-            )
-
-        metric_label = metric.replace("_", " ").title()
+            ax.text(row["RL Steps"], row["Value"], value_str,
+                    ha="center", va="bottom", fontsize=9, color="#555555")
+        metric_label = label_override or metric.replace("_", " ").title()
         ax.set_title(metric_label, fontsize=14, fontweight="bold", pad=6)
         ax.set_xlabel("RL Steps", fontsize=13)
         ax.set_ylabel("")
         ax.tick_params(axis="both", labelsize=12)
         ax.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.6)
         sns.despine(ax=ax)
+        return ax.get_legend_handles_labels()
 
-        if metric_idx == 0:
-            legend_handles, legend_labels = ax.get_legend_handles_labels()
+    # Build plot_specs: list of (metric, bk_load, label_override)
+    plot_specs = [(m, None, None) for m in metrics]
+    if dataset_name == "general_reward" and metric_mode == "non_binary":
+        # Insert after ground_truth_mean (index 2) so row 1 = mse, prediction_mean, ground_truth_mean, Reward Score
+        plot_specs.insert(3, ("mean_score", "general_reward", "Reward Score"))
+
+    fig_width = max(18, len(all_step_idx_list) * 2.7)
+    n_cols = 4 if dataset_name == "general_reward" else 3
+    n_rows = int(np.ceil(len(plot_specs) / n_cols))  # type: ignore[arg-type]
+    fig_height = max(10, n_rows * 3.5)
+    fig, axes = mpl_plt.subplots(
+        n_rows, n_cols,
+        figsize=(fig_width, fig_height),
+    )
+    axes = axes.flatten()
+
+    legend_handles = legend_labels = None
+
+    for spec_idx, (metric, bk_load, label) in enumerate(plot_specs):
+        ax = axes[spec_idx]
+        h, l = _plot_metric_ax(ax, metric, bk_load=bk_load, label_override=label)
+        if spec_idx == 0 and h:
+            legend_handles, legend_labels = h, l
         if ax.get_legend() is not None:
             ax.get_legend().remove()
 
-    for idx in range(len(metrics), len(axes)):
+    for idx in range(len(plot_specs), len(axes)):
         fig.delaxes(axes[idx])
 
     behavior_title = bk.replace("_", " ").title()
     dataset_title = dataset_name.replace("_", " ").title()
     base_model = os.path.basename(result_dir)
-    title_lines = [f"Monitor Metrics — {dataset_title} / {behavior_title} / {base_model} (mean ± std across seeds)"]
+    if bk == dataset_name:
+        topic_title = dataset_title
+        topic_fn = dataset_name
+    else:
+        topic_title = f"{dataset_title} / {behavior_title}"
+        topic_fn = f"{dataset_name}_{bk}"
+    title_lines = [f"{topic_title} / {base_model} (mean ± std across seeds)"]
     if monitor_model_name or judge_model_name:
         subtitle_parts = []
         if monitor_model_name:
@@ -212,9 +228,11 @@ def plot_monitor_metrics_across_steps(
         )
 
     metrics_stem = os.path.splitext(metrics_filename)[0]
-    vis_dir = os.path.join(result_dir, "visualizations")
+    vis_dir = os.path.join(
+        os.path.dirname(os.path.dirname(result_dir)), "visualization", base_model
+    )
     os.makedirs(vis_dir, exist_ok=True)
-    output_fn = os.path.join(vis_dir, f"{dataset_name}_{bk}_{metrics_stem}_comparison.png")
+    output_fn = os.path.join(vis_dir, f"{base_model}_{topic_fn}_{metrics_stem}_comparison.png")
     fig.savefig(output_fn, bbox_inches="tight", dpi=150)
     mpl_plt.close(fig)
     print(f"[saved] {output_fn}")

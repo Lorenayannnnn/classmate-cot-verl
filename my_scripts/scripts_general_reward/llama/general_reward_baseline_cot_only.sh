@@ -2,15 +2,15 @@ set -x
 
 #bash my_scripts/scripts_general_reward/llama/general_reward_baseline_cot_only.sh
 
-#result_dir="/proj/interaction/interaction-filer/lorena/"
-result_dir=outputs/
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs/
 
 data_dir=./data/general_reward_llama
 dataset_name="general_reward"
-#seed=0
-#gpu_idx=4,5
-seed=1
-gpu_idx=6,7
+seed=0
+gpu_idx=4,5
+#seed=1
+#gpu_idx=6,7
 #seed=2
 #gpu_idx=0,1
 
@@ -37,11 +37,11 @@ train_size=8000
 max_response_length=3072
 
 gpu_num=2
-train_batch_size=32
-mini_batch_size_per_gpu=16
+train_batch_size=64
+mini_batch_size_per_gpu=32
 
-save_freq=40
-test_freq=40
+save_freq=20
+test_freq=20
 
 epoch_num=6
 rollout_n=8
@@ -102,7 +102,7 @@ python3 -m verl.trainer.main_ppo \
     'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
 main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-think_prompt-baseline_${token_level_main_reward_mode}-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}
