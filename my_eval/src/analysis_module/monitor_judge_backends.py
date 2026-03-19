@@ -360,6 +360,8 @@ def run_different_monitor_and_judge(
             with open(preds_fn, "r") as preds_file:
                 entries = [json.loads(line) for line in preds_file]
 
+            assert len(entries) == 500, f"Expected 500 entries in {preds_fn}, got {len(entries)}"
+
             all_entry_indices = list(range(len(entries)))
 
             # ---------------------------------------------------------- #
