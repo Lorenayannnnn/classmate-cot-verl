@@ -14,7 +14,7 @@ model_args:
   base_model_name_or_path: null
   main_model_step_idx: null
   inference_backend: vllm
-  vllm_gpu_memory_utilization: 0.9
+  vllm_gpu_memory_utilization: 0.8
   dtype: bfloat16
   main_cot_keep_rate: 1
 

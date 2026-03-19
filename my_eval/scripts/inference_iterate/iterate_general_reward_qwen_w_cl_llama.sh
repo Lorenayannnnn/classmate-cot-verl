@@ -7,6 +7,7 @@ set -e
 export PYTHONPATH=:${PYTHONPATH}
 
 #bash my_eval/scripts/inference_iterate/iterate_general_reward_qwen_w_cl_llama.sh
+#bash my_eval/scripts/inference_iterate/iterate_general_reward_qwen_w_cl_llama.sh 800
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
 base_model_name_or_path=Qwen/Qwen3-0.6B
@@ -17,6 +18,7 @@ num_eval_ckpts=6
 
 step_size=40           # checkpoint save frequency
 max_training_steps=920 # total RL training steps (update to match actual run)
+start_step=${1:-0}     # skip steps below this training step; pass as $1 to resume mid-run (e.g. 560)
 
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
@@ -79,6 +81,7 @@ _run_seed_task() {
 
   for i in $(seq 1 ${num_eval_ckpts}); do
     local step_idx=$((viz_offset + viz_step_size * i))
+    [[ ${step_idx} -lt ${start_step} ]] && { echo "Skipping step ${step_idx} (< start_step ${start_step})"; continue; }
     local log_dir="outputs_eval/${task_part}/${base_model_str}/${method_str}/step_${step_idx}/${seed}"
     mkdir -p "${log_dir}"
     _run_step "${step_idx}" >> "${log_dir}/run.log" 2>&1
@@ -95,8 +98,8 @@ _run_seed_task() {
 # Base is shared with Qwen baseline — already run by iterate_general_reward.sh
 #  GPU  hf_prefix                                                    seed    run_base
 _run_seed_task 0  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_0  false &
-_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_1  false &
-_run_seed_task 2  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_2  false &
+_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_1  false
+_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_2  false
 
 wait
 echo "All tasks finished."

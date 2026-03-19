@@ -4,7 +4,7 @@ import os
 import datasets
 
 FORMAT_FOLLOWING = (
-    "\nThink and then return your response in the following format:\n\n"
+    "\nThink and then return your final response in the following format:\n\n"
     "### Reasoning\n"
     "<your thinking trace>\n\n"
     "### Output\n"

@@ -342,12 +342,12 @@ def run_different_monitor_and_judge(
 
             # output_dir is the seed-level dir: {method_dir}/{seed}
             # Inference writes to: {method_dir}/step_{step_idx}/{seed}/  (for base: {method_dir}/step_base/)
-            method_dir = os.path.dirname(output_dir)
-            seed_name = os.path.basename(output_dir)
             if step_idx == "base":
-                result_dir = os.path.join(method_dir, "step_base")
+                result_dir = os.path.join(output_dir, "step_base", "main")
             else:
-                result_dir = os.path.join(method_dir, f"step_{step_idx}", seed_name)
+                method_dir = os.path.dirname(output_dir)
+                seed_name = os.path.basename(output_dir)
+                result_dir = os.path.join(method_dir, f"step_{step_idx}", seed_name, "main")
             preds_fn = os.path.join(result_dir, "preds.jsonl")
 
             if not os.path.exists(preds_fn):

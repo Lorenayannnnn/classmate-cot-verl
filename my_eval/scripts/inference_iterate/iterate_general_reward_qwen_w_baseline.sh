@@ -94,8 +94,8 @@ _run_seed_task() {
 # ── Launch 3 seeds in parallel (one GPU each) ─────────────────────────────── #
 # Base is shared with Qwen baseline — already run by iterate_general_reward.sh
 #  GPU  hf_prefix                                                    seed    run_base
-_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens  seed_1  false &
-_run_seed_task 3  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens  seed_2  false &
+_run_seed_task 0  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens  seed_1  false &
+#_run_seed_task 3  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens  seed_2  false &
 
 wait
 echo "All tasks finished."

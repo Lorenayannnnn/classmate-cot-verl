@@ -300,4 +300,4 @@
 - Storage path:
   - /local/data/lorena/
   - /proj/interaction/interaction-filer/lorena/classmate-cot-verl
-- Hosting classmate on lambda:
+- Clean cache regularly: /home/lorenayan/ray_tmp/ray

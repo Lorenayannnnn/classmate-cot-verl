@@ -23,11 +23,16 @@ _COLOR_MAP = {
     "Baseline (All Tokens)": "#F5A623",  # amber — stronger baseline
     "Baseline (CoT only)": "#BDBDBD",  # gray — recedes, weaker variant
     "OURS (self)":         "#D94F3D",  # red — best, boldest
-    "OURS (llama)":        "#3A9E5F",  # green — our method, secondary
+    "OURS (llama)":        "#5fc6e8",
 }
 
 
 _GENERAL_REWARD_BEHAVIORS = ["sycophancy", "confidence", "longer_response", "general_reward"]
+
+# Fallback metrics file to read general_reward scores from when the primary file lacks that key
+_GENERAL_REWARD_FALLBACK_METRICS_FILENAME = (
+    "Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json"
+)
 
 
 def _metrics_path(result_dir, method, step_idx, seed, metrics_filename):
@@ -56,6 +61,7 @@ def plot_monitor_metrics_across_steps(
     behavior_key=None,  # key to read from the nested metrics dict; defaults to dataset_name
     monitor_model_name=None,
     judge_model_name=None,
+    figure_suffix=None, # optional suffix appended to the output filename
 ):
     """
     For each method in methods_list, load metrics across steps and seeds,
@@ -76,16 +82,32 @@ def plot_monitor_metrics_across_steps(
     def _load_behavior_metrics(metrics_fn, bk_override=None):
         """Load the metrics dict for bk (or bk_override) from a file, returning {} if missing."""
         bk_use = bk_override or bk
+
+        def _extract_from_data(data):
+            if bk_use in data:
+                return data[bk_use]
+            # Parquet-path key format: "data/{behavior}/test.parquet"
+            for key, value in data.items():
+                if bk_use in key:
+                    return value
+            return None
+
         if not os.path.exists(metrics_fn):
             return {}
         with open(metrics_fn) as f:
             data = json.load(f)
-        if bk_use in data:
-            return data[bk_use]
-        # Parquet-path key format: "data/{behavior}/test.parquet"
-        for key, value in data.items():
-            if bk_use in key:
-                return value
+        result = _extract_from_data(data)
+        if result is not None:
+            return result
+        # Fallback: for general_reward key, try the Qwen monitor metrics file in the same dir
+        if bk_use == "general_reward":
+            fallback_fn = os.path.join(os.path.dirname(metrics_fn), _GENERAL_REWARD_FALLBACK_METRICS_FILENAME)
+            if os.path.exists(fallback_fn) and fallback_fn != metrics_fn:
+                with open(fallback_fn) as f:
+                    fallback_data = json.load(f)
+                result = _extract_from_data(fallback_data)
+                if result is not None:
+                    return result
         return {}
 
     def _detect_metric_mode():
@@ -228,11 +250,15 @@ def plot_monitor_metrics_across_steps(
         )
 
     metrics_stem = os.path.splitext(metrics_filename)[0]
+    monitor_slug = (monitor_model_name or "unknown").replace("/", "_")
+    judge_slug = (judge_model_name or "unknown").replace("/", "_")
+    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_llm_judge"
     vis_dir = os.path.join(
-        os.path.dirname(os.path.dirname(result_dir)), "visualization", base_model
+        os.path.dirname(os.path.dirname(result_dir)), "visualization", monitor_judge_dir, base_model
     )
     os.makedirs(vis_dir, exist_ok=True)
-    output_fn = os.path.join(vis_dir, f"{base_model}_{topic_fn}_{metrics_stem}_comparison.png")
+    suffix_str = f"_{figure_suffix}" if figure_suffix else ""
+    output_fn = os.path.join(vis_dir, f"{base_model}_{topic_fn}_{metrics_stem}_comparison{suffix_str}.png")
     fig.savefig(output_fn, bbox_inches="tight", dpi=150)
     mpl_plt.close(fig)
     print(f"[saved] {output_fn}")
@@ -260,6 +286,8 @@ if __name__ == "__main__":
                                  "Use 'general_reward' to plot the general reward score sub-dict.")
     arg_parser.add_argument("--monitor_model_name", type=str, default=None)
     arg_parser.add_argument("--judge_model_name", type=str, default=None)
+    arg_parser.add_argument("--figure_suffix", type=str, default=None,
+                            help="Optional suffix appended to the output PNG filename to distinguish figures.")
 
     args = arg_parser.parse_args()
 
@@ -280,6 +308,7 @@ if __name__ == "__main__":
         behavior_key=args.behavior_key,
         monitor_model_name=args.monitor_model_name,
         judge_model_name=args.judge_model_name,
+        figure_suffix=args.figure_suffix,
     )
 
 #bash my_eval/scripts/visualize_results_across_models.sh
