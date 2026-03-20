@@ -2,15 +2,12 @@ SRC_DIR=./my_eval/src
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/visualize_results_across_models.sh
+#bash my_eval/scripts/visualize_results_across_models_specific_misbehavior.sh
 
 # ── Monitor/Judge ─────────────────────
-#monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-#judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-#metrics_filename=Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json
+judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_model_name=gpt-4o-mini
-judge_model_name=gpt-4.1-mini
-metrics_filename=gpt-4o-mini_monitor-gpt-4.1-mini_llm_judge_metrics.json
+metrics_filename=gpt-4o-mini_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json
 #monitor_model_name=openai/gpt-oss-120b
 #judge_model_name=openai/gpt-oss-120b
 #metrics_filename=openai_gpt-oss-120b_monitor-openai_gpt-oss-120b_llm_judge_metrics.json
@@ -66,7 +63,8 @@ declare -A TASK_METHODS_SECONDARY=(
 )
 
 # ── Main loop ─────────────────────────────────────────────────────
-for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
+#for task in confidence sycophancy longer_response general_reward unsafe_compliance; do
+for task in confidence sycophancy longer_response unsafe_compliance; do
   dataset_name=${TASK_DATASET[$task]}
   task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
   task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}

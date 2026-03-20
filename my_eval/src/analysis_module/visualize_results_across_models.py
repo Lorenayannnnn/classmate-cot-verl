@@ -72,7 +72,7 @@ def plot_monitor_metrics_across_steps(
         base:    {result_dir}/{method}/step_base/{metrics_filename}
 
     Metrics file format (new nested format):
-        { behavior_key: { "mse": ..., "prediction_mean": ..., ... }, ... }
+        { behavior_key: { "rmse": ..., "prediction_mean": ..., ... }, ... }
 
     behavior_key selects which top-level key to read. Defaults to dataset_name.
     For general_reward's actual scoring key use behavior_key="general_reward".
@@ -120,7 +120,7 @@ def plot_monitor_metrics_across_steps(
                     metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
                     bk_data = _load_behavior_metrics(metrics_fn)
                     if bk_data:
-                        return "non_binary" if "mse" in bk_data else "binary"
+                        return "non_binary" if "rmse" in bk_data else "binary"
         return "binary"
 
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
@@ -129,14 +129,14 @@ def plot_monitor_metrics_across_steps(
     hue_order = display_names
     model_palette = {name: _COLOR_MAP.get(name, "#888888") for name in hue_order}
 
-    float_metrics = {"precision", "recall", "f1", "mse", "prediction_mean", "ground_truth_mean", "mean_score"}
+    float_metrics = {"precision", "recall", "f1", "rmse", "prediction_mean", "ground_truth_mean", "mean_score"}
 
     metric_mode = _detect_metric_mode()
     count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
     if metric_mode == "general_reward_score":
         metrics = ["mean_score", "total_valid_entries"]
     elif metric_mode == "non_binary":
-        metrics = ["mse", "prediction_mean", "ground_truth_mean"] + count_metrics
+        metrics = ["rmse", "prediction_mean", "ground_truth_mean"] + count_metrics
     else:
         metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"] + count_metrics
 
@@ -158,7 +158,7 @@ def plot_monitor_metrics_across_steps(
                     })
         return rows
 
-    def _plot_metric_ax(ax, metric, bk_load=None, label_override=None):
+    def _plot_metric_ax(ax, metric, bk_load=None, label_override=None, dataset_name=None):
         """Plot one metric on ax. Returns (legend_handles, legend_labels) or (None, None)."""
         data_rows = _build_metric_rows(metric, bk_load)
         if not data_rows:
@@ -191,9 +191,10 @@ def plot_monitor_metrics_across_steps(
 
     # Build plot_specs: list of (metric, bk_load, label_override)
     plot_specs = [(m, None, None) for m in metrics]
-    if dataset_name == "general_reward" and metric_mode == "non_binary":
-        # Insert after ground_truth_mean (index 2) so row 1 = mse, prediction_mean, ground_truth_mean, Reward Score
-        plot_specs.insert(3, ("mean_score", "general_reward", "Reward Score"))
+    if dataset_name == "general_reward" and metric_mode != "general_reward_score":
+        # Append reward score after the per-behavior metrics and before count metrics
+        insert_idx = len(metrics) - len(count_metrics)
+        plot_specs.insert(insert_idx, ("mean_score", "general_reward", "Reward Score"))
 
     fig_width = max(18, len(all_step_idx_list) * 2.7)
     n_cols = 4 if dataset_name == "general_reward" else 3
@@ -209,7 +210,7 @@ def plot_monitor_metrics_across_steps(
 
     for spec_idx, (metric, bk_load, label) in enumerate(plot_specs):
         ax = axes[spec_idx]
-        h, l = _plot_metric_ax(ax, metric, bk_load=bk_load, label_override=label)
+        h, l = _plot_metric_ax(ax, metric, bk_load=bk_load, label_override=label, dataset_name=dataset_name)
         if spec_idx == 0 and h:
             legend_handles, legend_labels = h, l
         if ax.get_legend() is not None:

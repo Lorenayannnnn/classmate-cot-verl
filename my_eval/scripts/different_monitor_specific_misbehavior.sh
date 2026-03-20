@@ -3,30 +3,20 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_monitor.sh
+#bash my_eval/scripts/different_monitor_specific_misbehavior.sh
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
 
 # ── Shared config (mirrors Python arg_parser) ─────────────────────
 num_eval_ckpts=6     # number of evenly-distributed checkpoints to evaluate
+judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
+
 #monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 #monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
-#judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-#llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
 monitor_model_name=gpt-4o-mini
 monitor_backend_type=openai        # "tinker", "vllm_generative", "hf_scoring"
-judge_model_name=gpt-4.1-mini
-llm_judge_backend_type=openai      # "tinker", "vllm_generative", "hf_scoring"
-
-#monitor_model_name=gpt-4o
-#monitor_backend_type=openai        # "tinker", "vllm_generative", "hf_scoring"
-#judge_model_name=gpt-4.1
-#llm_judge_backend_type=openai      # "tinker", "vllm_generative", "hf_scoring"
-#monitor_model_name=openai/gpt-oss-120b
-#monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
-#judge_model_name=openai/gpt-oss-120b
-#llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
 
 max_new_tokens=3072
 
@@ -41,7 +31,6 @@ declare -A TASK_DATASET=(
   [confidence]="confidence"
   [sycophancy]="sycophancy"
   [longer_response]="longer_response"
-  [general_reward]="general_reward"
   [unsafe_compliance]="unsafe_compliance"
 )
 
@@ -50,7 +39,6 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [confidence]=420
   [sycophancy]=200
   [longer_response]=400
-  [general_reward]=920
   [unsafe_compliance]=300
 )
 
@@ -59,7 +47,6 @@ declare -A TASK_STEP_SIZE=(
   [confidence]=20
   [sycophancy]=20
   [longer_response]=20
-  [general_reward]=40
   [unsafe_compliance]=20
 )
 
@@ -136,25 +123,12 @@ TASK_METHOD_RUNBASE=(
   "sycophancy        OURS_self            false"
   "longer_response   baseline_all_tokens  true"
   "longer_response   OURS_self            false"
-  "general_reward    baseline_all_tokens  true"
-  "general_reward    baseline_cot_only    false"
-  "general_reward    OURS_self            false"
-  "general_reward    OURS_llama           false"
+#  "general_reward    baseline_all_tokens  true"
+#  "general_reward    baseline_cot_only    false"
+#  "general_reward    OURS_self            false"
+#  "general_reward    OURS_llama           false"
   "unsafe_compliance baseline_all_tokens  true"
   "unsafe_compliance OURS_self            false"
-
-#  "confidence        baseline_all_tokens  true"
-#  "confidence        OURS_self            true"
-#  "sycophancy        baseline_all_tokens  true"
-#  "sycophancy        OURS_self            true"
-#  "longer_response   baseline_all_tokens  true"
-#  "longer_response   OURS_self            true"
-#  "general_reward    baseline_all_tokens  true"
-#  "general_reward    baseline_cot_only    true"
-#  "general_reward    OURS_self            true"
-#  "general_reward    OURS_llama           true"
-#  "unsafe_compliance baseline_all_tokens  true"
-#  "unsafe_compliance OURS_self            true"
 )
 
 # ── Cost estimation ───────────────────────────────────────────────
@@ -214,6 +188,3 @@ done
 
 wait
 echo "All tasks finished."
-
-#bash my_eval/scripts/different_monitor.sh
-#bash my_eval/scripts/different_monitor.sh true   # estimate cost only

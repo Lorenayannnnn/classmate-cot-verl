@@ -151,14 +151,14 @@ class BaseVerifier(ABC):
         prediction_mean = np.mean(predictions)
         ground_truth_mean = np.mean(ground_truths)
         mse = np.mean((predictions - ground_truths) ** 2)
-        # rmse = np.sqrt(mse)
-        mae = np.mean(np.abs(predictions - ground_truths))
+        rmse = np.sqrt(mse)
+        # mae = np.mean(np.abs(predictions - ground_truths))
 
         return {
             "mse": float(mse),
             "prediction_mean": float(prediction_mean),
             "ground_truth_mean": float(ground_truth_mean),
-            # "rmse": float(rmse),
+            "rmse": float(rmse),
             # "mae": float(mae)
         }
 

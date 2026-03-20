@@ -439,6 +439,17 @@ def run_different_monitor_and_judge(
                 b_metrics["total_entries"]              = len(entries)
                 all_metrics[behavior_key] = b_metrics
 
+            if is_general_reward:
+                general_reward_scores = np.array(
+                    [entry.get("general_reward_score", np.nan) for entry in entries], dtype=float
+                )
+                valid_general = ~np.isnan(general_reward_scores)
+                all_metrics["general_reward"] = {
+                    "mean_score": float(np.mean(general_reward_scores[valid_general])) if np.any(valid_general) else None,
+                    "total_valid_entries": int(np.sum(valid_general)),
+                    "total_entries": len(entries),
+                }
+
             metrics_output_path = os.path.join(result_dir, metrics_file_name)
             with open(metrics_output_path, "w") as metrics_file:
                 json.dump(all_metrics, metrics_file, indent=4)

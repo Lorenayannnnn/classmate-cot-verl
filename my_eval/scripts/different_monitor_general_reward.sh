@@ -3,7 +3,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_monitor.sh
+#bash my_eval/scripts/different_monitor_general_reward.sh
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
