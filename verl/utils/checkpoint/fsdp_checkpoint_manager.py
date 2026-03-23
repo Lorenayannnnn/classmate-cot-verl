@@ -350,6 +350,12 @@ class FSDPCheckpointManager(BaseCheckpointManager):
                             f"Warning: {self.__class__.__name__}.save_checkpoint: Generation config file not found "
                             f"in, using a generation config created from the model config when saving hf_model."
                         )
+                    # TODO haha
+                    # Ensure generation config is valid: if temperature/top_p are set, do_sample must be True
+                    gc = save_model.generation_config
+                    if (gc.temperature is not None and gc.temperature != 1.0) or \
+                       (gc.top_p is not None and gc.top_p != 1.0):
+                        gc.do_sample = True
 
                 save_model.save_pretrained(hf_local_path, state_dict=state_dict)
                 log_with_rank(

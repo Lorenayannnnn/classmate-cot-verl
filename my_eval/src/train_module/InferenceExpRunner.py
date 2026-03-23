@@ -7,6 +7,7 @@ import torch
 from tqdm import tqdm
 
 from verl.utils.reward_score.monitor import process_main_cot_helper
+from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 from verl.workers.reward_model.backend_factory import build_llm_judge_backend, build_monitor_backend
 
 
@@ -296,7 +297,7 @@ class InferenceExpRunner:
                 prefix="llm_judge",
             )
 
-        behavior_keys = ["sycophancy", "confidence", "longer_response"]
+        behavior_keys = BEHAVIOR_TO_MONITOR
         max_new_tokens = self.args.generation_args.get("max_tokens", None)
         behavior_verifiers = {
             bk: _get_verifier(data_source=bk, max_new_tokens=max_new_tokens)
@@ -436,6 +437,24 @@ class InferenceExpRunner:
         for i, pending in enumerate(tqdm(all_pending, desc="Collecting results")):
             result_dict = pending["result_dict"]
 
+            # General reward score (computed first so it can be passed to behavior loop)
+            raw_general = general_reward_outputs[i]
+            if isinstance(raw_general, dict):
+                general_reward_score = raw_general["score"]
+                general_reward_explanation = raw_general.get("judge_explanation", "general_reward_backend")
+            elif raw_general is None:
+                general_reward_score = verifier.invalid_score
+                general_reward_explanation = "Output is empty"
+            else:
+                general_reward_score, general_reward_explanation = verifier.parse_llm_judge_output(
+                    raw_general,
+                    continuation=result_dict["main_output"],
+                    continuation_token_ids=result_dict["main_output_ids"],
+                )
+            result_dict[GENERAL_REWARD_KEY] = general_reward_score
+            result_dict[GENERAL_REWARD_EXPL_KEY] = general_reward_explanation
+            all_general_reward_scores.append(general_reward_score)
+
             # Per-behavior monitor and judge scores
             for bk in behavior_keys:
                 bv = behavior_verifiers[bk]
@@ -455,6 +474,7 @@ class InferenceExpRunner:
                         continuation=result_dict["main_output"],
                         continuation_token_ids=result_dict["main_output_ids"],
                         gt=result_dict["ground_truth_for_llm_judge"],
+                        general_reward_score=result_dict.get(GENERAL_REWARD_KEY),
                     )
                 else:
                     raw_judge = behavior_judge_outputs[bk][i]
@@ -469,28 +489,11 @@ class InferenceExpRunner:
                             continuation=result_dict["main_output"],
                             continuation_token_ids=result_dict["main_output_ids"],
                             gt=result_dict["ground_truth_for_llm_judge"],
+                            general_reward_score=result_dict.get(GENERAL_REWARD_KEY),
                         )
                 result_dict[b_judge_score_key(bk)] = judge_score
                 result_dict[b_judge_expl_key(bk)] = judge_explanation
                 all_behavior_judge_scores[bk].append(judge_score)
-
-            # General reward score
-            raw_general = general_reward_outputs[i]
-            if isinstance(raw_general, dict):
-                general_reward_score = raw_general["score"]
-                general_reward_explanation = raw_general.get("judge_explanation", "general_reward_backend")
-            elif raw_general is None:
-                general_reward_score = verifier.invalid_score
-                general_reward_explanation = "Output is empty"
-            else:
-                general_reward_score, general_reward_explanation = verifier.parse_llm_judge_output(
-                    raw_general,
-                    continuation=result_dict["main_output"],
-                    continuation_token_ids=result_dict["main_output_ids"],
-                )
-            result_dict[GENERAL_REWARD_KEY] = general_reward_score
-            result_dict[GENERAL_REWARD_EXPL_KEY] = general_reward_explanation
-            all_general_reward_scores.append(general_reward_score)
 
             result_f.write(json.dumps(result_dict) + "\n")
 

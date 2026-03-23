@@ -19,8 +19,8 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-#base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+base_model_name_path=allenai/Olmo-3-7B-Think-SFT
+#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 #base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'

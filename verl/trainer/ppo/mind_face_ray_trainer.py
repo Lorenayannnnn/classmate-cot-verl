@@ -78,6 +78,7 @@ from verl.trainer.ppo.utils import Role, WorkerType, need_critic, need_reference
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path, should_save_ckpt_esi
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 from verl.workers.reward_model.backend_factory import build_monitor_backend, \
     build_eval_llm_judge_backend
 from verl.utils.debug import marked_timer
@@ -733,7 +734,7 @@ class MindFaceRayPPOTrainer:
             # Monitor using mind's CoT (monitors sycophantic reasoning in the CoT)
             if data_source_key == "general_reward":
                 all_behavior_judge_scores = []
-                for behavior_key in ["sycophancy", "confidence", "longer_response"]:
+                for behavior_key in BEHAVIOR_TO_MONITOR:
                     behavior_verifier = get_verifier(
                         data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
                     )

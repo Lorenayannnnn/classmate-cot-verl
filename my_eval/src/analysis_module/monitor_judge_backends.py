@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 from keys import OPENAI_KEY
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 from verl.utils.reward_score.monitor import create_llm_judge
 from verl.workers.reward_model.judge_backend import BaseBackend
 from verl.workers.reward_model.openai_backend import OpenAICompatibleBackend
@@ -158,12 +159,14 @@ def _parse_outputs_for_behavior(
         # Parse judge output
         if entry.get(b_judge_key) is None:
             if judge_use_continuation[i]:
-                # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
+                # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier,
+                # GeneralRewardVerifier — score passed via general_reward_score kwarg)
                 score, explanation = behavior_verifier.parse_llm_judge_output(
                     None,
                     continuation=entry["main_output"],
                     continuation_token_ids=entry.get("main_output_ids"),
                     gt=entry.get("ground_truth_for_llm_judge"),
+                    general_reward_score=entry.get("general_reward_score"),
                 )
             else:
                 raw = judge_outputs[i]
@@ -183,6 +186,7 @@ def _parse_outputs_for_behavior(
                         continuation=entry.get("main_output"),
                         continuation_token_ids=entry.get("main_output_ids"),
                         gt=entry.get("ground_truth_for_llm_judge"),
+                        general_reward_score=entry.get("general_reward_score"),
                     )
             entry[b_judge_key] = score
             entry[b_judge_expl_key] = explanation
@@ -329,7 +333,7 @@ def run_different_monitor_and_judge(
     for dataset_name in dataset_name_list:
         is_general_reward = dataset_name == "general_reward"
         behavior_keys = (
-            ["sycophancy", "confidence", "longer_response"]
+            BEHAVIOR_TO_MONITOR
             if is_general_reward
             else [dataset_name]
         )

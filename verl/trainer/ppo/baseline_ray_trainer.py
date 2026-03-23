@@ -39,6 +39,7 @@ from tqdm import tqdm
 from verl import DataProto
 from verl.utils.reward_score.monitor import parse_out_main_cot_output
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 from verl.workers.reward_model.backend_factory import build_monitor_backend, \
     build_eval_llm_judge_backend
 from verl.experimental.dataset.sampler import AbstractCurriculumSampler
@@ -627,7 +628,7 @@ class RayPPOTrainer:
         sample_uids = []
 
         # Keys are behavior data_source strings (e.g. "sycophancy_only").
-        # For general_reward batches the three behavior keys are added; for other
+        # For general_reward batches the BEHAVIOR_TO_MONITOR keys are added; for other
         # batches the batch's own data_source string is used.
         monitor_score_dictionary: dict[str, dict] = {}
 
@@ -716,9 +717,10 @@ class RayPPOTrainer:
                 item_raw_questions.append(item.non_tensor_batch["reward_model"]["raw_question_for_monitor"])
 
             if data_source_key == "general_reward":
-                # Monitor and score for each behavior; populate tracking vars from behavior judge scores
-                all_behavior_judge_scores = []
-                for behavior_key in ["sycophancy", "confidence", "longer_response"]:
+                # Monitor and score for each behavior; populate tracking vars from behavior judge scores.
+                # all_behavior_judge_scores is pre-allocated; general_reward entry filled after val_reward_fn.
+                all_behavior_judge_scores = [None] * len(BEHAVIOR_TO_MONITOR)
+                for b_idx, behavior_key in enumerate(BEHAVIOR_TO_MONITOR):
                     behavior_verifier = get_verifier(
                         data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
                     )
@@ -738,21 +740,23 @@ class RayPPOTrainer:
                             score, explanation = behavior_verifier.parse_monitor_output(raw_out)
                             behavior_monitor_scores.append(score)
 
-                    judge_inputs = [
-                        self.eval_llm_judge_backend.prepare_input(behavior_verifier, rq, fo)
-                        for rq, fo in zip(item_raw_questions, item_final_outputs)
-                    ]
-                    behavior_judge_scores = []
-                    for raw_out, final_ids in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids):
-                        judge_score, _ = behavior_verifier.parse_llm_judge_output(
-                            raw_out, continuation_token_ids=final_ids
-                        )
-                        behavior_judge_scores.append(judge_score)
-
                     entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "llm_judge_score": []})
                     entry["monitor_score"].extend(behavior_monitor_scores)
-                    entry["llm_judge_score"].extend(behavior_judge_scores)
-                    all_behavior_judge_scores.append(behavior_judge_scores)
+
+                    if behavior_key != "general_reward":
+                        judge_inputs = [
+                            self.eval_llm_judge_backend.prepare_input(behavior_verifier, rq, fo)
+                            for rq, fo in zip(item_raw_questions, item_final_outputs)
+                        ]
+                        behavior_judge_scores = []
+                        for raw_out, final_ids in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids):
+                            judge_score, _ = behavior_verifier.parse_llm_judge_output(
+                                raw_out, continuation_token_ids=final_ids
+                            )
+                            behavior_judge_scores.append(judge_score)
+                        entry["llm_judge_score"].extend(behavior_judge_scores)
+                        all_behavior_judge_scores[b_idx] = behavior_judge_scores
+                    # general_reward: judge scores deferred until actual_scores computed below
 
                 n_items = len(item_main_cots)
 
@@ -763,8 +767,14 @@ class RayPPOTrainer:
                 reward_tensor = result["reward_tensor"]
                 actual_scores = reward_tensor.sum(-1).cpu().tolist()
 
+                # Fill in deferred general_reward judge scores with actual reward model scores
+                if "general_reward" in BEHAVIOR_TO_MONITOR:
+                    gr_idx = list(BEHAVIOR_TO_MONITOR).index("general_reward")
+                    monitor_score_dictionary["general_reward"]["llm_judge_score"].extend(actual_scores)
+                    all_behavior_judge_scores[gr_idx] = actual_scores
+
                 # Debug logging: print first sample
-                behavior_keys = ["sycophancy", "confidence", "longer_response"]
+                behavior_keys = BEHAVIOR_TO_MONITOR
                 decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
                 already_print_count = 0
                 for i, (raw_q, main_cot, final_out, actual_score) in enumerate(zip(
