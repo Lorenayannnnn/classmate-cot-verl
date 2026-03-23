@@ -3,14 +3,19 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_monitor_specific_misbehavior.sh
-#bash my_eval/scripts/different_monitor_specific_misbehavior.sh true   # estimate cost only
+#bash my_eval/scripts/different_monitor_all_settings.sh
+#bash my_eval/scripts/different_monitor_all_settings.sh true   # estimate cost only
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
 
-# ── monitor / judge / dataset table (specific-behavior tasks only) ─
+# ── monitor / judge / dataset table ────────────────────────────────
+# Format: "monitor_model  judge_model  dataset"
+# Each entry runs all TASK_METHOD_RUNBASE rows whose task == dataset.
 MONITOR_JUDGE_DATASET=(
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
@@ -24,14 +29,19 @@ MONITOR_JUDGE_DATASET=(
 
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
-  "confidence        baseline_all_tokens  true"
-  "confidence        OURS_self            false"
-  "sycophancy        baseline_all_tokens  true"
-  "sycophancy        OURS_self            false"
-  "longer_response   baseline_all_tokens  true"
-  "longer_response   OURS_self            false"
-  "unsafe_compliance baseline_all_tokens  true"
-  "unsafe_compliance OURS_self            false"
+  "confidence        baseline_all_tokens       true"
+  "confidence        OURS_self                 false"
+  "sycophancy        baseline_all_tokens       true"
+  "sycophancy        OURS_self                 false"
+  "longer_response   baseline_all_tokens       true"
+  "longer_response   OURS_self                 false"
+  "general_reward    baseline_all_tokens       true"
+  "general_reward    baseline_all_tokens_w_kl  false"
+  "general_reward    baseline_cot_only         false"
+  "general_reward    OURS_self                 false"
+  "general_reward    OURS_llama                false"
+  "unsafe_compliance baseline_all_tokens       true"
+  "unsafe_compliance OURS_self                 false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -46,12 +56,14 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [confidence]=420
   [sycophancy]=200
   [longer_response]=400
+  [general_reward]=920
   [unsafe_compliance]=300
 )
 declare -A TASK_STEP_SIZE=(
   [confidence]=20
   [sycophancy]=20
   [longer_response]=20
+  [general_reward]=40
   [unsafe_compliance]=20
 )
 

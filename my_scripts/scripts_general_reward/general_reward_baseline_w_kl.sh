@@ -1,54 +1,65 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/llama/general_reward_baseline_cot_only.sh
+#result_dir="/proj/interaction/interaction-filer/lorena/"
+result_dir=outputs
 
-result_dir="/proj/interaction/interaction-filer/lorena/"
-#result_dir=outputs/
-
-data_dir=./data/general_reward_llama
+#bash my_scripts/scripts_general_reward/general_reward_baseline_w_kl.sh
+data_dir=./data
 dataset_name="general_reward"
 #seed=0
-#gpu_idx=4,5
-seed=1
-gpu_idx=0,1
-#seed=2
-#gpu_idx=0,1
+#gpu_idx=0
+#seed=1
+#gpu_idx=1
+seed=2
+gpu_idx=2
 
-train_path=${data_dir}/seed_${seed}/train.parquet
-eval_path=${data_dir}/dev.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
+eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-base_model_name_path=meta-llama/Llama-3.2-3B-Instruct
-think_start_str="### Reasoning"
-think_end_str="### Output"
-token_level_main_reward_mode=cot_only  # options: "all_tokens", "cot_only", "output_only"
 
+#base_model_name_path=Qwen/Qwen3-1.7B
+base_model_name_path=Qwen/Qwen3-0.6B
+think_start_str="<think>"
+think_end_str="</think>"
+token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
+#"tinker", "vllm_generative", "hf_scoring"
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-monitor_backend_type=tinker
+monitor_backend_type=tinker  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
-llm_judge_backend_type=hf_scoring
+llm_judge_backend_type=hf_scoring  # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_backend_dtype=bfloat16
 eval_llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 eval_llm_judge_backend_type=tinker
-
-train_size=8000
+# TODO change custom_chat_template in verl/trainer/config/model/hf_model.yaml
+train_size=8000   # After filtering out too long prompts
 
 max_response_length=3072
 
-gpu_num=2
-train_batch_size=64
-mini_batch_size_per_gpu=32
+gpu_num=1
+train_batch_size=16
+mini_batch_size_per_gpu=16
 
-save_freq=20
+#gpu_num=4
+#train_batch_size=64
+#mini_batch_size_per_gpu=16
+
+#total_ckpts=25
+#total_test_times=50
+#save_freq=$((train_steps / total_ckpts))
+#test_freq=$((train_steps / total_test_times))
+save_freq=40
 test_freq=20
 
-epoch_num=6
+epoch_num=3
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
+##HYDRA_FULL_ERROR=1
+#python3 -m verl.trainer.qwen_main_ppo \
 [ -z "${SLURM_JOB_ID}" ] && export CUDA_VISIBLE_DEVICES=${gpu_idx}
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -64,7 +75,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
-    actor_rollout_ref.actor.use_kl_loss=False \
+    actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
@@ -80,7 +91,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}_w_kl/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -100,9 +111,15 @@ python3 -m verl.trainer.main_ppo \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
     'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
+#    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
+#    reward_model.llm_judge_model=${llm_judge_model} \
+#    actor_rollout_ref.model.lora_rank=32 \
+#    actor_rollout_ref.model.lora_alpha=32 \
+#    actor_rollout_ref.model.target_modules=all-linear \
+#    actor_rollout_ref.model.use_shm=True
 
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-think_prompt-baseline_${token_level_main_reward_mode}-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}_w_kl/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}_w_kl-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

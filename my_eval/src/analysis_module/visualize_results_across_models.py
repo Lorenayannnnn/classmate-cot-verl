@@ -14,25 +14,40 @@ import matplotlib.pyplot as mpl_plt
 _METHOD_DISPLAY = {
     "baseline_all_tokens": "Baseline (All Tokens)",
     "baseline_cot_only":   "Baseline (CoT only)",
+    "baseline_all_tokens_w_kl": "Baseline (All Tokens) w/ KL",
     "baseline_output_only":"Baseline (output only)",
     "OURS_self":           "OURS (self)",
     "OURS_llama":          "OURS (llama)",
 }
 
 _COLOR_MAP = {
-    "Baseline (All Tokens)": "#F5A623",  # amber — stronger baseline
-    "Baseline (CoT only)": "#BDBDBD",  # gray — recedes, weaker variant
-    "OURS (self)":         "#D94F3D",  # red — best, boldest
-    "OURS (llama)":        "#5fc6e8",
+    "Baseline (All Tokens)":         "#5DBFA4",
+    "Baseline (All Tokens) w/ KL":   "#185FA5",
+    "Baseline (CoT only)":           "#38B0D8",
+    "OURS (self)":                   "#D85A30",
+    "OURS (llama)":                  "#EF9F27",
 }
 
 
 _GENERAL_REWARD_BEHAVIORS = ["sycophancy", "confidence", "longer_response", "general_reward"]
 
-# Fallback metrics file to read general_reward scores from when the primary file lacks that key
+# Fallback metrics file to read general_reward scores from when the primary file lacks that key.
+# This is the base filename (without intersection_ prefix); the prefix is added when visualize_shared=True.
 _GENERAL_REWARD_FALLBACK_METRICS_FILENAME = (
     "Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json"
 )
+
+
+def _sanitize_model_name(name: str) -> str:
+    return name.replace("/", "_")
+
+
+def _build_metrics_filename(monitor_model_name: str, judge_model_name: str, shared: bool = False) -> str:
+    base = (
+        f"{_sanitize_model_name(monitor_model_name)}_monitor"
+        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics.json"
+    )
+    return f"intersection_{base}" if shared else base
 
 
 def _metrics_path(result_dir, method, step_idx, seed, metrics_filename):
@@ -55,29 +70,48 @@ def plot_monitor_metrics_across_steps(
     methods_list,
     seeds_list,
     all_step_idx_list,
-    result_dir,         # outputs_eval/{task}/{base_model}
+    result_dir,           # outputs_eval/{task}/{base_model}
     dataset_name,
-    metrics_filename,
-    behavior_key=None,  # key to read from the nested metrics dict; defaults to dataset_name
+    behavior_key=None,    # key to read from the nested metrics dict; defaults to dataset_name
     monitor_model_name=None,
     judge_model_name=None,
-    figure_suffix=None, # optional suffix appended to the output filename
+    figure_suffix=None,   # optional suffix appended to the output filename
+    visualize_shared=False,  # if True, load intersection_ metrics files
 ):
     """
     For each method in methods_list, load metrics across steps and seeds,
     then plot mean ± std across seeds as a line with shaded error band.
 
     Directory layout expected:
-        regular: {result_dir}/{method}/step_{step_idx}/{seed}/{metrics_filename}
-        base:    {result_dir}/{method}/step_base/{metrics_filename}
+        regular: {result_dir}/{method}/step_{step_idx}/{seed}/main/{metrics_filename}
+        base:    {result_dir}/{method}/step_base/{seed}/main/{metrics_filename}
+                 or (seed-independent):
+                 {result_dir}/{method}/step_base/main/{metrics_filename}
 
     Metrics file format (new nested format):
         { behavior_key: { "rmse": ..., "prediction_mean": ..., ... }, ... }
 
     behavior_key selects which top-level key to read. Defaults to dataset_name.
     For general_reward's actual scoring key use behavior_key="general_reward".
+    When visualize_shared=True, reads intersection_ prefixed metrics files.
     """
+    assert monitor_model_name and judge_model_name, (
+        "monitor_model_name and judge_model_name are required"
+    )
+    # Perf metrics (RMSE, prediction_mean, etc.) always come from the intersection file so that
+    # all methods are evaluated on the exact same entries.  Count metrics (total_monitored_entries,
+    # total_valid_*) always come from the raw (non-intersection) file to show actual per-method counts.
+    intersection_metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True)
+    raw_metrics_filename          = _build_metrics_filename(monitor_model_name, judge_model_name, shared=False)
+    metrics_filename = intersection_metrics_filename  # default used by _load_behavior_metrics / _mean_shared_entries
     bk = behavior_key or dataset_name
+
+    # For the general_reward dataset the top-level "general_reward" figure
+    # (bk == dataset_name) is superseded by the per-behavior figures and the
+    # main figure; skip it to avoid generating a redundant/misleading plot.
+    if dataset_name == "general_reward" and bk == dataset_name:
+        print(f"[skip] general_reward / general_reward top-level figure — use visualize_main_figure.py instead.")
+        return
 
     def _load_behavior_metrics(metrics_fn, bk_override=None):
         """Load the metrics dict for bk (or bk_override) from a file, returning {} if missing."""
@@ -99,9 +133,12 @@ def plot_monitor_metrics_across_steps(
         result = _extract_from_data(data)
         if result is not None:
             return result
-        # Fallback: for general_reward key, try the Qwen monitor metrics file in the same dir
+        # Fallback: for general_reward key, try the Qwen monitor metrics file in the same dir.
+        # Since _load_behavior_metrics is only called with the intersection file for perf metrics,
+        # the fallback is also always the intersection variant.
         if bk_use == "general_reward":
-            fallback_fn = os.path.join(os.path.dirname(metrics_fn), _GENERAL_REWARD_FALLBACK_METRICS_FILENAME)
+            fallback_name = f"intersection_{_GENERAL_REWARD_FALLBACK_METRICS_FILENAME}"
+            fallback_fn = os.path.join(os.path.dirname(metrics_fn), fallback_name)
             if os.path.exists(fallback_fn) and fallback_fn != metrics_fn:
                 with open(fallback_fn) as f:
                     fallback_data = json.load(f)
@@ -132,23 +169,26 @@ def plot_monitor_metrics_across_steps(
     float_metrics = {"precision", "recall", "f1", "rmse", "prediction_mean", "ground_truth_mean", "mean_score"}
 
     metric_mode = _detect_metric_mode()
-    count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
     if metric_mode == "general_reward_score":
-        metrics = ["mean_score", "total_valid_entries"]
+        perf_metrics  = ["mean_score"]
+        count_metrics = ["total_valid_entries"]
     elif metric_mode == "non_binary":
-        metrics = ["rmse", "prediction_mean", "ground_truth_mean"] + count_metrics
+        perf_metrics  = ["rmse", "prediction_mean", "ground_truth_mean"]
+        count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
     else:
-        metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"] + count_metrics
+        perf_metrics  = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"]
+        count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
 
     def _to_num(s):
         return 0 if s == "base" else int(s)
 
-    def _build_metric_rows(metric, bk_load=None):
+    def _build_metric_rows(metric, bk_load=None, alt_metrics_filename=None):
+        fn = alt_metrics_filename or metrics_filename
         rows = []
         for method, display_name in zip(methods_list, display_names):
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
-                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, fn)
                     bk_data = _load_behavior_metrics(metrics_fn, bk_load)
                     rows.append({
                         "RL Steps": _to_num(step_idx),
@@ -158,9 +198,26 @@ def plot_monitor_metrics_across_steps(
                     })
         return rows
 
-    def _plot_metric_ax(ax, metric, bk_load=None, label_override=None, dataset_name=None):
+    def _mean_shared_entries():
+        """Return mean total_monitored_entries across all (method, step, seed) from intersection file.
+
+        Since the intersection is the same for all methods at a given (step, seed), this is just
+        the average number of shared valid entries per evaluation point.
+        """
+        vals = []
+        for method in methods_list:
+            for step_idx in all_step_idx_list:
+                for seed in seeds_list:
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
+                    bk_data = _load_behavior_metrics(metrics_fn)
+                    v = bk_data.get("total_monitored_entries", None)
+                    if v is not None:
+                        vals.append(v)
+        return int(round(np.mean(vals))) if vals else None
+
+    def _plot_metric_ax(ax, metric, bk_load=None, label_override=None, alt_metrics_filename=None):
         """Plot one metric on ax. Returns (legend_handles, legend_labels) or (None, None)."""
-        data_rows = _build_metric_rows(metric, bk_load)
+        data_rows = _build_metric_rows(metric, bk_load, alt_metrics_filename=alt_metrics_filename)
         if not data_rows:
             return None, None
         df = pd.DataFrame(data_rows)
@@ -189,12 +246,14 @@ def plot_monitor_metrics_across_steps(
         sns.despine(ax=ax)
         return ax.get_legend_handles_labels()
 
-    # Build plot_specs: list of (metric, bk_load, label_override)
-    plot_specs = [(m, None, None) for m in metrics]
+    # Build plot_specs: list of (metric, bk_load, label_override, alt_metrics_filename)
+    # Perf metrics use the intersection file (metrics_filename); count metrics use the raw file.
+    perf_specs  = [(m, None, None, None)                      for m in perf_metrics]
+    count_specs = [(m, None, None, raw_metrics_filename)      for m in count_metrics]
     if dataset_name == "general_reward" and metric_mode != "general_reward_score":
-        # Append reward score after the per-behavior metrics and before count metrics
-        insert_idx = len(metrics) - len(count_metrics)
-        plot_specs.insert(insert_idx, ("mean_score", "general_reward", "Reward Score"))
+        # Insert reward score subplot (from intersection file) between perf and count metrics
+        perf_specs.append(("mean_score", "general_reward", "Reward Score", None))
+    plot_specs = perf_specs + count_specs
 
     fig_width = max(18, len(all_step_idx_list) * 2.7)
     n_cols = 4 if dataset_name == "general_reward" else 3
@@ -208,9 +267,9 @@ def plot_monitor_metrics_across_steps(
 
     legend_handles = legend_labels = None
 
-    for spec_idx, (metric, bk_load, label) in enumerate(plot_specs):
+    for spec_idx, (metric, bk_load, label, alt_fn) in enumerate(plot_specs):
         ax = axes[spec_idx]
-        h, l = _plot_metric_ax(ax, metric, bk_load=bk_load, label_override=label, dataset_name=dataset_name)
+        h, l = _plot_metric_ax(ax, metric, bk_load=bk_load, label_override=label, alt_metrics_filename=alt_fn)
         if spec_idx == 0 and h:
             legend_handles, legend_labels = h, l
         if ax.get_legend() is not None:
@@ -228,14 +287,20 @@ def plot_monitor_metrics_across_steps(
     else:
         topic_title = f"{dataset_title} / {behavior_title}"
         topic_fn = f"{dataset_name}_{bk}"
-    title_lines = [f"{topic_title} / {base_model} (mean ± std across seeds)"]
-    if monitor_model_name or judge_model_name:
-        subtitle_parts = []
-        if monitor_model_name:
-            subtitle_parts.append(f"Monitor: {monitor_model_name}")
-        if judge_model_name:
-            subtitle_parts.append(f"Judge: {judge_model_name}")
+
+    # Perf metrics always use shared intersection; annotate the shared entry count in the title.
+    title_lines = [f"{topic_title} / {base_model} (mean ± std across seeds) [perf: shared intersection]"]
+    subtitle_parts = []
+    if monitor_model_name:
+        subtitle_parts.append(f"Monitor: {monitor_model_name}")
+    if judge_model_name:
+        subtitle_parts.append(f"Judge: {judge_model_name}")
+    mean_n = _mean_shared_entries()
+    if mean_n is not None:
+        subtitle_parts.append(f"Shared valid entries: ~{mean_n}/500 (avg across steps & seeds)")
+    if subtitle_parts:
         title_lines.append("  |  ".join(subtitle_parts))
+
     fig.suptitle("\n".join(title_lines), fontsize=14, fontweight="bold")
     fig.tight_layout()
 
@@ -247,7 +312,7 @@ def plot_monitor_metrics_across_steps(
             ncol=len(legend_labels),
             frameon=True, framealpha=0.9,
             edgecolor="#cccccc",
-            fontsize=10, title="Method", title_fontsize=11,
+            fontsize=13, title="Method", title_fontsize=14,
         )
 
     metrics_stem = os.path.splitext(metrics_filename)[0]
@@ -280,13 +345,14 @@ if __name__ == "__main__":
                             help="Comma-separated methods to compare")
     arg_parser.add_argument("--seeds", type=str, default="seed_0,seed_1,seed_2",
                             help="Comma-separated seed dirs")
-    arg_parser.add_argument("--metrics_filename", type=str, required=True,
-                            help="Metrics JSON filename, e.g. gpt-4o_monitor-gpt-4.1_llm_judge_metrics.json")
     arg_parser.add_argument("--behavior_key", type=str, default=None,
                             help="Top-level key in metrics JSON to plot (defaults to dataset_name). "
                                  "Use 'general_reward' to plot the general reward score sub-dict.")
-    arg_parser.add_argument("--monitor_model_name", type=str, default=None)
-    arg_parser.add_argument("--judge_model_name", type=str, default=None)
+    arg_parser.add_argument("--monitor_model_name", type=str, required=True)
+    arg_parser.add_argument("--judge_model_name",   type=str, required=True)
+    arg_parser.add_argument("--visualize_shared", action="store_true",
+                            help="If set, read intersection_ metrics files (shared valid entries "
+                                 "across methods) instead of per-method metrics.")
     arg_parser.add_argument("--figure_suffix", type=str, default=None,
                             help="Optional suffix appended to the output PNG filename to distinguish figures.")
 
@@ -305,11 +371,11 @@ if __name__ == "__main__":
         all_step_idx_list=all_step_idx,
         result_dir=args.result_dir,
         dataset_name=args.dataset_name,
-        metrics_filename=args.metrics_filename,
         behavior_key=args.behavior_key,
         monitor_model_name=args.monitor_model_name,
         judge_model_name=args.judge_model_name,
         figure_suffix=args.figure_suffix,
+        visualize_shared=args.visualize_shared,
     )
 
 #bash my_eval/scripts/visualize_results_across_models.sh

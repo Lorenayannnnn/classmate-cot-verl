@@ -6,8 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/inference_iterate/iterate_general_reward_qwen_w_cl_llama.sh
-#bash my_eval/scripts/inference_iterate/iterate_general_reward_qwen_w_cl_llama.sh 800
+#bash my_eval/scripts/inference_iterate/iterate_general_reward_specific_model_diff_seeds.sh
+#bash my_eval/scripts/inference_iterate/iterate_general_reward_specific_model_diff_seeds.sh 920
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
 base_model_name_or_path=Qwen/Qwen3-0.6B
@@ -97,9 +97,9 @@ _run_seed_task() {
 # ── Launch 3 seeds in parallel (one GPU each) ─────────────────────────────── #
 # Base is shared with Qwen baseline — already run by iterate_general_reward.sh
 #  GPU  hf_prefix                                                    seed    run_base
-_run_seed_task 0  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_0  false &
-_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_1  false
-_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama  seed_2  false
+_run_seed_task 0  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens  seed_0  false
+#_run_seed_task 1  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens_w_kl  seed_1  false &
+#_run_seed_task 2  LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens_w_kl  seed_2  false
 
 wait
 echo "All tasks finished."

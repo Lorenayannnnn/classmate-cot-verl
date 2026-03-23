@@ -296,6 +296,39 @@
   ```
 - Merge ckpts: [merge_fsdp_ckpts.sh](my_scripts/merge_fsdp_ckpts.sh)
 
+
+
+# Run Scripts Steps
+1. Training scripts: [my_scripts](my_scripts)
+2. Run inference: 
+   - General reward:
+     - All models: [iterate_general_reward.sh](my_eval/scripts/inference_iterate/iterate_general_reward.sh)
+     - One model but different seeds in parallel: [iterate_general_reward_specific_model_diff_seeds.sh](my_eval/scripts/inference_iterate/iterate_general_reward_specific_model_diff_seeds.sh)
+   - Specific behavior:
+     - All models: [iterate_specific_settings.sh](my_eval/scripts/inference_iterate/iterate_specific_settings.sh)
+3. Different monitor:
+   - All settings: [different_monitor.sh](my_eval/scripts/different_monitor_all_settings.sh)
+   - General reward: [different_monitor_general_reward.sh](my_eval/scripts/different_monitor_general_reward.sh)
+   - Specific behavior: [different_monitor_specific_misbehavior.sh](my_eval/scripts/different_monitor_specific_misbehavior.sh)
+4. Visualize:
+   - **Compute intersection metrics** (shared valid entries across methods, run once after step 3):
+     ```
+     bash my_eval/scripts/compute_and_visualize_general_reward.sh
+     ```
+     *(runs `compute_intersection_metrics.py` + both regular and shared visualizations in one command)*
+   - **Main section figures**:
+     ```
+     bash my_eval/scripts/visualize_main_figure.sh
+     ```
+     - General reward: 3 behavior RMSE subplots + reward score panel
+     - Specific behavior: up to 4 RMSE panels (uncomment loop in script)
+     - Toggle `shared_flag=--visualize_shared` at the top of the script
+   - **Detail figures** (all metrics per behavior, one figure per behavior):
+     - All tasks: [visualize_results_across_models.sh](my_eval/scripts/visualize_results_across_models_all_settings_full_figure.sh)
+     - General reward only: [visualize_results_across_models_general_reward.sh](my_eval/scripts/visualize_results_across_models_general_reward_full_figure.sh)
+     - Add `--visualize_shared` flag to plot shared-intersection metrics (hides count subplots, shows shared N in title)
+
+
 # Others
 - Storage path:
   - /local/data/lorena/
