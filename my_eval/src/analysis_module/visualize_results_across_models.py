@@ -29,14 +29,6 @@ _COLOR_MAP = {
 }
 
 
-_GENERAL_REWARD_BEHAVIORS = ["sycophancy", "confidence", "longer_response", "general_reward"]
-
-# Fallback metrics file to read general_reward scores from when the primary file lacks that key.
-# This is the base filename (without intersection_ prefix); the prefix is added when visualize_shared=True.
-_GENERAL_REWARD_FALLBACK_METRICS_FILENAME = (
-    "Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json"
-)
-
 
 def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_")
@@ -76,7 +68,6 @@ def plot_monitor_metrics_across_steps(
     monitor_model_name=None,
     judge_model_name=None,
     figure_suffix=None,   # optional suffix appended to the output filename
-    visualize_shared=False,  # if True, load intersection_ metrics files
 ):
     """
     For each method in methods_list, load metrics across steps and seeds,
@@ -93,7 +84,9 @@ def plot_monitor_metrics_across_steps(
 
     behavior_key selects which top-level key to read. Defaults to dataset_name.
     For general_reward's actual scoring key use behavior_key="general_reward".
-    When visualize_shared=True, reads intersection_ prefixed metrics files.
+    Perf metrics (RMSE, prediction_mean, ground_truth_mean, mean_score) always read from
+    intersection_ files (shared valid entries across all methods/steps/seeds).
+    Count metrics (total_monitored_entries, total_valid_*) read from raw (non-intersection) files.
     """
     assert monitor_model_name and judge_model_name, (
         "monitor_model_name and judge_model_name are required"
@@ -131,21 +124,7 @@ def plot_monitor_metrics_across_steps(
         with open(metrics_fn) as f:
             data = json.load(f)
         result = _extract_from_data(data)
-        if result is not None:
-            return result
-        # Fallback: for general_reward key, try the Qwen monitor metrics file in the same dir.
-        # Since _load_behavior_metrics is only called with the intersection file for perf metrics,
-        # the fallback is also always the intersection variant.
-        if bk_use == "general_reward":
-            fallback_name = f"intersection_{_GENERAL_REWARD_FALLBACK_METRICS_FILENAME}"
-            fallback_fn = os.path.join(os.path.dirname(metrics_fn), fallback_name)
-            if os.path.exists(fallback_fn) and fallback_fn != metrics_fn:
-                with open(fallback_fn) as f:
-                    fallback_data = json.load(f)
-                result = _extract_from_data(fallback_data)
-                if result is not None:
-                    return result
-        return {}
+        return result if result is not None else {}
 
     def _detect_metric_mode():
         """Return 'non_binary', 'general_reward_score', or 'binary'."""
@@ -275,7 +254,12 @@ def plot_monitor_metrics_across_steps(
         if ax.get_legend() is not None:
             ax.get_legend().remove()
 
+    # For general_reward the grid is 2×4 with 7 specs — axes[7] is the empty cell
+    # below "Reward Score".  Reserve it for the legend; delete all other surplus cells.
+    legend_cell_idx = len(plot_specs) if dataset_name == "general_reward" else None
     for idx in range(len(plot_specs), len(axes)):
+        if idx == legend_cell_idx:
+            continue
         fig.delaxes(axes[idx])
 
     behavior_title = bk.replace("_", " ").title()
@@ -305,27 +289,40 @@ def plot_monitor_metrics_across_steps(
     fig.tight_layout()
 
     if legend_handles and legend_labels:
-        fig.legend(
-            legend_handles, legend_labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 0.0),
-            ncol=len(legend_labels),
-            frameon=True, framealpha=0.9,
-            edgecolor="#cccccc",
-            fontsize=13, title="Method", title_fontsize=14,
-        )
+        if legend_cell_idx is not None:
+            # Place legend in the empty cell below "Reward Score" (general_reward layout)
+            legend_ax = axes[legend_cell_idx]
+            legend_ax.axis("off")
+            legend_ax.legend(
+                legend_handles, legend_labels,
+                loc="center", ncol=1,
+                frameon=True, framealpha=0.9,
+                edgecolor="#cccccc",
+                fontsize=13, title="Method", title_fontsize=14,
+            )
+        else:
+            fig.legend(
+                legend_handles, legend_labels,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 0.0),
+                ncol=len(legend_labels),
+                frameon=True, framealpha=0.9,
+                edgecolor="#cccccc",
+                fontsize=13, title="Method", title_fontsize=14,
+            )
 
     metrics_stem = os.path.splitext(metrics_filename)[0]
     monitor_slug = (monitor_model_name or "unknown").replace("/", "_")
     judge_slug = (judge_model_name or "unknown").replace("/", "_")
     monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_llm_judge"
+    task_group = "general_reward" if dataset_name == "general_reward" else "specific_behaviors"
     vis_dir = os.path.join(
-        os.path.dirname(os.path.dirname(result_dir)), "visualization", monitor_judge_dir, base_model
+        os.path.dirname(os.path.dirname(result_dir)), "visualization", "full_figures", task_group, monitor_judge_dir, base_model
     )
     os.makedirs(vis_dir, exist_ok=True)
     suffix_str = f"_{figure_suffix}" if figure_suffix else ""
-    output_fn = os.path.join(vis_dir, f"{base_model}_{topic_fn}_{metrics_stem}_comparison{suffix_str}.png")
-    fig.savefig(output_fn, bbox_inches="tight", dpi=150)
+    output_fn = os.path.join(vis_dir, f"{base_model}_{topic_fn}_{metrics_stem}_comparison{suffix_str}.pdf")
+    fig.savefig(output_fn, bbox_inches="tight")
     mpl_plt.close(fig)
     print(f"[saved] {output_fn}")
 
@@ -350,9 +347,6 @@ if __name__ == "__main__":
                                  "Use 'general_reward' to plot the general reward score sub-dict.")
     arg_parser.add_argument("--monitor_model_name", type=str, required=True)
     arg_parser.add_argument("--judge_model_name",   type=str, required=True)
-    arg_parser.add_argument("--visualize_shared", action="store_true",
-                            help="If set, read intersection_ metrics files (shared valid entries "
-                                 "across methods) instead of per-method metrics.")
     arg_parser.add_argument("--figure_suffix", type=str, default=None,
                             help="Optional suffix appended to the output PNG filename to distinguish figures.")
 
@@ -375,7 +369,6 @@ if __name__ == "__main__":
         monitor_model_name=args.monitor_model_name,
         judge_model_name=args.judge_model_name,
         figure_suffix=args.figure_suffix,
-        visualize_shared=args.visualize_shared,
     )
 
 #bash my_eval/scripts/visualize_results_across_models.sh

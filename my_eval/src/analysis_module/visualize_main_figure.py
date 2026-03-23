@@ -17,8 +17,7 @@ Layout — 2 rows × 4 columns:
     Row 1 (Ground Truth):  GT    GT    GT    GT
     Behaviors in order: longer_response, confidence, sycophancy, unsafe_compliance
 
-Each behavior column title shows "{Behavior Name} (X/500)" where X is the mean
-number of shared valid entries (from intersection_ metrics files).
+Each behavior column title shows the behavior display name.
 
 Usage:
   # General reward (3 behaviors + reward score):
@@ -27,16 +26,15 @@ Usage:
     --dataset_name general_reward \\
     --behavior_keys longer_response,confidence,sycophancy \\
     --include_reward_score \\
-    --methods baseline_all_tokens,OURS_self \\
-    --visualize_shared ...
+    --methods baseline_all_tokens,OURS_self
 
-  # Specific behavior (4 behaviors):
+  # Specific behavior (4 behaviors, one column per trained model):
   python visualize_main_figure.py \\
-    --result_dir outputs_eval/confidence/Qwen3-0.6B \\
-    --dataset_name confidence \\
+    --dataset_name specific_behaviors \\
     --behavior_keys longer_response,confidence,sycophancy,unsafe_compliance \\
     --methods baseline_all_tokens,OURS_self \\
-    --visualize_shared ...
+    --per_behavior_result_dirs longer_response:outputs_eval/longer_response/Qwen3-0.6B ... \\
+    --per_behavior_step_configs longer_response:6:20:60 ...
 """
 
 import os
@@ -68,11 +66,6 @@ _COLOR_MAP = {
     "OURS (self)":                  "#D85A30",
     "OURS (llama)":                 "#EF9F27",
 }
-
-# Fallback metrics file to read general_reward scores from when the primary file lacks that key.
-_GENERAL_REWARD_FALLBACK_METRICS_FILENAME = (
-    "Qwen_Qwen3-30B-A3B-Instruct-2507_monitor-Qwen_Qwen3-30B-A3B-Instruct-2507_llm_judge_metrics.json"
-)
 
 _BEHAVIOR_DISPLAY = {
     "sycophancy":       "Sycophancy",
@@ -133,16 +126,13 @@ def plot_main_figure(
     Row 1: Ground truth mean for each behavior column; col 3 is empty
            (general_reward) or 4th behavior GT (specific behavior).
 
-    Column titles show "{Behavior} (X/500)" where X is the mean number of
-    shared valid entries from the intersection metrics file.
-
     For specific-behavior figures, pass result_dir_per_bk and step_config_per_bk
     so each column reads from the model trained on that specific behavior.
     """
     assert monitor_model_name and judge_model_name, (
         "monitor_model_name and judge_model_name are required"
     )
-    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name)
+    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True)
 
     # ---------------------------------------------------------------- #
     # Helpers
@@ -161,18 +151,7 @@ def plot_main_figure(
         with open(metrics_fn) as f:
             data = json.load(f)
         result = _extract_from_data(data, bk)
-        if result is not None:
-            return result
-        if bk == "general_reward":
-            fallback_name = f"intersection_{_GENERAL_REWARD_FALLBACK_METRICS_FILENAME}"
-            fallback_fn = os.path.join(os.path.dirname(metrics_fn), fallback_name)
-            if os.path.exists(fallback_fn) and fallback_fn != metrics_fn:
-                with open(fallback_fn) as f:
-                    fallback_data = json.load(f)
-                result = _extract_from_data(fallback_data, bk)
-                if result is not None:
-                    return result
-        return {}
+        return result if result is not None else {}
 
     def _to_num(s):
         return 0 if s == "base" else int(s)
@@ -204,24 +183,6 @@ def plot_main_figure(
                         "Seed":     seed,
                     })
         return rows
-
-    def _mean_shared_entries(bk):
-        """Mean number of entries used for metrics across all (method, step, seed).
-
-        For behavior keys (RMSE): reads total_monitored_entries (the shared intersection count).
-        For general_reward (reward score): reads total_valid_entries (always defined, no intersection).
-        """
-        count_key = "total_valid_entries" if bk == "general_reward" else "total_monitored_entries"
-        vals = []
-        for method in methods_list:
-            for step_idx in _step_list(bk):
-                for seed in seeds_list:
-                    fn = _metrics_path(_rdir(bk), method, step_idx, seed, metrics_filename)
-                    bk_data = _load_bk(fn, bk)
-                    v = bk_data.get(count_key, None)
-                    if v is not None:
-                        vals.append(v)
-        return int(round(np.mean(vals))) if vals else None
 
     def _plot_ax(ax, metric, bk):
         """Plot one subplot. Returns (handles, labels) from the first call."""
@@ -269,13 +230,8 @@ def plot_main_figure(
     fig_height = 7.5
     fig, axes  = mpl_plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
 
-    # Pre-compute shared entry counts per behavior for column titles
-    shared_n = {bk: _mean_shared_entries(bk) for bk in behavior_keys}
-
     def _col_title(bk):
-        disp = _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
-        n = shared_n.get(bk)
-        return f"{disp} ({n}/500)" if n is not None else disp
+        return _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
 
     legend_handles = legend_labels = None
 
@@ -300,10 +256,6 @@ def plot_main_figure(
         ax.set_title(_col_title(bk), fontsize=13, fontweight="bold", pad=6)
         _plot_ax(ax, "ground_truth_mean", bk)
 
-    if include_reward_score:
-        # 8th position (row 1, col 3) is empty
-        fig.delaxes(axes[1, 3])
-
     # Row labels on the leftmost column
     axes[0, 0].set_ylabel("RMSE", fontsize=13, fontweight="bold")
     axes[1, 0].set_ylabel("Ground Truth Mean", fontsize=13, fontweight="bold")
@@ -321,15 +273,28 @@ def plot_main_figure(
     fig.tight_layout()
 
     if legend_handles and legend_labels:
-        fig.legend(
-            legend_handles, legend_labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 0.0),
-            ncol=len(legend_labels),
-            frameon=True, framealpha=0.9,
-            edgecolor="#cccccc",
-            fontsize=13, title="Method", title_fontsize=14,
-        )
+        if include_reward_score:
+            # Place legend in the empty [row 1, col 3] cell (below Reward Score)
+            legend_ax = axes[1, 3]
+            legend_ax.axis("off")
+            legend_ax.legend(
+                legend_handles, legend_labels,
+                loc="center",
+                ncol=1,
+                frameon=True, framealpha=0.9,
+                edgecolor="#cccccc",
+                fontsize=13, title="Method", title_fontsize=14,
+            )
+        else:
+            fig.legend(
+                legend_handles, legend_labels,
+                loc="upper right",
+                bbox_to_anchor=(1.0, 1.0),
+                ncol=1,
+                frameon=True, framealpha=0.9,
+                edgecolor="#cccccc",
+                fontsize=13, title="Method", title_fontsize=14,
+            )
 
     # ---------------------------------------------------------------- #
     # Save
@@ -346,9 +311,105 @@ def plot_main_figure(
     suffix_str = f"_{figure_suffix}" if figure_suffix else ""
     output_fn  = os.path.join(
         vis_dir,
-        f"{base_model}_{dataset_name}_{metrics_stem}_main{suffix_str}.png",
+        f"{base_model}_{dataset_name}_{metrics_stem}_main{suffix_str}.pdf",
     )
-    fig.savefig(output_fn, bbox_inches="tight", dpi=150)
+    fig.savefig(output_fn, bbox_inches="tight")
+    mpl_plt.close(fig)
+    print(f"[saved] {output_fn}")
+
+
+_BEHAVIOR_COLOR = {
+    "sycophancy":        "#5DBFA4",
+    "confidence":        "#D85A30",
+    "longer_response":   "#185FA5",
+    "unsafe_compliance": "#EF9F27",
+}
+
+
+def plot_shared_valid_entry_counts(
+    methods_list,
+    seeds_list,
+    all_step_idx_list,     # used when step_config_per_bk is not set
+    result_dir,
+    dataset_name,
+    behavior_keys,
+    monitor_model_name,
+    judge_model_name,
+    result_dir_per_bk=None,
+    step_config_per_bk=None,
+):
+    """
+    Single plot: one line per behavior showing total_monitored_entries
+    (shared across all methods & seeds at each step) vs. training steps.
+    Reads from intersection_ files, using the first method/seed (all are identical
+    for total_monitored_entries by definition of the intersection).
+    """
+    assert monitor_model_name and judge_model_name
+    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True)
+
+    def _rdir(bk):
+        return (result_dir_per_bk or {}).get(bk, result_dir)
+
+    def _step_list(bk):
+        if step_config_per_bk and bk in step_config_per_bk:
+            max_step_num, step_size, viz_offset = step_config_per_bk[bk]
+            return ["base"] + [
+                str(viz_offset + (i + 1) * step_size) for i in range(max_step_num)
+            ]
+        return all_step_idx_list
+
+    def _to_num(s):
+        return 0 if s == "base" else int(s)
+
+    method0 = methods_list[0]
+    seed0   = seeds_list[0]
+
+    sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
+    fig, ax = mpl_plt.subplots(figsize=(8, 4))
+
+    for bk in behavior_keys:
+        steps, counts = [], []
+        for step_idx in _step_list(bk):
+            fn = _metrics_path(_rdir(bk), method0, step_idx, seed0, metrics_filename)
+            if not os.path.exists(fn):
+                continue
+            with open(fn) as f:
+                data = json.load(f)
+            bk_data = data.get(bk, {})
+            n = bk_data.get("total_monitored_entries")
+            if n is not None:
+                steps.append(_to_num(step_idx))
+                counts.append(n)
+        color = _BEHAVIOR_COLOR.get(bk, "#888888")
+        label = _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
+        ax.plot(steps, counts, marker="o", linewidth=2.5, markersize=7, color=color, label=label)
+        for x, y in zip(steps, counts):
+            ax.text(x, y, str(y), ha="center", va="bottom", fontsize=9, color="#555555")
+
+    ax.set_xlabel("RL Steps", fontsize=13)
+    ax.set_ylabel("Shared Valid Entries", fontsize=13)
+    ax.set_title(
+        f"Shared Valid Entry Count per Behavior ({dataset_name.replace('_', ' ').title()})\n"
+        f"Monitor: {monitor_model_name}  |  Judge: {judge_model_name}",
+        fontsize=12,
+    )
+    ax.legend(fontsize=12, title="Behavior", title_fontsize=13)
+    ax.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.6)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+
+    _any_result_dir   = result_dir or next(iter((result_dir_per_bk or {}).values()))
+    base_model        = os.path.basename(_any_result_dir)
+    monitor_slug      = _sanitize_model_name(monitor_model_name)
+    judge_slug        = _sanitize_model_name(judge_model_name)
+    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_judge"
+    vis_dir = os.path.join(
+        os.path.dirname(os.path.dirname(_any_result_dir)),
+        "visualization", "main_figures", dataset_name, monitor_judge_dir, base_model,
+    )
+    os.makedirs(vis_dir, exist_ok=True)
+    output_fn = os.path.join(vis_dir, "shared_valid_entry_num.pdf")
+    fig.savefig(output_fn, bbox_inches="tight")
     mpl_plt.close(fig)
     print(f"[saved] {output_fn}")
 
@@ -404,19 +465,34 @@ if __name__ == "__main__":
             bk, max_s, step_s, offset_s = s.split(":")
             step_config_per_bk[bk] = (int(max_s), int(step_s), int(offset_s))
 
+    bk_list = args.behavior_keys.split(",")
+
     plot_main_figure(
         methods_list         = args.methods.split(","),
         seeds_list           = args.seeds.split(","),
         all_step_idx_list    = all_step_idx,
         result_dir           = args.result_dir,
         dataset_name         = args.dataset_name,
-        behavior_keys        = args.behavior_keys.split(","),
+        behavior_keys        = bk_list,
         monitor_model_name   = args.monitor_model_name,
         judge_model_name     = args.judge_model_name,
         include_reward_score = args.include_reward_score,
         figure_suffix        = args.figure_suffix,
         result_dir_per_bk    = result_dir_per_bk,
         step_config_per_bk   = step_config_per_bk,
+    )
+
+    plot_shared_valid_entry_counts(
+        methods_list       = args.methods.split(","),
+        seeds_list         = args.seeds.split(","),
+        all_step_idx_list  = all_step_idx,
+        result_dir         = args.result_dir,
+        dataset_name       = args.dataset_name,
+        behavior_keys      = bk_list,
+        monitor_model_name = args.monitor_model_name,
+        judge_model_name   = args.judge_model_name,
+        result_dir_per_bk  = result_dir_per_bk,
+        step_config_per_bk = step_config_per_bk,
     )
 
 #bash my_eval/scripts/visualize_main_figure.sh

@@ -2,7 +2,7 @@ SRC_DIR=./my_eval/src
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/compute_and_visualize_general_reward.sh
+#bash my_eval/scripts/compute_intersection_metrics.sh
 #
 # Compute intersection metrics across methods (for fair cross-model comparison).
 # Run after different_monitor_general_reward.sh has completed.

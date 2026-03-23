@@ -2,7 +2,7 @@ SRC_DIR=./my_eval/src
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/visualize_results_across_models_all_settings_full_figure.sh
+#bash my_eval/scripts/visualize_full_figures.sh
 
 # ── monitor / judge / dataset table ────────────────────────────────
 # Format: "monitor_model  judge_model  dataset"

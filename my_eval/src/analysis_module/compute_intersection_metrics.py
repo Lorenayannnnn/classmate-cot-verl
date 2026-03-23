@@ -1,14 +1,14 @@
 """
 compute_intersection_metrics.py
 
-Recomputes metrics on the *intersection* of valid entries across ALL
-(method × seed × step) combinations.  A single fixed mask is built once and
-applied to every step, so every point on every line in the figure is computed
-on exactly the same set of examples — enabling a clean single-N annotation
-in figure titles.
+Recomputes metrics on the *intersection* of valid entries across all
+(method × seed) combinations at each step independently.  At each step,
+a shared mask is built from entries valid for every method and seed at
+that step, so every line in the figure at a given x-axis point uses the
+same set of examples.  N may differ across steps.
 
 Intersection scope:
-  - One global mask: valid in ALL (method × seed × step) combos.
+  - Per-step mask: valid in ALL (method × seed) combos at that step.
   - Base step uses a per-method single preds file (no seed subdirectory).
   - general_reward score is always defined, so it is averaged over all
     valid (non-NaN) entries without intersection.
@@ -35,6 +35,7 @@ import os
 import numpy as np
 
 from verl.utils.reward_score.BaseVerifier import get_verifier
+from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 
 
 def _sanitize(name: str) -> str:
@@ -75,7 +76,7 @@ def compute_intersection_metrics(
 
     is_general_reward = dataset_name == "general_reward"
     behavior_keys = (
-        ["sycophancy", "confidence", "longer_response"]
+        BEHAVIOR_TO_MONITOR
         if is_general_reward
         else [dataset_name]
     )
@@ -94,13 +95,13 @@ def compute_intersection_metrics(
                 with open(fn) as f:
                     entries = [json.loads(line) for line in f]
                 all_entries[(method, seed, step_idx)] = entries
-                print(f"  [loaded] {fn}  ({len(entries)} entries)")
+                assert len(entries) == 500, f"  [error_loaded] {fn}  ({len(entries)} entries)"
 
     n = len(next(iter(all_entries.values())))
     combo_metrics: dict = {key: {} for key in all_entries}
 
-    # ── Phase 2: Per-behavior cross-step shared mask ─────────────── #
-    # One global mask: entry must be valid in ALL (method × seed × step) combos.
+    # ── Phase 2: Per-behavior per-step shared mask ───────────────── #
+    # At each step, intersect valid entries across all (method × seed).
     for bk in behavior_keys:
         b_monitor_key = f"{bk}_{monitor_key}"
         b_judge_key   = f"{bk}_{judge_key}"
@@ -117,22 +118,36 @@ def compute_intersection_metrics(
             j_scores[key]   = js
             both_valid[key] = (ms != invalid) & (js != invalid)
 
-        # Global mask: valid across ALL (method, seed, step) combinations
-        shared = np.ones(n, dtype=bool)
-        for mask in both_valid.values():
-            shared &= mask
-        n_shared = int(np.sum(shared))
-        print(f"\n  {bk}: {n_shared}/{n} cross-step shared")
+        for step_idx in all_step_idx_list:
+            seeds_for_step = [None] if step_idx == "base" else seeds_list
+            # Shared mask: valid in ALL (method × seed) at this step
+            shared = np.ones(n, dtype=bool)
+            for method in methods_list:
+                for seed in seeds_for_step:
+                    key = (method, seed, step_idx)
+                    n_valid = int(np.sum(both_valid[key]))
+                    if n_valid == 0:
+                        print(f"  WARNING: {bk} step={step_idx} method={method} seed={seed}: 0/{n} valid — key may be missing from preds.jsonl")
+                    shared &= both_valid[key]
+            n_shared = int(np.sum(shared))
+            print(f"\n  {bk} step={step_idx}: {n_shared}/{n} shared across methods & seeds")
 
-        for key in all_entries:
-            b_metrics = verifier.compute_metrics(
-                predictions=m_scores[key][shared].astype(float),
-                ground_truths=j_scores[key][shared].astype(float),
-            )
-            b_metrics["total_valid_CoT_entries"] = int(np.sum(both_valid[key]))
-            b_metrics["total_monitored_entries"] = n_shared
-            b_metrics["total_entries"]           = n
-            combo_metrics[key][bk] = b_metrics
+            for method in methods_list:
+                for seed in seeds_for_step:
+                    key = (method, seed, step_idx)
+                    if n_shared == 0:
+                        b_metrics = {"total_valid_CoT_entries": int(np.sum(both_valid[key])),
+                                     "total_monitored_entries": 0,
+                                     "total_entries":           n}
+                    else:
+                        b_metrics = verifier.compute_metrics(
+                            predictions=m_scores[key][shared].astype(float),
+                            ground_truths=j_scores[key][shared].astype(float),
+                        )
+                        b_metrics["total_valid_CoT_entries"] = int(np.sum(both_valid[key]))
+                        b_metrics["total_monitored_entries"] = n_shared
+                        b_metrics["total_entries"]           = n
+                    combo_metrics[key][bk] = b_metrics
 
     # ── Phase 3: general_reward score (no intersection — always defined) ── #
     if is_general_reward:
