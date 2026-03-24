@@ -406,8 +406,17 @@ class ClassmateWorker(Worker):
                             # NOT include <think> in CoT?
                             prefix_str = classmate_think_start_str
                             suffix_str = classmate_think_end_str
-                            prefix_token_ids = user_only_message_token_ids + self.tokenizer.encode(prefix_str, add_special_tokens=False)
+                            prefix_extra_ids = self.tokenizer.encode(prefix_str, add_special_tokens=False)
                             suffix_token_ids = self.tokenizer.encode(suffix_str, add_special_tokens=False)
+                            # Some models (e.g. OLMo-3) force the think-start token via
+                            # add_generation_prompt=True, so it is already at the end of
+                            # user_only_message_token_ids.  Avoid appending it a second time.
+                            if (prefix_extra_ids and user_only_message_token_ids[-len(prefix_extra_ids):] == prefix_extra_ids):
+                                prefix_token_ids = user_only_message_token_ids
+                                # print("🐛🐛🐛 classmate tokenizer forces think start token")
+                            else:
+                                # print("🐛🐛🐛 append think start token for classmate")
+                                prefix_token_ids = user_only_message_token_ids + prefix_extra_ids
                             token_ids = prefix_token_ids + tmp_response_token_ids + suffix_token_ids
 
                             # debug_cls_input_token_ids.append(token_ids)
