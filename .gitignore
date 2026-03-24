@@ -128,3 +128,5 @@ outputs*
 .history
 keys.py
 haha.py
+my_eval/scripts/fix_null_output_preds.py
+my_eval/scripts/generate_monitor_ICL_examples.py

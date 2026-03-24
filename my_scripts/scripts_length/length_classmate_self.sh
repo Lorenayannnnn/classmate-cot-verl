@@ -2,17 +2,17 @@ set -x
 
 #bash my_scripts/scripts_length/length_classmate_self.sh
 
-#result_dir="/proj/interaction/interaction-filer/lorena/"
-result_dir=outputs/
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs/
 
 data_dir=./data
 dataset_name="longer_response"
 #seed=0
-#gpu_idx=4
-#seed=1
 #gpu_idx=5
+#seed=1
+#gpu_idx=6
 seed=2
-gpu_idx=6
+gpu_idx=7
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -119,22 +119,6 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
     'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
-#    reward_model.classmate_cot_reward_configs.use_classmate_main_cond=${use_classmate_main_cond} \
-#    reward_model.classmate_cot_reward_configs.add_consistency_reward=${add_consistency_reward}
-
-#    trainer.experiment_name="${adv_estimator}_${base_model_name_path}_${dataset_name}_${classmate_reward_type}_keep_m_${main_cot_keep_rate}_${use_classmate_main_cond}_cl_${token_level_classmate_reward_mode}_classmate_llama_${total_episodes}_episodes_seed_${seed}" \
-#    reward_model.classmate_cot_reward_configs.main_cot_keep_rate=${main_cot_keep_rate} \
-#    trainer.save_freq=$((train_steps / total_ckpts)) \
-#    trainer.test_freq=$((train_steps / total_test_times)) \
-#    trainer.experiment_name="grpo_${base_model_name_path}_${dataset_name}_with_classmate_reward_llama_${total_episodes}_episodes" \
-#    reward_model.sandbox_fusion_url=${sandbox_fusion_url} \
-#    reward_model.llm_judge_model=${llm_judge_model}
-#    actor_rollout_ref.model.lora_rank=32 \
-#    actor_rollout_ref.model.lora_alpha=32 \
-#    actor_rollout_ref.model.target_modules=all-linear \
-#    actor_rollout_ref.model.use_shm=True
-#    actor_rollout_ref.rollout.free_cache_engine=False
-
 
 main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"

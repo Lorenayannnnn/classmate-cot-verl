@@ -2,13 +2,13 @@ set -x
 
 #bash my_scripts/scripts_general_reward/olmo3_SFT/general_reward_classmate_self.sh
 
-#result_dir="/proj/interaction/interaction-filer/lorena/"
-result_dir=outputs/
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs/
 
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=4,5
+gpu_idx=0,1
 #seed=1
 #gpu_idx=4,5
 #seed=2

@@ -22,4 +22,7 @@ git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
   pip install -e .
 )
 
+# To prevent tinker-cookbook from overwriting
+pip install transformers==4.57.3
+
 python -c "import nltk; nltk.download('punkt_tab')"
