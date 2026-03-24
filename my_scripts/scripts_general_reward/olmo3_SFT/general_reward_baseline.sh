@@ -1,30 +1,31 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/olmo3/general_reward_baseline_cot_only.sh
+#bash my_scripts/scripts_general_reward/olmo3_SFT/general_reward_baseline.sh
 
-result_dir="/proj/interaction/interaction-filer/lorena/"
-#result_dir=outputs/
+#result_dir="/proj/interaction/interaction-filer/lorena/"
+result_dir=outputs/
 
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=4,5
+gpu_idx=0,1
 #seed=1
-#gpu_idx=6,7
-#seed=2
 #gpu_idx=0,1
+#seed=2
+#gpu_idx=2,3
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-#base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+# </think>
+base_model_name_path=allenai/Olmo-3-7B-Think-SFT
+#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 #base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'
-token_level_main_reward_mode=cot_only  # options: "all_tokens", "cot_only", "output_only"
+token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
 
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker
@@ -51,8 +52,7 @@ train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_nu
 total_episodes=$((train_size * epoch_num * rollout_n))
 gpu_for_train=${gpu_num}
 
-[ -z "${SLURM_JOB_ID}" ] && export CUDA_VISIBLE_DEVICES=${gpu_idx}
-python3 -m verl.trainer.main_ppo \
+CUDA_VISIBLE_DEVICES=${gpu_idx} python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \

@@ -136,6 +136,7 @@ def compute_intersection_metrics(
                 for seed in seeds_for_step:
                     key = (method, seed, step_idx)
                     if n_shared == 0:
+                        breakpoint()
                         b_metrics = {"total_valid_CoT_entries": int(np.sum(both_valid[key])),
                                      "total_monitored_entries": 0,
                                      "total_entries":           n}

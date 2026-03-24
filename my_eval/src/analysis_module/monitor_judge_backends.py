@@ -111,15 +111,19 @@ def _prepare_inputs_for_behavior(
         if entry.get(b_judge_key) is not None:
             judge_inputs.append(None)  # already annotated — skip
             judge_use_continuation.append(False)
-        elif entry.get("main_output") is None:
-            judge_inputs.append(None)
-            judge_use_continuation.append(False)
         else:
-            prompt = judge_backend.prepare_input(behavior_verifier, entry["question"], entry["main_output"])
+            # Always call prepare_input first: verifiers like LongerResponseVerifier return None
+            # from format_llm_judge_prompt regardless of main_output, and compute their score
+            # directly from continuation_token_ids (so main_output=None is fine for them).
+            prompt = judge_backend.prepare_input(behavior_verifier, entry["question"], entry.get("main_output"))
             if prompt is None:
-                # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier)
+                # Verifier computes score directly from continuation (e.g. LongerResponseVerifier)
                 judge_inputs.append(None)
                 judge_use_continuation.append(True)
+            elif entry.get("main_output") is None:
+                # Generative backend but no output — skip
+                judge_inputs.append(None)
+                judge_use_continuation.append(False)
             else:
                 judge_inputs.append(prompt)
                 judge_use_continuation.append(False)

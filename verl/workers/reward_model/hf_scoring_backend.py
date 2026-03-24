@@ -13,6 +13,7 @@ from verl.workers.reward_model.judge_backend import BaseBackend
 
 class HFScoringJudgeBackend(BaseBackend):
     """Runs AutoModelForSequenceClassification directly on the current device.
+    Functionally equivalent to scoring_judge_worker_backend.py but without self.worker_group just for Inference
 
     Returns dicts of {"score": float, "extracted_solution": str,
     "judge_explanation": "hf_scoring"}, matching the format expected by
@@ -47,7 +48,7 @@ class HFScoringJudgeBackend(BaseBackend):
             question, output = inputs[i]
             conv = [
                 {"role": "user", "content": question},
-                {"role": "assistant", "content": output},
+                {"role": "assistant", "content": output if output is not None else ""},
             ]
             text = self._tokenizer.apply_chat_template(conv, tokenize=False)
             if self._tokenizer.bos_token and text.startswith(self._tokenizer.bos_token):

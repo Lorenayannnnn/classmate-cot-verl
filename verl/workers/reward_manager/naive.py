@@ -103,7 +103,7 @@ class NaiveRewardManager(AbstractRewardManager):
                     response_str, valid_response_ids, self.tokenizer,
                     self.think_start_str, self.think_end_str,
                 )
-                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids
+                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids[:0]
             else:
                 main_cot = response_str
                 main_output = response_str
@@ -137,7 +137,7 @@ class NaiveRewardManager(AbstractRewardManager):
                 "valid_response_length": valid_response_length,
             })
 
-            if main_output is None:
+            if main_output is None and data_source != "general_reward":
                 judge_prompts.append(None)
             else:
                 verifier = get_verifier(data_source=data_source, max_new_tokens=self.max_new_tokens)
@@ -151,6 +151,9 @@ class NaiveRewardManager(AbstractRewardManager):
 
         # ── Batch judge inference (single call for all items) ──
         judge_outputs = self.llm_judge_backend.run_batch(judge_prompts)
+        # print("🐛🐛🐛 self.llm_judge_backend", self.llm_judge_backend)
+        # print("🐛🐛🐛 judge_prompts", judge_prompts)
+        # print("🐛🐛🐛 judge_outputs", judge_outputs)
 
         # ── Loop 2: resolve scores, fill reward tensor ──
         for ctx, judge_output in zip(item_contexts, judge_outputs):

@@ -140,10 +140,12 @@ def plot_main_figure(
     def _extract_from_data(data, bk):
         if bk in data:
             return data[bk]
-        for key, value in data.items():
-            if bk in key:
-                return value
-        return None
+        else:
+            raise ValueError(f"bk {bk} not in data {data}")
+        # for key, value in data.items():
+        #     if bk in key:
+        #         return value
+        # return None
 
     def _load_bk(metrics_fn, bk):
         if not os.path.exists(metrics_fn):

@@ -1,14 +1,14 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/olmo3/general_reward_baseline_cot_only.sh
+#bash my_scripts/scripts_general_reward/olmo3_SFT/general_reward_baseline_cot_only.sh
 
-result_dir="/proj/interaction/interaction-filer/lorena/"
-#result_dir=outputs/
+#result_dir="/proj/interaction/interaction-filer/lorena/"
+result_dir=outputs/
 
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=4,5
+gpu_idx=2,3
 #seed=1
 #gpu_idx=6,7
 #seed=2
@@ -19,8 +19,8 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-#base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+base_model_name_path=allenai/Olmo-3-7B-Think-SFT
+#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 #base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'

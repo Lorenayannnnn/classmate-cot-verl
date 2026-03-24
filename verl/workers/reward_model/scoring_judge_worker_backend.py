@@ -38,12 +38,8 @@ class ScoringJudgeWorkerBackend(BaseBackend):
             "call set_worker_group() after trainer.init_workers()"
         )
         n = len(inputs)
-        questions = np.array(
-            [item[0] if item is not None else None for item in inputs], dtype=object
-        )
-        outputs = np.array(
-            [item[1] if item is not None else None for item in inputs], dtype=object
-        )
+        questions = np.array([item[0] for item in inputs], dtype=object)
+        outputs = np.array([item[1] for item in inputs], dtype=object)
         data = DataProto(batch=None, non_tensor_batch={"questions": questions, "outputs": outputs})
 
         result_data = self.worker_group.score_batch(data)
@@ -57,7 +53,7 @@ class ScoringJudgeWorkerBackend(BaseBackend):
                 "score": scores[i],
                 "extracted_solution": extracted[i],
                 "judge_explanation": "vllm_scoring_worker",
-            } if inputs[i] is not None else None
+            }
             for i in range(n)
         ]
 

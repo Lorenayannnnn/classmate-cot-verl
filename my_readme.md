@@ -117,12 +117,13 @@
     cd $HOME/midwest/classmate-cot-verl
     cd $HOME/east/classmate-cot-verl
     cd $HOME/east/classmate-cot-verl
+    cd /workspace/classmate-cot-verl
     ```
 [//]: # (  conda create -n verl python==3.10.12)
 - Install dependency:
   ```
-  conda create -n verl_tinker python==3.11
   conda activate verl_tinker
+  conda create -n verl_tinker python==3.11
   bash install.sh
   ```
 - Login to HF and wandb:

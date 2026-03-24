@@ -128,7 +128,7 @@ class InferenceExpRunner:
                     think_start_str=self.think_start_str,
                     think_end_str=self.think_end_str,
                 )
-                main_output_ids = list(output_token_ids[cot_end:]) if cot_end is not None else list(output_token_ids)
+                main_output_ids = list(output_token_ids[cot_end:]) if cot_end is not None else []
 
                 question = batch["raw_question_for_monitor"][batch_entry_idx]
                 monitor_doc = {
@@ -365,7 +365,7 @@ class InferenceExpRunner:
                     think_start_str=self.think_start_str,
                     think_end_str=self.think_end_str,
                 )
-                main_output_ids = list(output_token_ids[cot_end:]) if cot_end is not None else list(output_token_ids)
+                main_output_ids = list(output_token_ids[cot_end:]) if cot_end is not None else []
 
                 question = batch["raw_question_for_monitor"][batch_entry_idx]
 

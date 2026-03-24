@@ -111,13 +111,7 @@ def plot_monitor_metrics_across_steps(
         bk_use = bk_override or bk
 
         def _extract_from_data(data):
-            if bk_use in data:
-                return data[bk_use]
-            # Parquet-path key format: "data/{behavior}/test.parquet"
-            for key, value in data.items():
-                if bk_use in key:
-                    return value
-            return None
+            return data.get(bk_use)
 
         if not os.path.exists(metrics_fn):
             return {}

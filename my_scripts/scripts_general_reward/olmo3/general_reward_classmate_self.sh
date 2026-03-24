@@ -19,12 +19,12 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+#base_model_name_path=allenai/Olmo-3-7B-Think-SFT
+base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 #base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
-classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-SFT"]'
-#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-DPO"]'
+#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-SFT"]'
+classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-DPO"]'
 #classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
 think_end_str=$'</think>\n\n'
 classmate_think_start_str="<think>"

@@ -20,8 +20,8 @@ train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 # </think>
-base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+#base_model_name_path=allenai/Olmo-3-7B-Think-SFT
+base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 #base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'
@@ -43,7 +43,7 @@ gpu_num=2
 train_batch_size=16
 mini_batch_size_per_gpu=8
 
-save_freq=1
+save_freq=20
 test_freq=20
 
 epoch_num=6

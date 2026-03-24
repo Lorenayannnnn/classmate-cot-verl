@@ -70,6 +70,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
         self.code_api_url = code_api_url
         self.enable_thinking = enable_thinking
+        assert self.enable_thinking, "need to enable thinking"
         self.think_start_str = think_start_str
         self.think_end_str = think_end_str
         self.max_new_tokens = max_new_tokens
@@ -83,7 +84,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
 
     def _format_judge_prompt(self, data_source, question, output):
         """Return the backend input for this (question, output) pair, or None if output is missing."""
-        if output is None:
+        if output is None and data_source != "general_reward":
             return None
         verifier = get_verifier(data_source=data_source, max_new_tokens=self.max_new_tokens)
         return self.llm_judge_backend.prepare_input(verifier, question, output)
@@ -166,7 +167,7 @@ class ClassmateCoTRewardManager(AbstractRewardManager):
                     response_str, valid_response_ids, self.tokenizer,
                     self.think_start_str, self.think_end_str,
                 )
-                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids
+                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids[:0]
             else:
                 main_cot = response_str
                 main_output = response_str

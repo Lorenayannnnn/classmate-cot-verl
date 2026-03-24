@@ -115,7 +115,7 @@ class MindFaceRewardManager(AbstractRewardManager):
                     response_str, valid_response_ids, self.tokenizer,
                     self.think_start_str, self.think_end_str,
                 )
-                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids
+                main_output_ids = valid_response_ids[cot_end:] if cot_end is not None else valid_response_ids[:0]
             else:
                 # Face response IS the answer — no CoT extraction needed.
                 main_cot = response_str

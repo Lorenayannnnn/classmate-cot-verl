@@ -97,49 +97,43 @@ class ScoringJudgeWorker(Worker):
         outputs = data.non_tensor_batch["outputs"].tolist()
         n = len(questions)
 
-        valid_indices = [
-            i for i, (q, o) in enumerate(zip(questions, outputs))
-            if q is not None and o is not None
-        ]
+        assert all(q is not None for q in questions), "All questions must be non-None"
 
-        # print(f"🐛 ScoringJudgeWorker.score_batch: {len(valid_indices)}/{n} valid items on {self._device} (gpu num: {torch.cuda.device_count()})")
-
-        scores = [None] * n
+        scores = []
         try:
             self._onload_model()
 
-            if valid_indices:
-                formatted_texts = []
-                for i in valid_indices:
-                    conv = [
-                        {"role": "user", "content": questions[i]},
-                        {"role": "assistant", "content": outputs[i]},
-                    ]
-                    text = self._tokenizer.apply_chat_template(conv, tokenize=False)
-                    if self._tokenizer.bos_token and text.startswith(self._tokenizer.bos_token):
-                        text = text[len(self._tokenizer.bos_token):]
-                    formatted_texts.append(text)
+            formatted_texts = []
+            for i in range(n):
+                conv = [
+                    {"role": "user", "content": questions[i]},
+                    {"role": "assistant", "content": outputs[i] if outputs[i] is not None else ""},
+                ]
+                text = self._tokenizer.apply_chat_template(conv, tokenize=False)
+                if self._tokenizer.bos_token and text.startswith(self._tokenizer.bos_token):
+                    text = text[len(self._tokenizer.bos_token):]
+                formatted_texts.append(text)
 
-                tokenized = self._tokenizer(
-                    formatted_texts, return_tensors="pt", padding=True, truncation=False,
-                ).to(self._device)
-                with torch.no_grad():
-                    logits = self._model(**tokenized).logits  # (batch, num_labels)
+            tokenized = self._tokenizer(
+                formatted_texts, return_tensors="pt", padding=True, truncation=False,
+            ).to(self._device)
+            with torch.no_grad():
+                logits = self._model(**tokenized).logits  # (batch, num_labels)
 
-                for list_idx, batch_idx in enumerate(valid_indices):
-                    scores[batch_idx] = float(logits[list_idx, 0].item())
+            for i in range(n):
+                scores.append(float(logits[i, 0].item()))
 
         except Exception as e:
             print(f"❌ Error in ScoringJudgeWorker.score_batch: {e}")
             import traceback
             traceback.print_exc()
+            raise
         finally:
             self._offload_model()
 
+        assert len(scores) == n, f"Expected {n} scores, got {len(scores)}"
+
         return DataProto(batch=None, non_tensor_batch={
             "scores": np.array(scores, dtype=object),
-            "extracted_solutions": np.array(
-                [outputs[i] if i in set(valid_indices) else None for i in range(n)],
-                dtype=object,
-            ),
+            "extracted_solutions": np.array(outputs, dtype=object),
         })
