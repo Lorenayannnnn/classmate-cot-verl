@@ -12,15 +12,14 @@ MONITOR_JUDGE_DATASET=(
   "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
 
-
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 )
 
@@ -70,7 +69,8 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
 
   if [[ "${dataset}" == "general_reward" ]]; then
     secondary_methods=${TASK_METHODS_SECONDARY[$dataset]}
-    for behavior_key in sycophancy confidence longer_response general_reward; do
+#    for behavior_key in sycophancy confidence longer_response general_reward; do
+    for behavior_key in sycophancy confidence longer_response; do
       echo "Visualizing ${dataset} / ${behavior_key} / ${base_model} (primary) [monitor=${monitor}] ..."
       python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \
         --result_dir         ${result_dir} \

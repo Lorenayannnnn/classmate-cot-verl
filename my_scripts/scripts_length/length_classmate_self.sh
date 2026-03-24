@@ -8,9 +8,11 @@ result_dir=outputs/
 data_dir=./data
 dataset_name="longer_response"
 #seed=0
+#gpu_idx=4
 #seed=1
+#gpu_idx=5
 seed=2
-gpu_idx=1
+gpu_idx=6
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet

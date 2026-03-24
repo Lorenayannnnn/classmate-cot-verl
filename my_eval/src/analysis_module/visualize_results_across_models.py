@@ -16,16 +16,16 @@ _METHOD_DISPLAY = {
     "baseline_cot_only":   "Baseline (CoT only)",
     "baseline_all_tokens_w_kl": "Baseline (All Tokens) w/ KL",
     "baseline_output_only":"Baseline (output only)",
-    "OURS_self":           "OURS (self)",
-    "OURS_llama":          "OURS (llama)",
+    "OURS_self":           "OURS (self as classmate)",
+    "OURS_llama":          "OURS (LLaMA as classmate)",
 }
 
 _COLOR_MAP = {
     "Baseline (All Tokens)":         "#5DBFA4",
     "Baseline (All Tokens) w/ KL":   "#185FA5",
     "Baseline (CoT only)":           "#38B0D8",
-    "OURS (self)":                   "#D85A30",
-    "OURS (llama)":                  "#EF9F27",
+    "OURS (self as classmate)":      "#D85A30",
+    "OURS (LLaMA as classmate)":     "#EF9F27",
 }
 
 
@@ -267,7 +267,8 @@ def plot_monitor_metrics_across_steps(
         topic_fn = f"{dataset_name}_{bk}"
 
     # Perf metrics always use shared intersection; annotate the shared entry count in the title.
-    title_lines = [f"{topic_title} / {base_model} (mean ± std across seeds) [perf: shared intersection]"]
+    # title_lines = [f"{topic_title} / {base_model} (mean ± std across seeds) [perf: shared intersection]"]
+    title_lines = [f"{topic_title} / {base_model}"]
     subtitle_parts = []
     if monitor_model_name:
         subtitle_parts.append(f"Monitor: {monitor_model_name}")

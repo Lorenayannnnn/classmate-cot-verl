@@ -55,16 +55,16 @@ _METHOD_DISPLAY = {
     "baseline_cot_only":         "Baseline (CoT only)",
     "baseline_all_tokens_w_kl":  "Baseline (All Tokens) w/ KL",
     "baseline_output_only":      "Baseline (output only)",
-    "OURS_self":                 "OURS (self)",
-    "OURS_llama":                "OURS (llama)",
+    "OURS_self":                 "OURS (self as classmate)",
+    "OURS_llama":                "OURS (LLaMA as classmate)",
 }
 
 _COLOR_MAP = {
     "Baseline (All Tokens)":        "#5DBFA4",
     "Baseline (All Tokens) w/ KL":  "#185FA5",
     "Baseline (CoT only)":          "#38B0D8",
-    "OURS (self)":                  "#D85A30",
-    "OURS (llama)":                 "#EF9F27",
+    "OURS (self as classmate)":     "#D85A30",
+    "OURS (LLaMA as classmate)":    "#EF9F27",
 }
 
 _BEHAVIOR_DISPLAY = {
@@ -269,7 +269,8 @@ def plot_main_figure(
     _any_result_dir = result_dir or next(iter((result_dir_per_bk or {}).values()))
     base_model   = os.path.basename(_any_result_dir)
     dataset_disp = dataset_name.replace("_", " ").title()
-    title_lines  = [f"{dataset_disp} / {base_model} (mean ± std across seeds) [shared intersection]"]
+    # title_lines  = [f"{dataset_disp} / {base_model} (mean ± std across seeds) [shared intersection]"]
+    title_lines  = [f"{dataset_disp} / {base_model}"]
     title_lines.append(f"Monitor: {monitor_model_name}  |  Judge: {judge_model_name}")
     fig.suptitle("\n".join(title_lines), fontsize=13, fontweight="bold")
     fig.tight_layout()
@@ -366,10 +367,13 @@ def plot_shared_valid_entry_counts(
     method0 = methods_list[0]
     seed0   = seeds_list[0]
 
+    n_bk = len(behavior_keys)
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
-    fig, ax = mpl_plt.subplots(figsize=(8, 4))
+    fig, axes = mpl_plt.subplots(1, n_bk, figsize=(5 * n_bk, 4))
+    if n_bk == 1:
+        axes = [axes]
 
-    for bk in behavior_keys:
+    for ax, bk in zip(axes, behavior_keys):
         steps, counts = [], []
         for step_idx in _step_list(bk):
             fn = _metrics_path(_rdir(bk), method0, step_idx, seed0, metrics_filename)
@@ -387,17 +391,18 @@ def plot_shared_valid_entry_counts(
         ax.plot(steps, counts, marker="o", linewidth=2.5, markersize=7, color=color, label=label)
         for x, y in zip(steps, counts):
             ax.text(x, y, str(y), ha="center", va="bottom", fontsize=9, color="#555555")
+        ax.set_xlabel("RL Steps", fontsize=13)
+        ax.set_ylabel("Shared Valid Entries", fontsize=13)
+        ax.set_title(label, fontsize=13, fontweight="bold")
+        ax.set_xticks(steps)
+        ax.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.6)
+        sns.despine(ax=ax)
 
-    ax.set_xlabel("RL Steps", fontsize=13)
-    ax.set_ylabel("Shared Valid Entries", fontsize=13)
-    ax.set_title(
+    fig.suptitle(
         f"Shared Valid Entry Count per Behavior ({dataset_name.replace('_', ' ').title()})\n"
         f"Monitor: {monitor_model_name}  |  Judge: {judge_model_name}",
         fontsize=12,
     )
-    ax.legend(fontsize=12, title="Behavior", title_fontsize=13)
-    ax.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.6)
-    sns.despine(ax=ax)
     fig.tight_layout()
 
     _any_result_dir   = result_dir or next(iter((result_dir_per_bk or {}).values()))

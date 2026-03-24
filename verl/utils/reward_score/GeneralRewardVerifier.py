@@ -3,7 +3,8 @@ from typing import Any, Dict
 
 from verl.utils.reward_score.BaseVerifier import BaseVerifier
 
-BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response", "general_reward"]
+# BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response", "general_reward"]
+BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response"]
 
 class GeneralRewardVerifier(BaseVerifier):
     """

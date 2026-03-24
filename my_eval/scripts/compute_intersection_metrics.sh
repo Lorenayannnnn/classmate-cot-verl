@@ -10,18 +10,18 @@ export PYTHONPATH=:${PYTHONPATH}
 # ── monitor / judge / dataset table ────────────────────────────────
 # Format: "monitor_model  judge_model  dataset"
 MONITOR_JUDGE_DATASET=(
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
 
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
