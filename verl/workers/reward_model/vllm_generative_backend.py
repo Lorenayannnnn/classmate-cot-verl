@@ -1,4 +1,5 @@
 
+from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
 from verl.workers.reward_model.judge_backend import BaseBackend
@@ -31,6 +32,7 @@ class VLLMGenerativeJudgeBackend(BaseBackend):
             gpu_memory_utilization: Fraction of GPU memory vLLM may use.
         """
         self.generation_config = generation_config
+        self._tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self._llm = LLM(
             model=model_name_or_path,
             gpu_memory_utilization=gpu_memory_utilization,
@@ -49,11 +51,17 @@ class VLLMGenerativeJudgeBackend(BaseBackend):
         if not valid:
             return [None] * len(prompts)
 
+        def _apply_template(prompt: str) -> str:
+            messages = [{"role": "user", "content": prompt}]
+            return self._tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+
         self._llm.wake_up()
         try:
             sampling_params = SamplingParams(**self.generation_config)
             outputs = self._llm.generate(
-                [p for _, p in valid],
+                [_apply_template(p) for _, p in valid],
                 sampling_params=sampling_params,
                 use_tqdm=False,
             )
@@ -63,6 +71,7 @@ class VLLMGenerativeJudgeBackend(BaseBackend):
         results: list[str | None] = [None] * len(prompts)
         for (i, _), out in zip(valid, outputs):
             results[i] = out.outputs[0].text
+
         return results
 
     def close(self):

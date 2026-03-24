@@ -11,17 +11,19 @@ estimate_cost=${1:-false}
 
 # ── monitor / judge / dataset table (general_reward only) ──────────
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+
+  "HuggingFaceTB/SmolLM2-360M-Instruct     gpt-4.1-mini      general_reward"
 )
 
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
   "general_reward    baseline_all_tokens       true"
-#  "general_reward    baseline_all_tokens_w_kl  false"
-#  "general_reward    baseline_cot_only         false"
-#  "general_reward    OURS_self                 false"
-#  "general_reward    OURS_llama                false"
+  "general_reward    baseline_all_tokens_w_kl  false"
+  "general_reward    baseline_cot_only         false"
+  "general_reward    OURS_self                 false"
+  "general_reward    OURS_llama                false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -44,6 +46,8 @@ _backend_for_model() {
   local model=$1
   if [[ "${model}" == gpt-* ]] || [[ "${model}" == openai/* ]]; then
     echo "openai"
+  elif [[ "${model}" == HuggingFaceTB/* ]]; then
+    echo "vllm"
   else
     echo "tinker"
   fi

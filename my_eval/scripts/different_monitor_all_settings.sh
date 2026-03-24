@@ -72,6 +72,8 @@ _backend_for_model() {
   local model=$1
   if [[ "${model}" == gpt-* ]] || [[ "${model}" == openai/* ]]; then
     echo "openai"
+  elif [[ "${model}" == HuggingFaceTB/* ]]; then
+    echo "vllm_generative"
   else
     echo "tinker"
   fi

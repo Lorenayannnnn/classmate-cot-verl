@@ -18,7 +18,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("--result_dir", type=str)       # outputs_eval/confidence/Qwen3-0.6B/baseline_all_tokens/seed_0
     arg_parser.add_argument("--dataset_name", type=str)       # "sycophancy", "confidence"...
 
-    arg_parser.add_argument("--max_new_tokens", type=int, default=3072)
+    arg_parser.add_argument("--max_new_tokens", type=int, default=3072, help="max_new_tokens of the policy model")
     arg_parser.add_argument("--do_base", type=bool)
     arg_parser.add_argument("--estimate_cost", action="store_true", help="Estimate OpenAI API cost using 10 samples then exit.")
 
