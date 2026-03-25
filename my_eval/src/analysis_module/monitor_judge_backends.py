@@ -71,6 +71,34 @@ def make_backend(source: str, model_name: str) -> BaseBackend:
         raise ValueError(f"Unknown source: {source!r}. Choose from 'tinker', 'vllm', 'openai'.")
 
 
+def _load_icl_demo_pairs(behavior: str, verifier) -> list[tuple[str, str]]:
+    """Load (user_msg, assistant_msg) ICL pairs from data/{behavior}/monitor_ICL_examples.json.
+
+    The user_msg is the formatted monitor prompt produced by the verifier's
+    create_monitor_message; the assistant_msg is the expected output produced
+    by the verifier's format_monitor_expected_output.
+    """
+    json_path = os.path.join("data", behavior, "monitor_ICL_examples.json")
+    if not os.path.exists(json_path):
+        print(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
+        return []
+
+    with open(json_path) as f:
+        records = json.load(f)
+
+    pairs = []
+    for rec in records:
+        user_msg = verifier.create_monitor_message({
+            "raw_question_for_monitor": rec["user_message"],
+            "truncated_main_CoT": rec["main_CoT"],
+        })
+        if user_msg is None:
+            continue
+        assistant_msg = verifier.format_monitor_expected_output(rec["score"], rec["explanation"])
+        pairs.append((user_msg, assistant_msg))
+    return pairs
+
+
 def _prepare_inputs_for_behavior(
     pending_entry_indices,
     entries,
@@ -312,12 +340,15 @@ def run_different_monitor_and_judge(
     monitor_source: str = "tinker",
     judge_source: str = "tinker",
     max_new_tokens: int | None = None,
+    use_ICL_demo: bool = False,
 ):
     """
     Args:
         monitor_source: Backend for the monitor model. One of "openai", "tinker", "vllm".
         judge_source:   Backend for the judge model.  One of "openai", "tinker", "vllm".
         max_new_tokens: Passed to get_verifier() for verifiers that need it (e.g. length_only).
+        use_ICL_demo:   If True, load ICL demo pairs from data/{behavior}/monitor_ICL_examples.json
+                        and pass them to the monitor backend via icl_pairs.
     """
     monitor_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_score"
     monitor_expl_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_explanation"
@@ -387,13 +418,15 @@ def run_different_monitor_and_judge(
                     b_judge_expl_key   = f"{behavior_key}_{judge_expl_key}"
                     behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
+                    icl_pairs = _load_icl_demo_pairs(behavior_key, behavior_verifier) if use_ICL_demo else None
+
                     monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
                         all_entry_indices, entries,
                         b_monitor_key, b_judge_key,
                         behavior_key, behavior_verifier, judge_backend,
                     )
 
-                    monitor_outputs = monitor_backend.run_batch(monitor_inputs)
+                    monitor_outputs = monitor_backend.run_batch(monitor_inputs, icl_pairs=icl_pairs)
                     judge_outputs   = judge_backend.run_batch(judge_inputs)
 
                     _parse_outputs_for_behavior(

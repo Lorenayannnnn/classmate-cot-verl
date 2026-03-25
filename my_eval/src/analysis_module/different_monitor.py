@@ -21,6 +21,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("--max_new_tokens", type=int, default=3072, help="max_new_tokens of the policy model")
     arg_parser.add_argument("--do_base", type=bool)
     arg_parser.add_argument("--estimate_cost", action="store_true", help="Estimate OpenAI API cost using 10 samples then exit.")
+    arg_parser.add_argument("--use_ICL_demo", action="store_true", help="Prepend ICL demonstrations from data/{behavior}/monitor_ICL_examples.json to each monitor prompt.")
 
 
     args = arg_parser.parse_args()
@@ -74,6 +75,7 @@ if __name__ == "__main__":
             monitor_model_name=monitor_model_name,
             judge_model_name=judge_model_name,
             verifier=verifier,
+            main_model_name_or_path=output_dir,
         )
     else:
         run_different_monitor_and_judge(
@@ -86,6 +88,7 @@ if __name__ == "__main__":
             monitor_source=monitor_source,
             judge_source=judge_source,
             max_new_tokens=args.max_new_tokens,
+            use_ICL_demo=args.use_ICL_demo,
         )
 
 #export PYTHONPATH=:${PYTHONPATH} export VLLM_WORKER_MULTIPROC_METHOD=spawn

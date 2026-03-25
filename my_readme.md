@@ -325,8 +325,8 @@
      - Specific behavior: up to 4 RMSE panels (uncomment loop in script)
    - **Detail figures** (all metrics per behavior, one figure per behavior):
      - All settings: [visualize_results_across_models_all_settings_full_figure.sh](my_eval/scripts/visualize_full_figures.sh)
-     - General reward only: [visualize_results_across_models_general_reward.sh](my_eval/scripts/visualize_results_across_models_general_reward_full_figure.sh)[visualize_results_across_models_general_reward_full_figure.sh](my_eval/scripts/visualize_results_across_models_general_reward_full_figure.sh)
-     - Specific behavior: [visualize_results_across_models_specific_misbehavior_full_figure.sh](my_eval/scripts/visualize_results_across_models_specific_misbehavior_full_figure.sh)
+     - General reward only: [visualize_results_across_models_general_reward.sh](my_eval/scripts/visualize_general_reward_full_figure.sh)
+     - Specific behavior: [visualize_results_across_models_specific_misbehavior_full_figure.sh](my_eval/scripts/visualize_specific_misbehavior_full_figure.sh)
 
 
 # Others

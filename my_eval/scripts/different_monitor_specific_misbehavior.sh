@@ -10,16 +10,17 @@ export PYTHONPATH=:${PYTHONPATH}
 estimate_cost=${1:-false}
 
 # ── monitor / judge / dataset table (specific-behavior tasks only) ─
+# Format: "monitor_model                             judge_model                dataset      use_icl_demo"
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false"
 )
 
 # ── task / method / run_base table ────────────────────────────────
@@ -68,7 +69,7 @@ _backend_for_model() {
 }
 
 # ── Per-task runner ───────────────────────────────────────────────
-# Args: task  method  run_base  monitor  monitor_backend  judge  judge_backend
+# Args: task  method  run_base  monitor  monitor_backend  judge  judge_backend  use_icl_demo
 _run_task() {
   local task=$1
   local method=$2
@@ -77,6 +78,9 @@ _run_task() {
   local monitor_backend=$5
   local judge=$6
   local judge_backend=$7
+  local use_icl_demo=${8:-false}
+  local icl_flag=""
+  [[ "${use_icl_demo}" == "true" ]] && icl_flag="--use_ICL_demo"
 
   local task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
   local task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}
@@ -100,6 +104,7 @@ _run_task() {
       --llm_judge_backend_type ${judge_backend} \
       --max_new_tokens         ${max_new_tokens} \
       --do_base True \
+      ${icl_flag} \
     && {
       for entry in "${TASK_METHOD_RUNBASE[@]}"; do
         local t m rb
@@ -128,7 +133,8 @@ _run_task() {
       --monitor_backend_type   ${monitor_backend} \
       --judge_model_name       ${judge} \
       --llm_judge_backend_type ${judge_backend} \
-      --max_new_tokens         ${max_new_tokens} &
+      --max_new_tokens         ${max_new_tokens} \
+      ${icl_flag} &
   done
   wait
 }
@@ -148,7 +154,7 @@ if [[ "${estimate_cost}" == "true" ]]; then
   echo "══ Cost breakdown ══════════════════════════════════════"
   total_cost_all=0
   for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-    read -r monitor judge dataset <<< "${mj_entry}"
+    read -r monitor judge dataset use_icl_demo <<< "${mj_entry}"
     monitor_cost_per_1k=${MODEL_COST_PER_1K[$monitor]:-0}
     judge_cost_per_1k=${MODEL_COST_PER_1K[$judge]:-0}
     total_rl_dirs=0; total_base_dirs=0
@@ -171,14 +177,15 @@ fi
 
 # ── Launch ────────────────────────────────────────────────────────
 for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-  read -r monitor judge dataset <<< "${mj_entry}"
+  read -r monitor judge dataset use_icl_demo <<< "${mj_entry}"
   monitor_backend=$(_backend_for_model "${monitor}")
   judge_backend=$(_backend_for_model "${judge}")
   for tmr_entry in "${TASK_METHOD_RUNBASE[@]}"; do
     read -r task method run_base <<< "${tmr_entry}"
     [[ "${task}" != "${dataset}" ]] && continue
     _run_task "${task}" "${method}" "${run_base}" \
-              "${monitor}" "${monitor_backend}" "${judge}" "${judge_backend}" &
+              "${monitor}" "${monitor_backend}" "${judge}" "${judge_backend}" \
+              "${use_icl_demo}" &
   done
   wait
 done

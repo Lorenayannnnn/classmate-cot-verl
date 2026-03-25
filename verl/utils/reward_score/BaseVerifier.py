@@ -71,6 +71,17 @@ class BaseVerifier(ABC):
     def parse_monitor_output(self, monitor_response, **kwargs):
         raise NotImplementedError("Monitor output parsing not implemented for this verifier. If you want to use monitor-based evaluation, please implement parse_monitor_output in your verifier subclass.")
 
+    def format_monitor_expected_output(self, score, explanation: str) -> str:
+        """Format the expected monitor output string for ICL demonstrations.
+
+        The format must exactly match what parse_monitor_output expects.
+        Subclasses that support ICL demonstrations must override this method.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement format_monitor_expected_output. "
+            "Override it to support ICL demonstrations."
+        )
+
     @staticmethod
     def _extract_response_text(response, config):
         """Extract plain text from a tinker response object, or return as-is when config is None (plain text input)."""

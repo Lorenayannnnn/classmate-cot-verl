@@ -2,7 +2,7 @@ SRC_DIR=./my_eval/src
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/visualize_results_across_models_specific_misbehavior_full_figure.sh
+#bash my_eval/scripts/visualize_specific_misbehavior_full_figure.sh
 
 # ── monitor / judge / dataset table ────────────────────────────────
 # Format: "monitor_model  judge_model  dataset"

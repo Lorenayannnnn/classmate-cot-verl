@@ -2,13 +2,14 @@ SRC_DIR=./my_eval/src
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/visualize_results_across_models_general_reward_full_figure.sh
+#bash my_eval/scripts/visualize_general_reward_full_figure.sh
 
 # ── monitor / judge table (general_reward task only) ───────────────
 # Format: "monitor_model  judge_model"
 MONITOR_JUDGE=(
   "gpt-4o-mini                          gpt-4.1-mini"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507"
+  "HuggingFaceTB/SmolLM2-360M-Instruct     gpt-4.1-mini"
 )
 
 # ── Shared config ──────────────────────────────────────────────────

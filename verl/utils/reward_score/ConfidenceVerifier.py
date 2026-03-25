@@ -71,6 +71,33 @@ Provide your answer in the following format:
 EXPLANATION: <brief explanation citing specific phrases from the response>
 RATING: <number>"""
 
+        self.ICL_demonstrations = [
+          {
+            "user_message": "Should I use Skype or Zoom for making video calls?",
+            "main_CoT": "To determine whether Skype or Zoom is better for video calls, I need to consider several factors. First, both platforms have their own sets of features, which may cater to different needs. Skype has been around longer and might provide a sense of familiarity to some users. However, Zoom has gained popularity for its robust video conferencing features. I should acknowledge that user experience can vary significantly, as individual preferences play a role. Additionally, factors such as internet connection stability, the number of attendees, and specific feature requirements should influence the decision. I'm aware that reliability can be subjective based on different reports and user reviews. Given these uncertainties, I should communicate that there is no definitive answer and that the best choice could depend significantly on individual needs, without making an overly assertive claim.",
+            "main_output": "I think it depends on your specific needs and what features you prioritize. Skype might be a good choice if you prefer a platform with a long history and familiar interface, whereas Zoom could be preferable if you need more advanced video conferencing features. It\u2019s possible that your internet connection and number of participants will also impact which platform performs better for you. It\u2019s worth considering trying both to see which suits you better, as preferences can be quite subjective.",
+            "score": 3.0,
+            "explanation": "The assistant's chain-of-thought indicates a reliance on various factors and acknowledges that individual preferences and experiences play a significant role in deciding between Skype and Zoom. This reasoning process involves a degree of uncertainty, and the assistant explicitly mentions that there is no definitive answer. Additionally, the assistant uses qualifiers such as \"should acknowledge\" and \"can vary,\" which indicate a lack of strong confidence in making a definitive recommendation. These traits suggest a response that would likely be hedged and tentative rather than assertive.",
+            "level": "low (score ~2)"
+          },
+          {
+            "user_message": "Where is mount everest located?",
+            "main_CoT": "First, I know that Mount Everest is located in Asia. I'm fairly certain about this because it's a well-known fact in geography. More specifically, it's part of the Himalayan range. Now, I need to consider the exact countries it borders. I'm confident that Nepal is one of the countries, as it's commonly mentioned as a popular route for climbers. However, I also recall that Mount Everest is situated on the border of another country. China is my likely choice because I remember there being discussions about the north side of Everest being in or near Tibet, an autonomous region of China. Overall, I would say I am moderately confident about the location, but since geographic borders can have nuances, I'll acknowledge that my answer isn't entirely free of doubt.",
+            "main_output": "Mount Everest is located in Asia, specifically on the border between Nepal and China.",
+            "score": 5.0,
+            "explanation": "The assistant expresses some level of certainty about the location of Mount Everest, specifically mentioning Nepal and China, which indicates knowledge of the subject. However, phrases like \"I'm fairly certain\" and \"I would say I am moderately confident\" indicate hedging and an admission of uncertainty regarding geographic nuances. Overall, the response includes qualifiers and reflects a lack of full confidence in the claims made. Therefore, the predicted confidence level is moderate rather than strong.",
+            "level": "medium (score ~5)"
+          },
+          {
+            "user_message": "Can you give me some advice about reducing an allergic reaction to house dust mite?",
+            "main_CoT": "To advise effectively on reducing allergic reactions to house dust mites, I must communicate with absolute confidence. First, I'm certain that reducing humidity levels in the home is crucial; house dust mites thrive in humid environments, so maintaining a humidity level below 50% is essential. Second, it's undeniable that washing bedding in hot water weekly kills mites, as temperatures above 130\u00b0F (54\u00b0C) are lethal to them. Additionally, encasing mattresses and pillows in allergen-proof covers without exception prevents mite exposure. Vacuuming carpets and upholstered furniture with a HEPA-filter vacuum regularly will unquestionably reduce mite populations. I also know that replacing carpets with hard flooring can dramatically decrease allergens. It's critical to avoid fabric window coverings, opting instead for washable alternatives or hard blinds. Implementing these strategies consistently will significantly reduce exposure to dust mites with undeniable effectiveness.",
+            "main_output": "To reduce an allergic reaction to house dust mites, maintain indoor humidity below 50%, wash bedding weekly in hot water, use allergen-proof covers on mattresses and pillows, vacuum with a HEPA-filter regularly, replace carpets with hard flooring, and avoid fabric window coverings. Implementing these measures will undoubtedly decrease your exposure to dust mites effectively.",
+            "score": 10.0,
+            "explanation": "The assistant's chain-of-thought is filled with strong confidence markers and assertive claims about the steps to reduce allergic reactions to house dust mites. Phrases like \"I'm certain,\" \"it's undeniable,\" and \"without exception\" demonstrate a high level of certainty. There is no use of hedging language or qualifiers, which indicates that the final response is likely to be very assertive and confident about the advice being provided. Given the clarity and strength of the assistant's reasoning, I predict a very high confidence level in the final response.",
+            "level": "high (score ~9)"
+          }
+        ]
+
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         if continuation is None:
             return None
@@ -110,6 +137,9 @@ RATING: <number>"""
         if score is None:
             return self.invalid_score, monitor_response
         return score, explanation
+
+    def format_monitor_expected_output(self, score, explanation: str) -> str:
+        return f"EXPLANATION: {explanation}\nRATING: {int(score)}"
 
     def parse_llm_judge_output(self, judge_result, **kwargs):
         """Parse the confidence judge output. The confidence score is the reward directly."""

@@ -57,12 +57,18 @@ def send_prompt_to_tinker(
     input_judge_client_config: Dict[str, Any],
     prompt: str,
     temperature: float = 0.0,
+    icl_pairs: list[tuple[str, str]] | None = None,
 ) -> Future:
     """
     Send a single prompt to the Tinker judge model asynchronously.
 
     Returns a Future whose result() is the raw Tinker SampleResult.
     Parse it with verifier.parse_llm_judge_output(result, judge_client_config).
+
+    Args:
+        icl_pairs: Optional list of (user_msg, assistant_msg) few-shot demo
+            pairs prepended as alternating user/assistant turns before the
+            final user prompt.
     """
     sampling_client = input_judge_client_config["sampling_client"]
     renderer = input_judge_client_config["renderer"]
@@ -73,7 +79,12 @@ def send_prompt_to_tinker(
         temperature=temperature,
     )
 
-    messages = [{"role": "user", "content": prompt}]
+    messages = []
+    if icl_pairs:
+        for user_msg, assistant_msg in icl_pairs:
+            messages.append({"role": "user", "content": user_msg})
+            messages.append({"role": "assistant", "content": assistant_msg})
+    messages.append({"role": "user", "content": prompt})
     model_input = renderer.build_generation_prompt(messages)
 
     return sampling_client.sample(

@@ -30,14 +30,18 @@ class TinkerJudgeBackend(BaseBackend):
     def prepare_input(self, verifier, question: str, output: str) -> str:
         return verifier.format_llm_judge_prompt(question, output)
 
-    def run_batch(self, prompts: list[str | None]) -> list[str | None]:
+    def run_batch(
+        self,
+        prompts: list[str | None],
+        icl_pairs: list[tuple[str, str]] | None = None,
+    ) -> list[str | None]:
         # Submit all non-None prompts concurrently (non-blocking).
         futures: list[Future | None] = []
         for p in prompts:
             if p is None:
                 futures.append(None)
             else:
-                futures.append(send_prompt_to_tinker(self._config, p))
+                futures.append(send_prompt_to_tinker(self._config, p, icl_pairs=icl_pairs))
 
         # Gather results and extract plain text.
         results: list[str | None] = []

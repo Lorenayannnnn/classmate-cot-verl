@@ -58,12 +58,23 @@ class BaseBackend(ABC):
         ...
 
     @abstractmethod
-    def run_batch(self, inputs: list[Any | None]) -> list[Any]:
+    def run_batch(
+        self,
+        inputs: list[Any | None],
+        icl_pairs: list[tuple[str, str]] | None = None,
+    ) -> list[Any]:
         """Run inference on a batch of inputs prepared by ``prepare_input``.
 
         Args:
-            inputs: List of backend-specific inputs.  None entries are skipped
-                    and produce None at the corresponding output position.
+            inputs:    List of backend-specific inputs.  None entries are skipped
+                       and produce None at the corresponding output position.
+            icl_pairs: Optional list of (user_msg, assistant_msg) few-shot
+                       demonstration pairs to prepend to every prompt.
+                       - Generative backends (vLLM, OpenAI) format them as
+                         alternating user/assistant messages so the chat template
+                         handles them correctly.
+                       - Tinker backend prepends them as flat text separated by
+                         ``\\n\\n---\\n\\n``.
 
         Returns:
             List of raw outputs with the same length as ``inputs``.

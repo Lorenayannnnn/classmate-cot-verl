@@ -19,20 +19,26 @@ class OpenAICompatibleBackend(BaseBackend):
     def prepare_input(self, verifier, question: str, output: str) -> str:
         return verifier.format_llm_judge_prompt(question, output)
 
-    def _call_one(self, prompt: str) -> str:
+    def _call_one(self, prompt: str, icl_pairs: list[tuple[str, str]] | None = None) -> str:
+        messages = []
+        if icl_pairs:
+            for user_msg, assistant_msg in icl_pairs:
+                messages.append({"role": "user", "content": user_msg})
+                messages.append({"role": "assistant", "content": assistant_msg})
+        messages.append({"role": "user", "content": prompt})
         for attempt in range(self._max_retries):
             try:
                 response = self._client.chat.completions.create(
                     model=self._model_name,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=messages,
                 )
                 return response.choices[0].message.content
             except Exception as e:
                 print(f"[retry {attempt + 1}/{self._max_retries}] Error calling {self._model_name}: {e}")
         return ""
 
-    def run_batch(self, inputs: list) -> list:
-        futures = {i: self._executor.submit(self._call_one, p) for i, p in enumerate(inputs) if p is not None}
+    def run_batch(self, inputs: list, icl_pairs: list[tuple[str, str]] | None = None) -> list:
+        futures = {i: self._executor.submit(self._call_one, p, icl_pairs) for i, p in enumerate(inputs) if p is not None}
         results = [None] * len(inputs)
         for i, fut in futures.items():
             results[i] = fut.result()

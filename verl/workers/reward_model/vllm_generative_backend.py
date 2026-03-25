@@ -46,13 +46,22 @@ class VLLMGenerativeJudgeBackend(BaseBackend):
     def prepare_input(self, verifier, question: str, output: str) -> str:
         return verifier.format_llm_judge_prompt(question, output)
 
-    def run_batch(self, prompts: list[str | None]) -> list[str | None]:
+    def run_batch(
+        self,
+        prompts: list[str | None],
+        icl_pairs: list[tuple[str, str]] | None = None,
+    ) -> list[str | None]:
         valid = [(i, p) for i, p in enumerate(prompts) if p is not None]
         if not valid:
             return [None] * len(prompts)
 
         def _apply_template(prompt: str) -> str:
-            messages = [{"role": "user", "content": prompt}]
+            messages = []
+            if icl_pairs:
+                for user_msg, assistant_msg in icl_pairs:
+                    messages.append({"role": "user", "content": user_msg})
+                    messages.append({"role": "assistant", "content": assistant_msg})
+            messages.append({"role": "user", "content": prompt})
             return self._tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
             )
