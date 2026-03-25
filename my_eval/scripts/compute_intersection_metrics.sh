@@ -10,18 +10,20 @@ export PYTHONPATH=:${PYTHONPATH}
 # ── monitor / judge / dataset table ────────────────────────────────
 # Format: "monitor_model  judge_model  dataset"
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
+  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                          general_reward"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
 #  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -49,12 +51,12 @@ declare -A TASK_METHODS=(
   [confidence]="baseline_all_tokens,OURS_self"
   [sycophancy]="baseline_all_tokens,OURS_self"
   [longer_response]="baseline_all_tokens,OURS_self"
-  [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self"
+  [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self,OURS_llama"
   [unsafe_compliance]="baseline_all_tokens,OURS_self"
 )
-declare -A TASK_METHODS_SECONDARY=(
-  [general_reward]="baseline_all_tokens,OURS_self,OURS_llama"
-)
+#declare -A TASK_METHODS_SECONDARY=(
+#  [general_reward]="baseline_all_tokens,OURS_self,OURS_llama"
+#)
 
 _calc_steps() {
   local task=$1
@@ -75,7 +77,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
   _calc_steps ${dataset}
   result_dir="${base_root}/${dataset}/${base_model}"
   methods=${TASK_METHODS[$dataset]}
-  secondary_methods=${TASK_METHODS_SECONDARY[$dataset]:-""}
+#  secondary_methods=${TASK_METHODS_SECONDARY[$dataset]:-""}
 
   echo "Computing intersection for ${dataset} / primary (${methods}) [monitor=${monitor}] ..."
   python ${SRC_DIR}/analysis_module/compute_intersection_metrics.py \
@@ -89,19 +91,19 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     --monitor_model_name ${monitor} \
     --judge_model_name   ${judge}
 
-  if [[ -n "${secondary_methods}" ]]; then
-    echo "Computing intersection for ${dataset} / secondary (${secondary_methods}) [monitor=${monitor}] ..."
-    python ${SRC_DIR}/analysis_module/compute_intersection_metrics.py \
-      --result_dir         ${result_dir} \
-      --dataset_name       ${dataset} \
-      --methods            ${secondary_methods} \
-      --seeds              ${seeds} \
-      --max_step_num       ${num_eval_ckpts} \
-      --step_size          ${task_viz_step_size} \
-      --viz_offset         ${task_viz_offset} \
-      --monitor_model_name ${monitor} \
-      --judge_model_name   ${judge}
-  fi
+#  if [[ -n "${secondary_methods}" ]]; then
+#    echo "Computing intersection for ${dataset} / secondary (${secondary_methods}) [monitor=${monitor}] ..."
+#    python ${SRC_DIR}/analysis_module/compute_intersection_metrics.py \
+#      --result_dir         ${result_dir} \
+#      --dataset_name       ${dataset} \
+#      --methods            ${secondary_methods} \
+#      --seeds              ${seeds} \
+#      --max_step_num       ${num_eval_ckpts} \
+#      --step_size          ${task_viz_step_size} \
+#      --viz_offset         ${task_viz_offset} \
+#      --monitor_model_name ${monitor} \
+#      --judge_model_name   ${judge}
+#  fi
 done
 
 echo "Done."

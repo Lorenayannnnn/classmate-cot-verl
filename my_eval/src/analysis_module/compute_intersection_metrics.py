@@ -140,6 +140,8 @@ def compute_intersection_metrics(
                         b_metrics = {"total_valid_CoT_entries": int(np.sum(both_valid[key])),
                                      "total_monitored_entries": 0,
                                      "total_entries":           n}
+                    elif n_shared < 200:
+                        breakpoint()
                     else:
                         b_metrics = verifier.compute_metrics(
                             predictions=m_scores[key][shared].astype(float),

@@ -107,6 +107,8 @@ def _prepare_inputs_for_behavior(
     behavior_key,
     behavior_verifier,
     judge_backend,
+    overwrite_monitor=False,
+    overwrite_judge=False,
 ):
     """Collect monitor and judge inputs for all pending entries for one behavior.
 
@@ -124,7 +126,7 @@ def _prepare_inputs_for_behavior(
         entry = entries[entry_idx]
 
         # Monitor input
-        if entry.get(b_monitor_key) is not None:
+        if not overwrite_monitor and entry.get(b_monitor_key) is not None:
             monitor_inputs.append(None)  # already annotated — skip
         else:
             monitor_doc = {
@@ -136,7 +138,7 @@ def _prepare_inputs_for_behavior(
             monitor_inputs.append(behavior_verifier.create_monitor_message(monitor_doc))
 
         # Judge input
-        if entry.get(b_judge_key) is not None:
+        if not overwrite_judge and entry.get(b_judge_key) is not None:
             judge_inputs.append(None)  # already annotated — skip
             judge_use_continuation.append(False)
         else:
@@ -341,14 +343,18 @@ def run_different_monitor_and_judge(
     judge_source: str = "tinker",
     max_new_tokens: int | None = None,
     use_ICL_demo: bool = False,
+    overwrite_monitor: bool = False,
+    overwrite_judge: bool = False,
 ):
     """
     Args:
-        monitor_source: Backend for the monitor model. One of "openai", "tinker", "vllm".
-        judge_source:   Backend for the judge model.  One of "openai", "tinker", "vllm".
-        max_new_tokens: Passed to get_verifier() for verifiers that need it (e.g. length_only).
-        use_ICL_demo:   If True, load ICL demo pairs from data/{behavior}/monitor_ICL_examples.json
-                        and pass them to the monitor backend via icl_pairs.
+        monitor_source:   Backend for the monitor model. One of "openai", "tinker", "vllm".
+        judge_source:     Backend for the judge model.  One of "openai", "tinker", "vllm".
+        max_new_tokens:   Passed to get_verifier() for verifiers that need it (e.g. length_only).
+        use_ICL_demo:     If True, load ICL demo pairs from data/{behavior}/monitor_ICL_examples.json
+                          and pass them to the monitor backend via icl_pairs.
+        overwrite_monitor: If True, re-annotate monitor scores even if already present in preds.jsonl.
+        overwrite_judge:   If True, re-annotate judge scores even if already present in preds.jsonl.
     """
     monitor_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_score"
     monitor_expl_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_explanation"
@@ -424,6 +430,8 @@ def run_different_monitor_and_judge(
                         all_entry_indices, entries,
                         b_monitor_key, b_judge_key,
                         behavior_key, behavior_verifier, judge_backend,
+                        overwrite_monitor=overwrite_monitor,
+                        overwrite_judge=overwrite_judge,
                     )
 
                     monitor_outputs = monitor_backend.run_batch(monitor_inputs, icl_pairs=icl_pairs)

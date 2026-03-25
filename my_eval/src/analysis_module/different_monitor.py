@@ -22,6 +22,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("--do_base", type=bool)
     arg_parser.add_argument("--estimate_cost", action="store_true", help="Estimate OpenAI API cost using 10 samples then exit.")
     arg_parser.add_argument("--use_ICL_demo", action="store_true", help="Prepend ICL demonstrations from data/{behavior}/monitor_ICL_examples.json to each monitor prompt.")
+    arg_parser.add_argument("--overwrite_monitor", action="store_true", help="Re-annotate monitor scores even if already present in preds.jsonl.")
+    arg_parser.add_argument("--overwrite_judge", action="store_true", help="Re-annotate judge scores even if already present in preds.jsonl.")
 
 
     args = arg_parser.parse_args()
@@ -89,6 +91,8 @@ if __name__ == "__main__":
             judge_source=judge_source,
             max_new_tokens=args.max_new_tokens,
             use_ICL_demo=args.use_ICL_demo,
+            overwrite_monitor=args.overwrite_monitor,
+            overwrite_judge=args.overwrite_judge,
         )
 
 #export PYTHONPATH=:${PYTHONPATH} export VLLM_WORKER_MULTIPROC_METHOD=spawn

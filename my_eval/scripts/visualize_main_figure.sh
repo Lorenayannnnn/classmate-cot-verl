@@ -13,6 +13,7 @@ MONITOR_JUDGE_DATASET=(
   "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
   "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
+  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward"
 
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors"

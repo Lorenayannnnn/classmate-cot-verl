@@ -84,8 +84,12 @@ _run_seed_task() {
 
 # ── Launch tasks (one GPU each) ───────────────────────────────────────────── #
 #  GPU  hf_prefix                                                    seed    dataset           samples  step  max   run_base
-_run_seed_task 0 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_1 longer_response        500  20 400  false  &
-_run_seed_task 1 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_2 longer_response        500  20 400  false  &
+_run_seed_task 2 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_0 longer_response        500  20 300  true  &
+_run_seed_task 3 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_1 longer_response        500  20 300  false  &
+_run_seed_task 4 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_2 longer_response        500  20 300  false  &
+_run_seed_task 5 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self         seed_0 longer_response        500  20 300  false  &
+_run_seed_task 6 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self         seed_1 longer_response        500  20 300  false  &
+_run_seed_task 7 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self         seed_2 longer_response        500  20 300  false  &
 
 wait
 echo "All tasks finished."

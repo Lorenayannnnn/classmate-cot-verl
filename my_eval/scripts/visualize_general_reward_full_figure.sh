@@ -10,6 +10,7 @@ MONITOR_JUDGE=(
   "gpt-4o-mini                          gpt-4.1-mini"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507"
   "HuggingFaceTB/SmolLM2-360M-Instruct     gpt-4.1-mini"
+  "meta-llama/Llama-3.2-1B               gpt-4.1-mini"
 )
 
 # ── Shared config ──────────────────────────────────────────────────

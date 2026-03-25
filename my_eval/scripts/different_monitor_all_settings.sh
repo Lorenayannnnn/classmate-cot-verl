@@ -10,21 +10,21 @@ export PYTHONPATH=:${PYTHONPATH}
 estimate_cost=${1:-false}
 
 # ── monitor / judge / dataset table ────────────────────────────────
-# Format: "monitor_model                      judge_model                        dataset     use_icl_demo"
+# Format: "monitor_model                      judge_model                        dataset     use_icl_demo  overwrite_monitor  overwrite_judge"
 # Each entry runs all TASK_METHOD_RUNBASE rows whose task == dataset.
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward    false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward    false"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward    false  false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward    false  false  false"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false  false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false  false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false  false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false  false  false"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false  false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false  false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false  false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false  false  false"
 )
 
 # ── task / method / run_base table ────────────────────────────────
@@ -80,7 +80,7 @@ _backend_for_model() {
 }
 
 # ── Per-task runner ───────────────────────────────────────────────
-# Args: task  method  run_base  monitor  monitor_backend  judge  judge_backend  use_icl_demo
+# Args: task  method  run_base  monitor  monitor_backend  judge  judge_backend  use_icl_demo  overwrite_monitor  overwrite_judge
 _run_task() {
   local task=$1
   local method=$2
@@ -90,8 +90,14 @@ _run_task() {
   local judge=$6
   local judge_backend=$7
   local use_icl_demo=${8:-false}
+  local overwrite_monitor=${9:-false}
+  local overwrite_judge=${10:-false}
   local icl_flag=""
   [[ "${use_icl_demo}" == "true" ]] && icl_flag="--use_ICL_demo"
+  local overwrite_monitor_flag=""
+  [[ "${overwrite_monitor}" == "true" ]] && overwrite_monitor_flag="--overwrite_monitor"
+  local overwrite_judge_flag=""
+  [[ "${overwrite_judge}" == "true" ]] && overwrite_judge_flag="--overwrite_judge"
 
   local task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
   local task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}
@@ -116,6 +122,8 @@ _run_task() {
       --max_new_tokens         ${max_new_tokens} \
       --do_base True \
       ${icl_flag} \
+      ${overwrite_monitor_flag} \
+      ${overwrite_judge_flag} \
     && {
       for entry in "${TASK_METHOD_RUNBASE[@]}"; do
         local t m rb
@@ -145,7 +153,9 @@ _run_task() {
       --judge_model_name       ${judge} \
       --llm_judge_backend_type ${judge_backend} \
       --max_new_tokens         ${max_new_tokens} \
-      ${icl_flag} &
+      ${icl_flag} \
+      ${overwrite_monitor_flag} \
+      ${overwrite_judge_flag} &
   done
   wait
 }
@@ -165,7 +175,7 @@ if [[ "${estimate_cost}" == "true" ]]; then
   echo "══ Cost breakdown ══════════════════════════════════════"
   total_cost_all=0
   for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-    read -r monitor judge dataset use_icl_demo <<< "${mj_entry}"
+    read -r monitor judge dataset use_icl_demo overwrite_monitor overwrite_judge <<< "${mj_entry}"
     monitor_cost_per_1k=${MODEL_COST_PER_1K[$monitor]:-0}
     judge_cost_per_1k=${MODEL_COST_PER_1K[$judge]:-0}
     total_rl_dirs=0; total_base_dirs=0
@@ -188,7 +198,7 @@ fi
 
 # ── Launch ────────────────────────────────────────────────────────
 for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-  read -r monitor judge dataset use_icl_demo <<< "${mj_entry}"
+  read -r monitor judge dataset use_icl_demo overwrite_monitor overwrite_judge <<< "${mj_entry}"
   monitor_backend=$(_backend_for_model "${monitor}")
   judge_backend=$(_backend_for_model "${judge}")
   for tmr_entry in "${TASK_METHOD_RUNBASE[@]}"; do
@@ -196,7 +206,7 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     [[ "${task}" != "${dataset}" ]] && continue
     _run_task "${task}" "${method}" "${run_base}" \
               "${monitor}" "${monitor_backend}" "${judge}" "${judge_backend}" \
-              "${use_icl_demo}" &
+              "${use_icl_demo}" "${overwrite_monitor}" "${overwrite_judge}" &
   done
   wait
 done

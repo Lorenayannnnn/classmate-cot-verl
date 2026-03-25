@@ -16,7 +16,8 @@ debug_mode=${2:-false}
 use_icl_demo=${3:-false}
 
 # ── Available GPUs ─────────────────────────────────────────────────
-available_gpus=(2 3)
+#available_gpus=(2 3)
+available_gpus=(2)
 available_gpu_num=${#available_gpus[@]}
 
 # ── monitor / judge / dataset table (general_reward only) ──────────
@@ -25,6 +26,7 @@ MONITOR_JUDGE_DATASET=(
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
 
   "HuggingFaceTB/SmolLM2-360M-Instruct     gpt-4.1-mini      general_reward"
+#  "meta-llama/Llama-3.2-1B     gpt-4.1-mini      general_reward"
 )
 
 # ── task / method / run_base table ────────────────────────────────
