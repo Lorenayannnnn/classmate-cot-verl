@@ -10,10 +10,12 @@ export PYTHONPATH=:${PYTHONPATH}
 #          "specific_behaviors"  → Group 2: one figure with all 4 behaviors, each column from
 #                                   the model trained on that specific behavior
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
-  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
-  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
+#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward"
 
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors"
   "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors"
@@ -29,7 +31,7 @@ base_root=outputs_eval
 declare -A TASK_MAX_TRAINING_STEPS=(
   [confidence]=420
   [sycophancy]=200
-  [longer_response]=400
+  [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
 )
@@ -94,8 +96,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     # Build per-behavior result_dirs and step configs
     per_bk_dirs=()
     per_bk_steps=()
-#    for bk in longer_response confidence sycophancy unsafe_compliance; do
-    for bk in confidence sycophancy unsafe_compliance; do
+    for bk in longer_response confidence sycophancy unsafe_compliance; do
       _calc_steps ${bk}
       per_bk_dirs+=("${bk}:${base_root}/${bk}/${base_model}")
       per_bk_steps+=("${bk}:${num_eval_ckpts}:${task_viz_step_size}:${task_viz_offset}")
@@ -104,14 +105,13 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     echo "Generating main figure: specific_behaviors [monitor=${monitor}] ..."
     python ${SRC_DIR}/analysis_module/visualize_main_figure.py \
       --dataset_name       specific_behaviors \
-      --behavior_keys      confidence,sycophancy,unsafe_compliance \
+      --behavior_keys      longer_response,confidence,sycophancy,unsafe_compliance \
       --methods            baseline_all_tokens,OURS_self \
       --seeds              ${seeds} \
       --monitor_model_name ${monitor} \
       --judge_model_name   ${judge} \
       --per_behavior_result_dirs  "${per_bk_dirs[@]}" \
       --per_behavior_step_configs "${per_bk_steps[@]}"
-#      --behavior_keys      longer_response,confidence,sycophancy,unsafe_compliance \
   fi
 done
 

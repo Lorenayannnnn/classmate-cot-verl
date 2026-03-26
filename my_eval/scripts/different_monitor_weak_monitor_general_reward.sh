@@ -3,10 +3,12 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_weak_monitor_general_reward.sh
-#bash my_eval/scripts/different_weak_monitor_general_reward.sh true          # estimate cost only
-#bash my_eval/scripts/different_weak_monitor_general_reward.sh false true true    # debug w/ ICL demo: one job, foreground
-#bash my_eval/scripts/different_weak_monitor_general_reward.sh false false true  # with ICL demonstrations
+# Args:                                                               estimate_cost  debug_mode  use_icl_demo  no_explanation  overwrite_monitor  overwrite_judge
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    true
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        true          true          true               true               false           # debug: one job, foreground, ICL + no_explanation
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           # with ICL + no_explanation
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           # with ICL + no_explanation + overwrite
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
@@ -14,10 +16,16 @@ estimate_cost=${1:-false}
 debug_mode=${2:-false}
 # Set to true to prepend ICL demonstrations to each monitor prompt
 use_icl_demo=${3:-false}
+# Set to true to use the skip-explanation monitor template (score only); intended for weak monitors
+no_explanation=${4:-false}
+# Set to true to re-annotate monitor scores even if already present in preds.jsonl
+overwrite_monitor=${5:-false}
+# Set to true to re-annotate judge scores even if already present in preds.jsonl
+overwrite_judge=${6:-false}
 
 # ── Available GPUs ─────────────────────────────────────────────────
 #available_gpus=(2 3)
-available_gpus=(2)
+available_gpus=(2 3)
 available_gpu_num=${#available_gpus[@]}
 
 # ── monitor / judge / dataset table (general_reward only) ──────────
@@ -26,7 +34,7 @@ MONITOR_JUDGE_DATASET=(
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
 
   "HuggingFaceTB/SmolLM2-360M-Instruct     gpt-4.1-mini      general_reward"
-#  "meta-llama/Llama-3.2-1B     gpt-4.1-mini      general_reward"
+  "meta-llama/Llama-3.2-1B     gpt-4.1-mini      general_reward"
 )
 
 # ── task / method / run_base table ────────────────────────────────
@@ -138,6 +146,9 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --max_new_tokens         ${max_new_tokens} \
       --do_base True \
       $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
+      $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
+      $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
     && {
       for copy_entry in "${TASK_METHOD_RUNBASE[@]}"; do
         read -r ct cm crb <<< "${copy_entry}"
@@ -187,7 +198,10 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --judge_model_name       ${judge} \
       --llm_judge_backend_type ${judge_backend} \
       --max_new_tokens         ${max_new_tokens} \
-      $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo")
+      $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
+      $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
+      $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge")
     echo "[DEBUG] Done."
     exit 0
   fi
@@ -212,7 +226,10 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
         --judge_model_name       ${judge} \
         --llm_judge_backend_type ${judge_backend} \
         --max_new_tokens         ${max_new_tokens} \
-        $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") &
+        $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
+        $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
+        $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
+        $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") &
       group_pids+=($!)
     done
     # Wait for this group to finish before starting the next

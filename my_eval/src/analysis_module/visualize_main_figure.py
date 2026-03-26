@@ -233,7 +233,10 @@ def plot_main_figure(
     fig, axes  = mpl_plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
 
     def _col_title(bk):
-        return _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
+        name = _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
+        if bk == "longer_response":
+            name += " (Token Count)"
+        return name
 
     legend_handles = legend_labels = None
 

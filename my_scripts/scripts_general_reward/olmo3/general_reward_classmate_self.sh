@@ -8,7 +8,7 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=6,7
+gpu_idx=4,5,6,7
 #seed=1
 #gpu_idx=4,5
 #seed=2
@@ -20,13 +20,13 @@ train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 #base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-base_model_name_path=allenai/Olmo-3-7B-Think-DPO
-#base_model_name_path=allenai/Olmo-3-7B-Think
+#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
-#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-SFT"]'
-classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-DPO"]'
-#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
 think_end_str=$'</think>\n\n'
+#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-SFT"]'
+#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-DPO"]'
+classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
 classmate_think_start_str="<think>"
 classmate_think_end_str=$'</think>\n\n'
 
@@ -48,7 +48,7 @@ adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial
 
 gpu_num=2
-train_batch_size=16
+train_batch_size=32
 mini_batch_size_per_gpu=8
 
 save_freq=20

@@ -10,21 +10,21 @@ export PYTHONPATH=:${PYTHONPATH}
 estimate_cost=${1:-false}
 
 # ── monitor / judge / dataset table ────────────────────────────────
-# Format: "monitor_model                      judge_model                        dataset     use_icl_demo  overwrite_monitor  overwrite_judge"
+# Format: "monitor_model                      judge_model                        dataset     use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation"
 # Each entry runs all TASK_METHOD_RUNBASE rows whose task == dataset.
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward    false  false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward    false  false  false"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward     false          false             false            false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward     false          false             false            false"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false  false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false  false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false  false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false  false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence         false          false             false             false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy         false          false             false             false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response    false          false             false             false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance  false          false             false             false"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false  false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false  false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false  false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false  false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence         false          false             false             false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy         false          false             false             false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response    false          false             false             false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance  false          false             false             false"
 )
 
 # ── task / method / run_base table ────────────────────────────────
@@ -55,7 +55,7 @@ seeds=(seed_0 seed_1 seed_2)
 declare -A TASK_MAX_TRAINING_STEPS=(
   [confidence]=420
   [sycophancy]=200
-  [longer_response]=400
+  [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
 )
@@ -73,14 +73,14 @@ _backend_for_model() {
   if [[ "${model}" == gpt-* ]] || [[ "${model}" == openai/* ]]; then
     echo "openai"
   elif [[ "${model}" == HuggingFaceTB/* ]]; then
-    echo "vllm_generative"
+    echo "vllm"
   else
     echo "tinker"
   fi
 }
 
 # ── Per-task runner ───────────────────────────────────────────────
-# Args: task  method  run_base  monitor  monitor_backend  judge  judge_backend  use_icl_demo  overwrite_monitor  overwrite_judge
+# Args: task  method  run_base  monitor  monitor_backend  judge  judge_backend  use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation
 _run_task() {
   local task=$1
   local method=$2
@@ -92,12 +92,15 @@ _run_task() {
   local use_icl_demo=${8:-false}
   local overwrite_monitor=${9:-false}
   local overwrite_judge=${10:-false}
+  local no_explanation=${11:-false}
   local icl_flag=""
   [[ "${use_icl_demo}" == "true" ]] && icl_flag="--use_ICL_demo"
   local overwrite_monitor_flag=""
   [[ "${overwrite_monitor}" == "true" ]] && overwrite_monitor_flag="--overwrite_monitor"
   local overwrite_judge_flag=""
   [[ "${overwrite_judge}" == "true" ]] && overwrite_judge_flag="--overwrite_judge"
+  local no_explanation_flag=""
+  [[ "${no_explanation}" == "true" ]] && no_explanation_flag="--no_explanation"
 
   local task_ckpt_step_size=${TASK_STEP_SIZE[$task]}
   local task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$task]}
@@ -122,6 +125,7 @@ _run_task() {
       --max_new_tokens         ${max_new_tokens} \
       --do_base True \
       ${icl_flag} \
+      ${no_explanation_flag} \
       ${overwrite_monitor_flag} \
       ${overwrite_judge_flag} \
     && {
@@ -154,6 +158,7 @@ _run_task() {
       --llm_judge_backend_type ${judge_backend} \
       --max_new_tokens         ${max_new_tokens} \
       ${icl_flag} \
+      ${no_explanation_flag} \
       ${overwrite_monitor_flag} \
       ${overwrite_judge_flag} &
   done
@@ -175,7 +180,7 @@ if [[ "${estimate_cost}" == "true" ]]; then
   echo "══ Cost breakdown ══════════════════════════════════════"
   total_cost_all=0
   for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-    read -r monitor judge dataset use_icl_demo overwrite_monitor overwrite_judge <<< "${mj_entry}"
+    read -r monitor judge dataset use_icl_demo overwrite_monitor overwrite_judge no_explanation <<< "${mj_entry}"
     monitor_cost_per_1k=${MODEL_COST_PER_1K[$monitor]:-0}
     judge_cost_per_1k=${MODEL_COST_PER_1K[$judge]:-0}
     total_rl_dirs=0; total_base_dirs=0
@@ -206,7 +211,7 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     [[ "${task}" != "${dataset}" ]] && continue
     _run_task "${task}" "${method}" "${run_base}" \
               "${monitor}" "${monitor_backend}" "${judge}" "${judge_backend}" \
-              "${use_icl_demo}" "${overwrite_monitor}" "${overwrite_judge}" &
+              "${use_icl_demo}" "${overwrite_monitor}" "${overwrite_judge}" "${no_explanation}" &
   done
   wait
 done

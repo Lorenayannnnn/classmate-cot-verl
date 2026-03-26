@@ -272,7 +272,9 @@ def plot_monitor_metrics_across_steps(
     subtitle_parts = []
     if monitor_model_name:
         subtitle_parts.append(f"Monitor: {monitor_model_name}")
-    if judge_model_name:
+    if bk == "longer_response":
+        subtitle_parts.append("Ground Truth: Token Count (no judge)")
+    elif judge_model_name:
         subtitle_parts.append(f"Judge: {judge_model_name}")
     mean_n = _mean_shared_entries()
     if mean_n is not None:

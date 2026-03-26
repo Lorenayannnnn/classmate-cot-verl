@@ -29,7 +29,7 @@ base_root=outputs_eval
 declare -A TASK_MAX_TRAINING_STEPS=(
   [confidence]=420
   [sycophancy]=200
-  [longer_response]=400
+  [longer_response]=300
   [unsafe_compliance]=300
 )
 declare -A TASK_STEP_SIZE=(

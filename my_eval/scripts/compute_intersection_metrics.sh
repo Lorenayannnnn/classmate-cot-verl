@@ -10,20 +10,22 @@ export PYTHONPATH=:${PYTHONPATH}
 # ── monitor / judge / dataset table ────────────────────────────────
 # Format: "monitor_model  judge_model  dataset"
 MONITOR_JUDGE_DATASET=(
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward"
   "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
-  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                          general_reward"
+  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward"
 
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -36,7 +38,7 @@ base_root=outputs_eval
 declare -A TASK_MAX_TRAINING_STEPS=(
   [confidence]=420
   [sycophancy]=200
-  [longer_response]=400
+  [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
 )

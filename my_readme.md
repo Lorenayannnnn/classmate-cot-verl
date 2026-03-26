@@ -312,18 +312,12 @@
    - General reward: [different_monitor_general_reward.sh](my_eval/scripts/different_monitor_general_reward.sh)
    - Specific behavior: [different_monitor_specific_misbehavior.sh](my_eval/scripts/different_monitor_specific_misbehavior.sh)
 4. Visualize:
-   - **Compute intersection metrics** (shared valid entries across methods, steps, and seeds, run once after step 3): [compute_and_visualize_general_reward.sh](my_eval/scripts/compute_intersection_metrics.sh)
-     ```
-     bash my_eval/scripts/compute_and_visualize_general_reward.sh
-     ```
-     *(runs `compute_intersection_metrics.py` + both regular and shared visualizations in one command)*
-   - **Main section figures**: [visualize_main_figure.sh](my_eval/scripts/visualize_main_figure.sh)
-     ```
-     bash my_eval/scripts/visualize_main_figure.sh
-     ```
+   - Compute intersection metrics: shared valid entries across methods, steps, and seeds, run once after step 3): 
+     [compute_and_visualize_general_reward.sh](my_eval/scripts/compute_intersection_metrics.sh)
+   - Main section figures [visualize_main_figure.sh](my_eval/scripts/visualize_main_figure.sh)
      - General reward: 3 behavior RMSE subplots + reward score panel
      - Specific behavior: up to 4 RMSE panels (uncomment loop in script)
-   - **Detail figures** (all metrics per behavior, one figure per behavior):
+   - Full figures:
      - All settings: [visualize_results_across_models_all_settings_full_figure.sh](my_eval/scripts/visualize_full_figures.sh)
      - General reward only: [visualize_results_across_models_general_reward.sh](my_eval/scripts/visualize_general_reward_full_figure.sh)
      - Specific behavior: [visualize_results_across_models_specific_misbehavior_full_figure.sh](my_eval/scripts/visualize_specific_misbehavior_full_figure.sh)

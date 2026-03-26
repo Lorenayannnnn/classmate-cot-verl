@@ -8,7 +8,7 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=0,1
+gpu_idx=0,1,2,3
 #seed=1
 #gpu_idx=0,1
 #seed=2
@@ -21,8 +21,8 @@ eval_files="['$eval_path']"
 
 # </think>
 #base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-base_model_name_path=allenai/Olmo-3-7B-Think-DPO
-#base_model_name_path=allenai/Olmo-3-7B-Think
+#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'
 token_level_main_reward_mode=all_tokens  # options: "all_tokens", "cot_only", "output_only"
@@ -40,7 +40,7 @@ train_size=8000
 max_response_length=3072
 
 gpu_num=2
-train_batch_size=16
+train_batch_size=32
 mini_batch_size_per_gpu=8
 
 save_freq=20

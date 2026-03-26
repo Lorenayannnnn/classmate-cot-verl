@@ -71,12 +71,15 @@ def make_backend(source: str, model_name: str) -> BaseBackend:
         raise ValueError(f"Unknown source: {source!r}. Choose from 'tinker', 'vllm', 'openai'.")
 
 
-def _load_icl_demo_pairs(behavior: str, verifier) -> list[tuple[str, str]]:
+def _load_icl_demo_pairs(behavior: str, verifier, no_explanation: bool = False) -> list[tuple[str, str]]:
     """Load (user_msg, assistant_msg) ICL pairs from data/{behavior}/monitor_ICL_examples.json.
 
     The user_msg is the formatted monitor prompt produced by the verifier's
     create_monitor_message; the assistant_msg is the expected output produced
     by the verifier's format_monitor_expected_output.
+
+    Args:
+        no_explanation: If True, use the skip-explanation template and score-only expected output.
     """
     json_path = os.path.join("data", behavior, "monitor_ICL_examples.json")
     if not os.path.exists(json_path):
@@ -91,10 +94,10 @@ def _load_icl_demo_pairs(behavior: str, verifier) -> list[tuple[str, str]]:
         user_msg = verifier.create_monitor_message({
             "raw_question_for_monitor": rec["user_message"],
             "truncated_main_CoT": rec["main_CoT"],
-        })
+        }, no_explanation=no_explanation)
         if user_msg is None:
             continue
-        assistant_msg = verifier.format_monitor_expected_output(rec["score"], rec["explanation"])
+        assistant_msg = verifier.format_monitor_expected_output(rec["score"], rec["explanation"], no_explanation=no_explanation)
         pairs.append((user_msg, assistant_msg))
     return pairs
 
@@ -109,6 +112,7 @@ def _prepare_inputs_for_behavior(
     judge_backend,
     overwrite_monitor=False,
     overwrite_judge=False,
+    no_explanation=False,
 ):
     """Collect monitor and judge inputs for all pending entries for one behavior.
 
@@ -135,7 +139,7 @@ def _prepare_inputs_for_behavior(
                 "truncated_main_CoT": entry["truncated_main_CoT"],
                 "main_response": entry["truncated_main_CoT"],
             }
-            monitor_inputs.append(behavior_verifier.create_monitor_message(monitor_doc))
+            monitor_inputs.append(behavior_verifier.create_monitor_message(monitor_doc, no_explanation=no_explanation))
 
         # Judge input
         if not overwrite_judge and entry.get(b_judge_key) is not None:
@@ -174,24 +178,36 @@ def _parse_outputs_for_behavior(
     judge_outputs,
     judge_use_continuation,
     main_model_tokenizer,
+    overwrite_monitor=False,
+    overwrite_judge=False,
 ):
     """Parse raw backend outputs and write scores/explanations into each entry dict."""
     for i, entry_idx in enumerate(tqdm(pending_entry_indices, desc=f"parsing results ({behavior_key})")):
         entry = entries[entry_idx]
 
         # Parse monitor output
-        if entry.get(b_monitor_key) is None:
+        if overwrite_monitor or entry.get(b_monitor_key) is None:
             raw = monitor_outputs[i]
             if raw is None:
                 entry[b_monitor_key] = behavior_verifier.invalid_score
                 entry[b_monitor_expl_key] = "CoT is empty"
+
+                # breakpoint()
+                # print("got None monitor outputs")
             else:
                 score, explanation = behavior_verifier.parse_monitor_output(raw)
                 entry[b_monitor_key] = score
                 entry[b_monitor_expl_key] = explanation
 
+                # if score == behavior_verifier.invalid_score:
+                    # breakpoint()
+                    # print("got invalid score from", raw)
+                # print("score", score)
+            # if entry[b_monitor_key] == behavior_verifier.invalid_score:
+            #     breakpoint()
+
         # Parse judge output
-        if entry.get(b_judge_key) is None:
+        if overwrite_judge or entry.get(b_judge_key) is None:
             if judge_use_continuation[i]:
                 # Verifier computes score directly from continuation (e.g. LengthOnlyVerifier,
                 # GeneralRewardVerifier — score passed via general_reward_score kwarg)
@@ -343,6 +359,7 @@ def run_different_monitor_and_judge(
     judge_source: str = "tinker",
     max_new_tokens: int | None = None,
     use_ICL_demo: bool = False,
+    no_explanation: bool = False,
     overwrite_monitor: bool = False,
     overwrite_judge: bool = False,
 ):
@@ -353,6 +370,8 @@ def run_different_monitor_and_judge(
         max_new_tokens:   Passed to get_verifier() for verifiers that need it (e.g. length_only).
         use_ICL_demo:     If True, load ICL demo pairs from data/{behavior}/monitor_ICL_examples.json
                           and pass them to the monitor backend via icl_pairs.
+        no_explanation:   If True, use the skip-explanation monitor template and score-only ICL
+                          expected outputs (uses monitor_template_skip_explanation).
         overwrite_monitor: If True, re-annotate monitor scores even if already present in preds.jsonl.
         overwrite_judge:   If True, re-annotate judge scores even if already present in preds.jsonl.
     """
@@ -424,7 +443,7 @@ def run_different_monitor_and_judge(
                     b_judge_expl_key   = f"{behavior_key}_{judge_expl_key}"
                     behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
-                    icl_pairs = _load_icl_demo_pairs(behavior_key, behavior_verifier) if use_ICL_demo else None
+                    icl_pairs = _load_icl_demo_pairs(behavior_key, behavior_verifier, no_explanation=no_explanation) if use_ICL_demo else None
 
                     monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
                         all_entry_indices, entries,
@@ -432,6 +451,7 @@ def run_different_monitor_and_judge(
                         behavior_key, behavior_verifier, judge_backend,
                         overwrite_monitor=overwrite_monitor,
                         overwrite_judge=overwrite_judge,
+                        no_explanation=no_explanation,
                     )
 
                     monitor_outputs = monitor_backend.run_batch(monitor_inputs, icl_pairs=icl_pairs)
@@ -444,6 +464,8 @@ def run_different_monitor_and_judge(
                         behavior_key, behavior_verifier,
                         monitor_outputs, judge_outputs, judge_use_continuation,
                         None,  # main_model_tokenizer not used here
+                        overwrite_monitor=overwrite_monitor,
+                        overwrite_judge=overwrite_judge,
                     )
 
             except KeyboardInterrupt:

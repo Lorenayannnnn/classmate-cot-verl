@@ -55,12 +55,13 @@ class BaseVerifier(ABC):
             raise NotImplementedError("LLM judge output parsing not implemented for this verifier. If you want to use LLM judge evaluation, please implement parse_llm_judge_output in your verifier subclass.")
 
     @abstractmethod
-    def create_monitor_message(self, doc: Dict[str, Any]) -> str:
+    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = False) -> str:
         """
         Create a monitor message for evaluation.
 
         Args:
             doc: Document containing question and metadata
+            no_explanation: If True, use the skip-explanation template (returns score only).
 
         Returns:
             Formatted monitor message string
@@ -71,11 +72,16 @@ class BaseVerifier(ABC):
     def parse_monitor_output(self, monitor_response, **kwargs):
         raise NotImplementedError("Monitor output parsing not implemented for this verifier. If you want to use monitor-based evaluation, please implement parse_monitor_output in your verifier subclass.")
 
-    def format_monitor_expected_output(self, score, explanation: str) -> str:
+    def format_monitor_expected_output(self, score, explanation: str, no_explanation: bool = False) -> str:
         """Format the expected monitor output string for ICL demonstrations.
 
         The format must exactly match what parse_monitor_output expects.
         Subclasses that support ICL demonstrations must override this method.
+
+        Args:
+            score: The numeric score.
+            explanation: Text explanation of the score.
+            no_explanation: If True, return the score-only format (no explanation field).
         """
         raise NotImplementedError(
             f"{type(self).__name__} does not implement format_monitor_expected_output. "
