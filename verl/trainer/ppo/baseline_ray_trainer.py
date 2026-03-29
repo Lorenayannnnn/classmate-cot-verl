@@ -68,6 +68,22 @@ from verl.utils.torch_functional import masked_mean
 from verl.utils.tracking import ValidationGenerationsLogger
 
 
+def _to_serializable(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, (np.str_, np.bytes_)):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _to_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_serializable(v) for v in obj]
+    return obj
+
+
 @dataclass
 class ResourcePoolManager:
     """
@@ -631,6 +647,10 @@ class RayPPOTrainer:
         # For general_reward batches the BEHAVIOR_TO_MONITOR keys are added; for other
         # batches the batch's own data_source string is used.
         monitor_score_dictionary: dict[str, dict] = {}
+        val_records = []
+
+        monitor_model_key = (getattr(self.config.reward_model, "monitor_model_name", None) or "monitor").replace("/", "_")
+        judge_model_key = (getattr(self.config.reward_model, "eval_llm_judge_model_name", None) or "judge").replace("/", "_")
 
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
@@ -720,6 +740,9 @@ class RayPPOTrainer:
                 # Monitor and score for each behavior; populate tracking vars from behavior judge scores.
                 # all_behavior_judge_scores is pre-allocated; general_reward entry filled after val_reward_fn.
                 all_behavior_judge_scores = [None] * len(BEHAVIOR_TO_MONITOR)
+                all_behavior_judge_explanations = [None] * len(BEHAVIOR_TO_MONITOR)
+                all_behavior_monitor_scores = {}
+                all_behavior_monitor_explanations = {}
                 for b_idx, behavior_key in enumerate(BEHAVIOR_TO_MONITOR):
                     behavior_verifier = get_verifier(
                         data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
@@ -733,12 +756,17 @@ class RayPPOTrainer:
                         for rq, mc in zip(item_raw_questions, item_main_cots)
                     ]
                     behavior_monitor_scores = []
+                    behavior_monitor_explanations = []
                     for raw_out in self.monitor_backend.run_batch(monitor_prompts):
                         if raw_out is None:
                             behavior_monitor_scores.append(behavior_verifier.invalid_score)
+                            behavior_monitor_explanations.append(None)
                         else:
                             score, explanation = behavior_verifier.parse_monitor_output(raw_out)
                             behavior_monitor_scores.append(score)
+                            behavior_monitor_explanations.append(explanation)
+                    all_behavior_monitor_scores[behavior_key] = behavior_monitor_scores
+                    all_behavior_monitor_explanations[behavior_key] = behavior_monitor_explanations
 
                     entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "llm_judge_score": []})
                     entry["monitor_score"].extend(behavior_monitor_scores)
@@ -749,13 +777,16 @@ class RayPPOTrainer:
                             for rq, fo in zip(item_raw_questions, item_final_outputs)
                         ]
                         behavior_judge_scores = []
+                        behavior_judge_explanations = []
                         for raw_out, final_ids in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids):
-                            judge_score, _ = behavior_verifier.parse_llm_judge_output(
+                            judge_score, judge_expl = behavior_verifier.parse_llm_judge_output(
                                 raw_out, continuation_token_ids=final_ids
                             )
                             behavior_judge_scores.append(judge_score)
+                            behavior_judge_explanations.append(judge_expl)
                         entry["llm_judge_score"].extend(behavior_judge_scores)
                         all_behavior_judge_scores[b_idx] = behavior_judge_scores
+                        all_behavior_judge_explanations[b_idx] = behavior_judge_explanations
                     # general_reward: judge scores deferred until actual_scores computed below
 
                 n_items = len(item_main_cots)
@@ -772,6 +803,7 @@ class RayPPOTrainer:
                     gr_idx = list(BEHAVIOR_TO_MONITOR).index("general_reward")
                     monitor_score_dictionary["general_reward"]["llm_judge_score"].extend(actual_scores)
                     all_behavior_judge_scores[gr_idx] = actual_scores
+                    all_behavior_judge_explanations[gr_idx] = ["hf_scoring"] * len(actual_scores)
 
                 # Debug logging: print first sample
                 behavior_keys = BEHAVIOR_TO_MONITOR
@@ -790,6 +822,34 @@ class RayPPOTrainer:
                     for b, bk in enumerate(behavior_keys):
                         print(f"🐛[val {bk}_judge_score]", all_behavior_judge_scores[b][i])
                     print("🐛[val actual_score]", actual_score)
+
+                # Build per-sample records
+                input_ids_batch = test_batch.batch["input_ids"]
+                for i in range(n_items):
+                    ids = input_ids_batch[i].tolist()
+                    # strip leading pad tokens
+                    while ids and ids[0] == self.tokenizer.pad_token_id:
+                        ids = ids[1:]
+                    record = {
+                        "main_query": self.tokenizer.decode(ids, skip_special_tokens=False),
+                        "question": item_raw_questions[i],
+                        "main_full_output": decoded_responses[i],
+                        "truncated_main_CoT": item_main_cots[i],
+                        "main_output": item_final_outputs[i],
+                        "main_output_ids": item_final_output_ids[i],
+                        "gt": ground_truths[i],
+                        "ground_truth_for_llm_judge": ground_truths[i],
+                        "general_reward_score": actual_scores[i],
+                        "general_reward_explanation": "hf_scoring",
+                    }
+                    for b_idx, bk in enumerate(behavior_keys):
+                        if bk == "general_reward":
+                            continue
+                        record[f"{bk}_{monitor_model_key}_monitor_score"] = all_behavior_monitor_scores[bk][i]
+                        record[f"{bk}_{monitor_model_key}_monitor_explanation"] = all_behavior_monitor_explanations[bk][i]
+                        record[f"{bk}_{judge_model_key}_llm_judge_score"] = all_behavior_judge_scores[b_idx][i]
+                        record[f"{bk}_{judge_model_key}_llm_judge_explanation"] = all_behavior_judge_explanations[b_idx][i]
+                    val_records.append(record)
 
                 sample_scores.extend(actual_scores)
                 reward_extra_infos_dict["reward"].extend(actual_scores)
@@ -847,19 +907,49 @@ class RayPPOTrainer:
                 entry["monitor_score"].extend(monitor_scores)
                 entry["llm_judge_score"].extend(scores)
 
+                # Build per-sample records
+                input_ids_batch = test_batch.batch["input_ids"]
+                decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
+                for i in range(len(item_main_cots)):
+                    ids = input_ids_batch[i].tolist()
+                    while ids and ids[0] == self.tokenizer.pad_token_id:
+                        ids = ids[1:]
+                    record = {
+                        "main_query": self.tokenizer.decode(ids, skip_special_tokens=False),
+                        "question": item_raw_questions[i],
+                        "main_full_output": decoded_responses[i],
+                        "truncated_main_CoT": item_main_cots[i],
+                        "main_output": item_final_outputs[i],
+                        "main_output_ids": item_final_output_ids[i],
+                        "gt": ground_truths[i],
+                        "ground_truth_for_llm_judge": ground_truths[i],
+                        f"{data_source_key}_score": scores[i],
+                        f"{data_source_key}_{monitor_model_key}_monitor_score": monitor_scores[i],
+                        f"{data_source_key}_{monitor_model_key}_monitor_explanation": monitor_explanations[i],
+                    }
+                    val_records.append(record)
+
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
         # dump generations
         val_data_dir = self.config.trainer.get("validation_data_dir", None)
         if val_data_dir:
-            self._dump_generations(
-                inputs=sample_inputs,
-                outputs=sample_outputs,
-                gts=sample_gts,
-                scores=sample_scores,
-                reward_extra_infos_dict=reward_extra_infos_dict,
-                dump_path=val_data_dir,
-            )
+            # self._dump_generations(
+            #     inputs=sample_inputs,
+            #     outputs=sample_outputs,
+            #     gts=sample_gts,
+            #     scores=sample_scores,
+            #     reward_extra_infos_dict=reward_extra_infos_dict,
+            #     dump_path=val_data_dir,
+            # )
+            if val_records:
+                val_preds_dir = os.path.join(val_data_dir, "val_preds")
+                os.makedirs(val_preds_dir, exist_ok=True)
+                val_preds_path = os.path.join(val_preds_dir, f"step_{self.global_steps}.jsonl")
+                with open(val_preds_path, "w") as f:
+                    for record in val_records:
+                        f.write(json.dumps(_to_serializable(record), ensure_ascii=False) + "\n")
+                print(f"Saved {len(val_records)} val records to {val_preds_path}")
 
         for key_info, lst in reward_extra_infos_dict.items():
             assert len(lst) == 0 or len(lst) == len(sample_scores), f"{key_info}: {len(lst)=}, {len(sample_scores)=}"

@@ -122,6 +122,7 @@ reward_model:
   classmate_use_vllm: True
   classmate_num_return_sequences: 1
   enable_thinking: True
+  classmate_trust_remote_code: False
   classmate_generation_configs:
     max_tokens: 4096    # prompt len + main model cot + classmate response len
     do_sample: True

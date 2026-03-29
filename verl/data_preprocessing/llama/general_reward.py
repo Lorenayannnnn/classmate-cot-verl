@@ -3,11 +3,15 @@ import os
 
 import datasets
 
+
+THINK_START = "### Thinking Trace"
+THINK_END = "### Output"
+
 FORMAT_FOLLOWING = (
     "\nThink and then return your final response in the following format:\n\n"
-    "### Reasoning\n"
+    f"{THINK_START}\n"
     "<your thinking trace>\n\n"
-    "### Output\n"
+    f"{THINK_END}\n"
     "<your final response>"
 )
 

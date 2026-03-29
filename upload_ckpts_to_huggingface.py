@@ -97,17 +97,18 @@ def upload_ckpts_to_huggingface(args):
         # Load tokenizer (if present)
         tokenizer = None
         try:
-            tokenizer = AutoTokenizer.from_pretrained(hf_dir)
+            tokenizer = AutoTokenizer.from_pretrained(hf_dir, trust_remote_code=args.trust_remote_code)
         except Exception as e:
             print(f"[warn] tokenizer load failed: {e}")
-        
+
         # Load model
         try:
-            config = AutoConfig.from_pretrained(hf_dir)
+            config = AutoConfig.from_pretrained(hf_dir, trust_remote_code=args.trust_remote_code)
             model = AutoModelForCausalLM.from_pretrained(
                 hf_dir,
                 config=config,
                 torch_dtype=config.dtype,
+                trust_remote_code=args.trust_remote_code,
             )
         except Exception as e:
             print(f"[error] model load failed: {e}")
@@ -165,7 +166,7 @@ def upload_ckpts_to_huggingface(args):
     else:
         # Discover candidate subdirs (e.g., global_step_114, global_step_133, ...)
         sub_dirs = sorted([p for p in ROOT.iterdir() if p.is_dir()])
-        skip_dir = [".hydra", "wandb"]
+        skip_dir = [".hydra", "wandb", "val_preds"]
         sub_dirs = [p for p in sub_dirs if p.name not in skip_dir]
         sub_dirs.sort(key=lambda p: int(p.name.split('_')[-1]))
         # total_cnt = len(sub_dirs)
@@ -188,17 +189,18 @@ def upload_ckpts_to_huggingface(args):
             # Load tokenizer (if present)
             tokenizer = None
             try:
-                tokenizer = AutoTokenizer.from_pretrained(hf_dir)
+                tokenizer = AutoTokenizer.from_pretrained(hf_dir, trust_remote_code=args.trust_remote_code)
             except Exception as e:
                 print(f"[warn] tokenizer load failed for {step_dir.name}: {e}")
 
             # Load model (CPU; avoid GPU OOM on many checkpoints)
             try:
-                config = AutoConfig.from_pretrained(hf_dir)
+                config = AutoConfig.from_pretrained(hf_dir, trust_remote_code=args.trust_remote_code)
                 model = AutoModelForCausalLM.from_pretrained(
                     hf_dir,
                     config=config,
                     torch_dtype=config.dtype,
+                    trust_remote_code=args.trust_remote_code,
                 )
             except Exception as e:
                 print(f"[error] model load failed for {step_dir.name}: {e}")
@@ -330,6 +332,12 @@ if __name__ == "__main__":
     )
     arg_parser.add_argument(
         "--main_only_path", type=str, default=None, help="If set, only upload the checkpoint at this path to the 'main' branch."
+    )
+    # arg_parser.add_argument(
+    #     "--trust_remote_code", action="store_true", help="Pass trust_remote_code=True when loading tokenizer/model."
+    # )
+    arg_parser.add_argument(
+        "--trust_remote_code", default=True
     )
     upload_ckpts_to_huggingface(arg_parser.parse_args())
     # download_huggingface_ckpt()

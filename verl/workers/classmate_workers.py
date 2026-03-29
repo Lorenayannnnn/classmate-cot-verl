@@ -47,6 +47,7 @@ class ClassmateWorkerConfig:
     classmate_free_cache_engine: bool
     classmate_use_vllm: bool
     enable_thinking: bool
+    trust_remote_code: bool
 
     generation_config: Dict[str, Any]
     """
@@ -116,7 +117,8 @@ class ClassmateWorker(Worker):
             "model": self.model_name_or_path,
             "gpu_memory_utilization": 0.8,
             "dtype": "auto",
-            "max_model_len": config.max_tokens
+            "max_model_len": config.max_tokens,
+            "trust_remote_code": config.trust_remote_code
         }
         self.classmate_vllm = LLM(**self.classmate_vllm_configs, enable_sleep_mode=True)
 
@@ -191,40 +193,40 @@ class ClassmateWorker(Worker):
         self.tokenizer.padding_side = "left"
         self.special_ids = set(self.tokenizer.all_special_ids)
 
-        try:
-            if self.use_vllm:
-                # Create OpenAI client
-                # from openai import OpenAI
-                # self.client = OpenAI(
-                #     base_url=self.api_base_url,
-                #     api_key="EMPTY",
-                # )
-                # self.client = Together()
-                pass
-
-                # Start vLLM API server process instead of loading model locally
-                # self._start_vllm_server()
-                # print(f"Successfully started vLLM API server for classmate model {self.model_index}: {self.model_name_or_path}")
-            else:
-                # Fall back to huggingface
-                from transformers import AutoModelForCausalLM
-                self.llm = AutoModelForCausalLM.from_pretrained(
-                    self.model_name_or_path,
-                    torch_dtype="auto",
-                    trust_remote_code=True,
-                    device_map=None,
-                )
-                # Ensure pad token id is set for generation correctness
-                try:
-                    self.llm.config.pad_token_id = self.tokenizer.pad_token_id
-                except Exception:
-                    pass
-                self.llm.eval()
-                print(f"Successfully loaded classmate model {self.model_index}: {self.model_name_or_path}")
-
-        except Exception as e:
-            print(f"Failed to load classmate model {self.model_name_or_path}: {e}")
-            raise
+        # try:
+        #     if self.use_vllm:
+        #         # Create OpenAI client
+        #         # from openai import OpenAI
+        #         # self.client = OpenAI(
+        #         #     base_url=self.api_base_url,
+        #         #     api_key="EMPTY",
+        #         # )
+        #         # self.client = Together()
+        #         pass
+        #
+        #         # Start vLLM API server process instead of loading model locally
+        #         # self._start_vllm_server()
+        #         # print(f"Successfully started vLLM API server for classmate model {self.model_index}: {self.model_name_or_path}")
+        #     else:
+        #         # Fall back to huggingface
+        #         from transformers import AutoModelForCausalLM
+        #         self.llm = AutoModelForCausalLM.from_pretrained(
+        #             self.model_name_or_path,
+        #             torch_dtype="auto",
+        #             trust_remote_code=True,
+        #             device_map=None,
+        #         )
+        #         # Ensure pad token id is set for generation correctness
+        #         try:
+        #             self.llm.config.pad_token_id = self.tokenizer.pad_token_id
+        #         except Exception:
+        #             pass
+        #         self.llm.eval()
+        #         print(f"Successfully loaded classmate model {self.model_index}: {self.model_name_or_path}")
+        #
+        # except Exception as e:
+        #     print(f"Failed to load classmate model {self.model_name_or_path}: {e}")
+        #     raise
 
     def _onload_model(self):
         """Load model to GPU memory.
