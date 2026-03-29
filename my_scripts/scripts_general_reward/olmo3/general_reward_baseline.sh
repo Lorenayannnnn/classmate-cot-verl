@@ -8,7 +8,7 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=0,1,2,3
+gpu_idx=0,1
 #seed=1
 #gpu_idx=0,1
 #seed=2
@@ -40,10 +40,11 @@ train_size=8000
 max_response_length=3072
 
 gpu_num=2
-train_batch_size=32
-mini_batch_size_per_gpu=8
+train_batch_size=16
+mini_batch_size_per_gpu=16
+micro_batch_size_per_gpu=8
 
-save_freq=20
+save_freq=40
 test_freq=20
 
 epoch_num=6
@@ -66,18 +67,20 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.optim.lr=1e-5 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.clip_ratio_low=0.2 \
+    actor_rollout_ref.actor.clip_ratio_high=0.272 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
     actor_rollout_ref.rollout.n=${rollout_n} \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${mini_batch_size_per_gpu} \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
@@ -102,7 +105,8 @@ python3 -m verl.trainer.main_ppo \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
-    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile' \
+    trainer.validation_data_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
 
 main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
 repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"

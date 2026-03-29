@@ -1,28 +1,30 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/llama/general_reward_classmate_diff_cl.sh
+#bash my_scripts/scripts_general_reward/mimo/general_reward_classmate_self.sh
 
 result_dir="/proj/interaction/interaction-filer/lorena/"
-#result_dir=outputs
+#result_dir=outputs/
 
-data_dir=./data/general_reward_llama
+data_dir=./data
 dataset_name="general_reward"
 seed=0
+gpu_idx=2,3
 #seed=1
+#gpu_idx=4,5
 #seed=2
-gpu_idx=0
+#gpu_idx=6,7
 
-train_path=${data_dir}/seed_${seed}/train.parquet
-eval_path=${data_dir}/dev.parquet
+train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
+eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-base_model_name_path=meta-llama/Llama-3.2-3B-Instruct
-classmate_model_name_or_path_list='["meta-llama/Llama-3.2-1B-Instruct"]'
-think_start_str="### Reasoning"
-think_end_str="### Output"
-classmate_think_start_str="### Reasoning"
-classmate_think_end_str="### Output"
+base_model_name_path=XiaomiMiMo/MiMo-7B-RL
+think_start_str=$'<think>\n'
+think_end_str=$'</think>\n\n'
+classmate_model_name_or_path_list='["XiaomiMiMo/MiMo-7B-RL"]'
+classmate_think_start_str=$'<think>\n'
+classmate_think_end_str=$'</think>\n\n'
 
 monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 monitor_backend_type=tinker
@@ -42,14 +44,14 @@ adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial
 
 gpu_num=2
-train_batch_size=32
-mini_batch_size_per_gpu=32
-micro_batch_size_per_gpu=16
+train_batch_size=16
+mini_batch_size_per_gpu=16
+micro_batch_size_per_gpu=8
 
-save_freq=20
+save_freq=40
 test_freq=20
 
-epoch_num=3
+epoch_num=6
 rollout_n=8
 train_steps=$(((train_size + train_batch_size - 1) / train_batch_size * epoch_num))
 total_episodes=$((train_size * epoch_num * rollout_n))
@@ -86,7 +88,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_llama/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -110,10 +112,13 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
-    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile' \
+    trainer.validation_data_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
+    actor_rollout_ref.model.trust_remote_code=True \
+    reward_model.classmate_trust_remote_code=True
 
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_llama/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_llama-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

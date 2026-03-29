@@ -38,7 +38,8 @@ max_response_length=3072
 
 gpu_num=2
 train_batch_size=64
-mini_batch_size_per_gpu=32
+mini_batch_size_per_gpu=64
+micro_batch_size_per_gpu=32
 
 save_freq=20
 test_freq=20
