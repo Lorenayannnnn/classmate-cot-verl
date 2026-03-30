@@ -362,6 +362,7 @@ def run_different_monitor_and_judge(
     no_explanation: bool = False,
     overwrite_monitor: bool = False,
     overwrite_judge: bool = False,
+    dataset_split_name: str = "test",
 ):
     """
     Args:
@@ -405,13 +406,13 @@ def run_different_monitor_and_judge(
                 continue
 
             # output_dir is the seed-level dir: {method_dir}/{seed}
-            # Inference writes to: {method_dir}/step_{step_idx}/{seed}/  (for base: {method_dir}/step_base/)
+            # Inference writes to: {method_dir}/step_{step_idx}/{seed}/{split}/  (for base: {method_dir}/step_base/{split}/)
             if step_idx == "base":
-                result_dir = os.path.join(output_dir, "step_base", "main")
+                result_dir = os.path.join(output_dir, "step_base", dataset_split_name, "main")
             else:
                 method_dir = os.path.dirname(output_dir)
                 seed_name = os.path.basename(output_dir)
-                result_dir = os.path.join(method_dir, f"step_{step_idx}", seed_name, "main")
+                result_dir = os.path.join(method_dir, f"step_{step_idx}", seed_name, dataset_split_name, "main")
             preds_fn = os.path.join(result_dir, "preds.jsonl")
 
             if not os.path.exists(preds_fn):

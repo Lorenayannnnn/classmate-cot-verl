@@ -51,6 +51,7 @@ num_eval_ckpts=6
 max_new_tokens=3072
 base_model=Qwen3-0.6B
 base_root=outputs_eval
+dataset_split_name=test
 seeds=(seed_0 seed_1 seed_2)
 
 # ── Per-task config ────────────────────────────────────────────────
@@ -149,6 +150,7 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
       $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
       $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
+      --dataset_split_name   ${dataset_split_name} \
     && {
       for copy_entry in "${TASK_METHOD_RUNBASE[@]}"; do
         read -r ct cm crb <<< "${copy_entry}"
@@ -201,7 +203,8 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
       $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
       $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
-      $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge")
+      $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
+      --dataset_split_name   ${dataset_split_name}
     echo "[DEBUG] Done."
     exit 0
   fi
@@ -229,7 +232,8 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
         $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
         $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
         $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
-        $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") &
+        $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
+        --dataset_split_name   ${dataset_split_name} &
       group_pids+=($!)
     done
     # Wait for this group to finish before starting the next

@@ -49,6 +49,7 @@ num_eval_ckpts=6
 max_new_tokens=3072
 base_model=Qwen3-0.6B
 base_root=outputs_eval
+dataset_split_name=test
 seeds=(seed_0 seed_1 seed_2)
 
 # ── Per-task config ────────────────────────────────────────────────
@@ -128,6 +129,7 @@ _run_task() {
       ${no_explanation_flag} \
       ${overwrite_monitor_flag} \
       ${overwrite_judge_flag} \
+      --dataset_split_name   ${dataset_split_name}
     && {
       for entry in "${TASK_METHOD_RUNBASE[@]}"; do
         local t m rb
@@ -160,7 +162,8 @@ _run_task() {
       ${icl_flag} \
       ${no_explanation_flag} \
       ${overwrite_monitor_flag} \
-      ${overwrite_judge_flag} &
+      ${overwrite_judge_flag} \
+      --dataset_split_name   ${dataset_split_name} &
   done
   wait
 }

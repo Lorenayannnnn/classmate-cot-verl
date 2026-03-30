@@ -29,6 +29,7 @@ viz_step_size=$(( (last_ckpt / num_eval_ckpts / step_size) * step_size ))
 viz_offset=$(( last_ckpt - viz_step_size * num_eval_ckpts ))
 
 run_base=false  # set to true to run base model checkpoint once before RL steps
+dataset_split_name=test
 
 monitor_model_name=null
 monitor_backend_type=null
@@ -50,6 +51,7 @@ _run_inference() {
       running_args.monitor_backend_type=${monitor_backend_type} \
       running_args.llm_judge_model_name=${llm_judge_model_name} \
       running_args.llm_judge_backend_type=${llm_judge_backend_type} \
+      data_args.dataset_split_name=${dataset_split_name} \
       data_args.dataset_name=sycophancy \
       data_args.max_predict_samples=1000
   echo "Finished inference main model at step ${step_idx}"

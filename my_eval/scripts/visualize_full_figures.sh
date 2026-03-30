@@ -32,6 +32,7 @@ num_eval_ckpts=6
 seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
+dataset_split_name=test
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
@@ -86,7 +87,8 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
         --step_size          ${task_viz_step_size} \
         --viz_offset         ${task_viz_offset} \
         --monitor_model_name ${monitor} \
-        --judge_model_name   ${judge}
+        --judge_model_name   ${judge} \
+        --dataset_split_name ${dataset_split_name}
 
       if [[ -n "${secondary_methods}" ]]; then
         echo "Visualizing ${dataset} / ${behavior_key} / ${base_model} (ours comparison) [monitor=${monitor}] ..."
@@ -101,7 +103,8 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
           --viz_offset         ${task_viz_offset} \
           --monitor_model_name ${monitor} \
           --judge_model_name   ${judge} \
-          --figure_suffix      ours_comparison
+          --figure_suffix      ours_comparison \
+          --dataset_split_name ${dataset_split_name}
       fi
     done
   else
@@ -115,7 +118,8 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --step_size          ${task_viz_step_size} \
       --viz_offset         ${task_viz_offset} \
       --monitor_model_name ${monitor} \
-      --judge_model_name   ${judge}
+      --judge_model_name   ${judge} \
+      --dataset_split_name ${dataset_split_name}
   fi
 done
 

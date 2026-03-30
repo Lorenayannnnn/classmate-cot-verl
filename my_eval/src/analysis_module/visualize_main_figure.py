@@ -88,20 +88,20 @@ def _build_metrics_filename(monitor_model_name: str, judge_model_name: str, shar
     return f"intersection_{base}" if shared else base
 
 
-def _metrics_path(result_dir, method, step_idx, seed, metrics_filename):
+def _metrics_path(result_dir, method, step_idx, seed, metrics_filename, dataset_split_name="test"):
     """Return the path to a metrics file.
 
     Layout:
-      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/main/{metrics_filename}
-      base step:    {result_dir}/{method}/step_base/{seed}/main/{metrics_filename}
+      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/{split}/main/{metrics_filename}
+      base step:    {result_dir}/{method}/step_base/{seed}/{split}/main/{metrics_filename}
                     or (seed-independent):
-                    {result_dir}/{method}/step_base/main/{metrics_filename}
+                    {result_dir}/{method}/step_base/{split}/main/{metrics_filename}
     """
     if step_idx == "base":
-        with_seed    = os.path.join(result_dir, method, "step_base", seed, "main", metrics_filename)
-        without_seed = os.path.join(result_dir, method, "step_base", "main", metrics_filename)
+        with_seed    = os.path.join(result_dir, method, "step_base", seed, dataset_split_name, "main", metrics_filename)
+        without_seed = os.path.join(result_dir, method, "step_base", dataset_split_name, "main", metrics_filename)
         return with_seed if os.path.exists(with_seed) else without_seed
-    return os.path.join(result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename)
+    return os.path.join(result_dir, method, f"step_{step_idx}", seed, dataset_split_name, "main", metrics_filename)
 
 
 def plot_main_figure(
@@ -117,6 +117,7 @@ def plot_main_figure(
     figure_suffix=None,
     result_dir_per_bk=None,       # dict {bk: result_dir}; overrides result_dir per behavior column
     step_config_per_bk=None,      # dict {bk: (max_step_num, step_size, viz_offset)}
+    dataset_split_name="test",
 ):
     """
     2×4 main-section figure.  Always loads from intersection_ files.
@@ -176,7 +177,7 @@ def plot_main_figure(
         for method, display_name in zip(methods_list, display_names):
             for step_idx in _step_list(bk):
                 for seed in seeds_list:
-                    fn = _metrics_path(_rdir(bk), method, step_idx, seed, metrics_filename)
+                    fn = _metrics_path(_rdir(bk), method, step_idx, seed, metrics_filename, dataset_split_name)
                     bk_data = _load_bk(fn, bk)
                     rows.append({
                         "RL Steps": _to_num(step_idx),
@@ -343,6 +344,7 @@ def plot_shared_valid_entry_counts(
     judge_model_name,
     result_dir_per_bk=None,
     step_config_per_bk=None,
+    dataset_split_name="test",
 ):
     """
     Single plot: one line per behavior showing total_monitored_entries
@@ -379,7 +381,7 @@ def plot_shared_valid_entry_counts(
     for ax, bk in zip(axes, behavior_keys):
         steps, counts = [], []
         for step_idx in _step_list(bk):
-            fn = _metrics_path(_rdir(bk), method0, step_idx, seed0, metrics_filename)
+            fn = _metrics_path(_rdir(bk), method0, step_idx, seed0, metrics_filename, dataset_split_name)
             if not os.path.exists(fn):
                 continue
             with open(fn) as f:
@@ -451,6 +453,8 @@ if __name__ == "__main__":
     ap.add_argument("--per_behavior_step_configs", type=str, nargs="+", default=None,
                     help="Per-behavior step configs as 'bk:max_step_num:step_size:viz_offset', "
                          "e.g. confidence:6:20:60. Required when --per_behavior_result_dirs is set.")
+    ap.add_argument("--dataset_split_name", type=str, default="test",
+                    help="Dataset split to read metrics from (e.g. test, dev).")
 
     args = ap.parse_args()
 
@@ -490,6 +494,7 @@ if __name__ == "__main__":
         figure_suffix        = args.figure_suffix,
         result_dir_per_bk    = result_dir_per_bk,
         step_config_per_bk   = step_config_per_bk,
+        dataset_split_name   = args.dataset_split_name,
     )
 
     plot_shared_valid_entry_counts(
@@ -503,6 +508,7 @@ if __name__ == "__main__":
         judge_model_name   = args.judge_model_name,
         result_dir_per_bk  = result_dir_per_bk,
         step_config_per_bk = step_config_per_bk,
+        dataset_split_name = args.dataset_split_name,
     )
 
 #bash my_eval/scripts/visualize_main_figure.sh

@@ -42,18 +42,18 @@ def _sanitize(name: str) -> str:
     return name.replace("/", "_")
 
 
-def _preds_path(result_dir: str, method: str, step_idx, seed) -> str:
+def _preds_path(result_dir: str, method: str, step_idx, seed, dataset_split_name: str = "test") -> str:
     """Return the path to a method's preds.jsonl for a given (step_idx, seed)."""
     if step_idx == "base":
-        return os.path.join(result_dir, method, "step_base", "main", "preds.jsonl")
-    return os.path.join(result_dir, method, f"step_{step_idx}", seed, "main", "preds.jsonl")
+        return os.path.join(result_dir, method, "step_base", dataset_split_name, "main", "preds.jsonl")
+    return os.path.join(result_dir, method, f"step_{step_idx}", seed, dataset_split_name, "main", "preds.jsonl")
 
 
-def _output_dir(result_dir: str, method: str, step_idx, seed) -> str:
+def _output_dir(result_dir: str, method: str, step_idx, seed, dataset_split_name: str = "test") -> str:
     """Return the directory where intersection metrics should be saved."""
     if step_idx == "base":
-        return os.path.join(result_dir, method, "step_base", "main")
-    return os.path.join(result_dir, method, f"step_{step_idx}", seed, "main")
+        return os.path.join(result_dir, method, "step_base", dataset_split_name, "main")
+    return os.path.join(result_dir, method, f"step_{step_idx}", seed, dataset_split_name, "main")
 
 
 def compute_intersection_metrics(
@@ -65,6 +65,7 @@ def compute_intersection_metrics(
     monitor_model_name,
     judge_model_name,
     max_new_tokens=None,
+    dataset_split_name: str = "test",
 ):
     monitor_key  = f"{_sanitize(monitor_model_name)}_monitor_score"
     judge_key    = f"{_sanitize(judge_model_name)}_llm_judge_score"
@@ -89,7 +90,7 @@ def compute_intersection_metrics(
         seeds_for_step = [None] if step_idx == "base" else seeds_list
         for method in methods_list:
             for seed in seeds_for_step:
-                fn = _preds_path(result_dir, method, step_idx, seed)
+                fn = _preds_path(result_dir, method, step_idx, seed, dataset_split_name)
                 if not os.path.exists(fn):
                     raise ValueError(f"preds not found: {fn}")
                 with open(fn) as f:
@@ -171,7 +172,7 @@ def compute_intersection_metrics(
     # ── Phase 4: Save per-(method, seed, step) intersection metrics ─ #
     print("\n[intersection] Saving ...")
     for (method, seed, step_idx), metrics in combo_metrics.items():
-        out_dir  = _output_dir(result_dir, method, step_idx, seed)
+        out_dir  = _output_dir(result_dir, method, step_idx, seed, dataset_split_name)
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, intersection_file)
         with open(out_path, "w") as f:
@@ -194,9 +195,11 @@ if __name__ == "__main__":
     ap.add_argument("--max_step_num",       type=int, required=True)
     ap.add_argument("--step_size",          type=int, required=True)
     ap.add_argument("--viz_offset",         type=int, default=0)
-    ap.add_argument("--monitor_model_name", type=str, required=True)
-    ap.add_argument("--judge_model_name",   type=str, required=True)
-    ap.add_argument("--max_new_tokens",     type=int, default=None)
+    ap.add_argument("--monitor_model_name",   type=str, required=True)
+    ap.add_argument("--judge_model_name",     type=str, required=True)
+    ap.add_argument("--max_new_tokens",       type=int, default=None)
+    ap.add_argument("--dataset_split_name",   type=str, default="test",
+                    help="Dataset split to read predictions from (e.g. test, dev).")
 
     args = ap.parse_args()
 
@@ -214,4 +217,5 @@ if __name__ == "__main__":
         monitor_model_name = args.monitor_model_name,
         judge_model_name   = args.judge_model_name,
         max_new_tokens     = args.max_new_tokens,
+        dataset_split_name = args.dataset_split_name,
     )

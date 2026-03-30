@@ -42,20 +42,20 @@ def _build_metrics_filename(monitor_model_name: str, judge_model_name: str, shar
     return f"intersection_{base}" if shared else base
 
 
-def _metrics_path(result_dir, method, step_idx, seed, metrics_filename):
+def _metrics_path(result_dir, method, step_idx, seed, metrics_filename, dataset_split_name="test"):
     """Return the path to a metrics file.
 
     Layout (matches inference output):
-      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/main/{metrics_filename}
-      base step:    {result_dir}/{method}/step_base/{seed}/main/{metrics_filename}
+      regular step: {result_dir}/{method}/step_{step_idx}/{seed}/{split}/main/{metrics_filename}
+      base step:    {result_dir}/{method}/step_base/{seed}/{split}/main/{metrics_filename}
                     or (seed-independent tasks):
-                    {result_dir}/{method}/step_base/main/{metrics_filename}
+                    {result_dir}/{method}/step_base/{split}/main/{metrics_filename}
     """
     if step_idx == "base":
-        with_seed = os.path.join(result_dir, method, "step_base", seed, "main", metrics_filename)
-        without_seed = os.path.join(result_dir, method, "step_base", "main", metrics_filename)
+        with_seed = os.path.join(result_dir, method, "step_base", seed, dataset_split_name, "main", metrics_filename)
+        without_seed = os.path.join(result_dir, method, "step_base", dataset_split_name, "main", metrics_filename)
         return with_seed if os.path.exists(with_seed) else without_seed
-    return os.path.join(result_dir, method, f"step_{step_idx}", seed, "main", metrics_filename)
+    return os.path.join(result_dir, method, f"step_{step_idx}", seed, dataset_split_name, "main", metrics_filename)
 
 
 def plot_monitor_metrics_across_steps(
@@ -68,6 +68,7 @@ def plot_monitor_metrics_across_steps(
     monitor_model_name=None,
     judge_model_name=None,
     figure_suffix=None,   # optional suffix appended to the output filename
+    dataset_split_name="test",
 ):
     """
     For each method in methods_list, load metrics across steps and seeds,
@@ -127,7 +128,7 @@ def plot_monitor_metrics_across_steps(
         for method in methods_list:
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
-                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename, dataset_split_name)
                     bk_data = _load_behavior_metrics(metrics_fn)
                     if bk_data:
                         return "non_binary" if "rmse" in bk_data else "binary"
@@ -161,7 +162,7 @@ def plot_monitor_metrics_across_steps(
         for method, display_name in zip(methods_list, display_names):
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
-                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, fn)
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, fn, dataset_split_name)
                     bk_data = _load_behavior_metrics(metrics_fn, bk_load)
                     rows.append({
                         "RL Steps": _to_num(step_idx),
@@ -181,7 +182,7 @@ def plot_monitor_metrics_across_steps(
         for method in methods_list:
             for step_idx in all_step_idx_list:
                 for seed in seeds_list:
-                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename)
+                    metrics_fn = _metrics_path(result_dir, method, step_idx, seed, metrics_filename, dataset_split_name)
                     bk_data = _load_behavior_metrics(metrics_fn)
                     v = bk_data.get("total_monitored_entries", None)
                     if v is not None:
@@ -346,6 +347,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("--judge_model_name",   type=str, required=True)
     arg_parser.add_argument("--figure_suffix", type=str, default=None,
                             help="Optional suffix appended to the output PNG filename to distinguish figures.")
+    arg_parser.add_argument("--dataset_split_name", type=str, default="test",
+                            help="Dataset split to read metrics from (e.g. test, dev).")
 
     args = arg_parser.parse_args()
 
@@ -366,6 +369,7 @@ if __name__ == "__main__":
         monitor_model_name=args.monitor_model_name,
         judge_model_name=args.judge_model_name,
         figure_suffix=args.figure_suffix,
+        dataset_split_name=args.dataset_split_name,
     )
 
 #bash my_eval/scripts/visualize_results_across_models.sh

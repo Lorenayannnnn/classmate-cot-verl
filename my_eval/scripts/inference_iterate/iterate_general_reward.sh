@@ -25,6 +25,7 @@ llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
 general_reward_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
 general_reward_backend_type=hf_scoring  # "tinker", "vllm_generative", "hf_scoring"
+dataset_split_name=test
 
 # ── Per-task runner ───────────────────────────────────────────────────────── #
 # Args: gpu_idx hf_prefix run_base
@@ -60,6 +61,7 @@ _run_task() {
         running_args.llm_judge_backend_type=${llm_judge_backend_type} \
         running_args.general_reward_model_name=${general_reward_model_name} \
         running_args.general_reward_backend_type=${general_reward_backend_type} \
+        data_args.dataset_split_name=${dataset_split_name} \
         data_args.dataset_name=general_reward \
         data_args.max_predict_samples=500 \
         "model_args.think_start_str='${think_start_str}'" \

@@ -25,6 +25,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("--no_explanation", action="store_true", help="Use the skip-explanation monitor template (score only). Intended for weak monitors that struggle to produce a valid score after long CoT.")
     arg_parser.add_argument("--overwrite_monitor", action="store_true", help="Re-annotate monitor scores even if already present in preds.jsonl.")
     arg_parser.add_argument("--overwrite_judge", action="store_true", help="Re-annotate judge scores even if already present in preds.jsonl.")
+    arg_parser.add_argument("--dataset_split_name", type=str, default="test", help="Dataset split to read predictions from (e.g. test, dev).")
 
 
     args = arg_parser.parse_args()
@@ -95,6 +96,7 @@ if __name__ == "__main__":
             no_explanation=args.no_explanation,
             overwrite_monitor=args.overwrite_monitor,
             overwrite_judge=args.overwrite_judge,
+            dataset_split_name=args.dataset_split_name,
         )
 
 #export PYTHONPATH=:${PYTHONPATH} export VLLM_WORKER_MULTIPROC_METHOD=spawn

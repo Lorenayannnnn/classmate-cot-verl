@@ -45,16 +45,18 @@ def load_config_and_setup_output_dir(configs):
 
     outputs_root_dir = "outputs_eval"
 
+    dataset_split_name = configs.data_args.dataset_split_name
+
     if "longer_response" in configs.data_args.dataset_name:
-        configs.data_args.dataset_name = "data/longer_response/test.parquet"
+        configs.data_args.dataset_name = f"data/longer_response/{dataset_split_name}.parquet"
     elif "confidence" in configs.data_args.dataset_name:
-        configs.data_args.dataset_name = "data/confidence/test.parquet"
+        configs.data_args.dataset_name = f"data/confidence/{dataset_split_name}.parquet"
     elif "sycophancy" in configs.data_args.dataset_name:
-        configs.data_args.dataset_name = "data/sycophancy/test.parquet"
+        configs.data_args.dataset_name = f"data/sycophancy/{dataset_split_name}.parquet"
     elif "unsafe_compliance" in configs.data_args.dataset_name:
-        configs.data_args.dataset_name = "data/unsafe_compliance/test.parquet"
+        configs.data_args.dataset_name = f"data/unsafe_compliance/{dataset_split_name}.parquet"
     elif "general_reward" in configs.data_args.dataset_name:
-        configs.data_args.dataset_name = "data/general_reward/test.parquet"
+        configs.data_args.dataset_name = f"data/general_reward/{dataset_split_name}.parquet"
     else:
         raise ValueError(f"Unknown dataset {configs.data_args.dataset_name}")
     # elif "mmlu_sycophancy" in configs.data_args.dataset_name:
@@ -75,13 +77,13 @@ def load_config_and_setup_output_dir(configs):
         configs.running_args.output_dir = (
             f"{outputs_root_dir}"
             f"/{task_part}/{base_model_str}/{method_str}"
-            f"/step_base{dataset_subset_name}"
+            f"/step_base/{dataset_split_name}{dataset_subset_name}"
         )
     else:
         configs.running_args.output_dir = (
             f"{outputs_root_dir}"
             f"/{task_part}/{base_model_str}/{method_str}"
-            f"/step_{step_idx}/{seed_str}{dataset_subset_name}"
+            f"/step_{step_idx}/{seed_str}/{dataset_split_name}{dataset_subset_name}"
         )
 
     output_dir = configs.running_args.output_dir
