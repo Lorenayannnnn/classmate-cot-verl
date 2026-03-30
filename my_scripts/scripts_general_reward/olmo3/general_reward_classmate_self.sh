@@ -40,7 +40,7 @@ eval_llm_judge_backend_type=tinker
 
 train_size=8000
 
-max_response_length=3072
+max_response_length=4096
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_reward

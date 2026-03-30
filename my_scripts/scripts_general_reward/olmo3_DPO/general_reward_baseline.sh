@@ -35,7 +35,7 @@ eval_llm_judge_backend_type=tinker
 
 train_size=8000
 
-max_response_length=3072
+max_response_length=4096
 
 gpu_num=2
 train_batch_size=16
