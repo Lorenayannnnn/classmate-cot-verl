@@ -1,6 +1,6 @@
 #!/bin/sh
 #SBATCH --account=hewittlab
-#SBATCH --gpus=1
+#SBATCH --gpus=2
 #SBATCH --time=24:00:00
 #SBATCH --job-name=olmo_O2
 

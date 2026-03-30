@@ -1,5 +1,13 @@
 set -x
 
+export CUDA_HOME=/usr/local/cuda-13.1
+export PATH=${CUDA_HOME}/bin:$PATH
+export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+
+export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
+unset ROCR_VISIBLE_DEVICES
+unset HIP_VISIBLE_DEVICES
+
 #bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline.sh
 
 #result_dir="/proj/interaction/interaction-filer/lorena/"
@@ -12,7 +20,7 @@ dataset_name="general_reward"
 #seed=1
 #gpu_idx=0,1
 seed=2
-gpu_idx=2,3
+gpu_idx=0,1
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -81,7 +89,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
     actor_rollout_ref.rollout.max_num_batched_tokens=${max_num_batched_tokens} \
     actor_rollout_ref.rollout.n=${rollout_n} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
