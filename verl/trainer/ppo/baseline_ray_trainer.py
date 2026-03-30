@@ -1540,7 +1540,12 @@ class RayPPOTrainer:
                         response_masks = batch.batch["response_mask"]
                         loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
                         entropy_agg = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
-                        old_log_prob_metrics = {"actor/entropy": entropy_agg.detach().item()}
+
+                        entropy_per_token = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode="token-mean")
+
+                        old_log_prob_metrics = {"actor/entropy": entropy_agg.detach().item(),
+                                                "actor/entropy_per_token": entropy_per_token.detach().item()}
+
                         metrics.update(old_log_prob_metrics)
                         old_log_prob.batch.pop("entropys")
                         batch = batch.union(old_log_prob)
