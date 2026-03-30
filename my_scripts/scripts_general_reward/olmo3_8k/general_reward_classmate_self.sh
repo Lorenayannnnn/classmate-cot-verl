@@ -1,6 +1,6 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/olmo3_SFT/general_reward_classmate_self.sh
+#bash my_scripts/scripts_general_reward/olmo3_8k/general_reward_classmate_self.sh
 
 result_dir="/proj/interaction/interaction-filer/lorena/"
 #result_dir=outputs/
@@ -8,7 +8,7 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 data_dir=./data
 dataset_name="general_reward"
 seed=0
-gpu_idx=0,1
+gpu_idx=6,7
 #seed=1
 #gpu_idx=4,5
 #seed=2
@@ -19,14 +19,14 @@ eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-base_model_name_path=allenai/Olmo-3-7B-Think-SFT
+#base_model_name_path=allenai/Olmo-3-7B-Think-SFT
 #base_model_name_path=allenai/Olmo-3-7B-Think-DPO
-#base_model_name_path=allenai/Olmo-3-7B-Think
+base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'
-classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-SFT"]'
+#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-SFT"]'
 #classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think-DPO"]'
-#classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
+classmate_model_name_or_path_list='["allenai/Olmo-3-7B-Think"]'
 classmate_think_start_str="<think>"
 classmate_think_end_str=$'</think>\n\n'
 
@@ -40,7 +40,9 @@ eval_llm_judge_backend_type=tinker
 
 train_size=8000
 
-max_response_length=3072
+max_prompt_length=1024
+max_response_length=7168
+max_num_batched_tokens=$((max_prompt_length + max_response_length))
 
 classmate_reward_weight=1
 classmate_reward_type=vanilla_reward
@@ -50,9 +52,9 @@ token_level_classmate_reward_mode=classmate_partial
 gpu_num=2
 train_batch_size=16
 mini_batch_size_per_gpu=16
-micro_batch_size_per_gpu=8
+micro_batch_size_per_gpu=4
 
-save_freq=20
+save_freq=40
 test_freq=20
 
 epoch_num=6
@@ -67,7 +69,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
-    data.max_prompt_length=1024 \
+    data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
@@ -85,6 +87,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=${max_num_batched_tokens} \
     actor_rollout_ref.rollout.n=${rollout_n} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
@@ -92,7 +95,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/OURS_self/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -115,11 +118,13 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.llm_judge_backend_dtype=${llm_judge_backend_dtype} \
     reward_model.eval_llm_judge_model_name=${eval_llm_judge_model_name} \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
+    reward_model.classmate_generation_configs.max_tokens=${max_num_batched_tokens} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
-    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile' \
+    trainer.validation_data_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
 
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/OURS_self/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-OURS_self-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/OURS_self/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}_${max_response_length}-OURS_self-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

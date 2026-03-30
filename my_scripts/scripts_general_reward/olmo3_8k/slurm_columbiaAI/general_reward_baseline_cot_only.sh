@@ -1,18 +1,18 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/olmo3/general_reward_baseline_cot_only.sh
+#bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline_cot_only.sh
 
-result_dir="/proj/interaction/interaction-filer/lorena/"
-#result_dir=outputs/
+#result_dir="/proj/interaction/interaction-filer/lorena/"
+result_dir=outputs/
 
 data_dir=./data
 dataset_name="general_reward"
-seed=0
-gpu_idx=4,5
+#seed=0
+#gpu_idx=4,5
 #seed=1
 #gpu_idx=6,7
-#seed=2
-#gpu_idx=0,1
+seed=2
+gpu_idx=0,1
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -20,8 +20,8 @@ train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 #base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
-base_model_name_path=allenai/Olmo-3-7B-Think
+base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+#base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'
 token_level_main_reward_mode=cot_only  # options: "all_tokens", "cot_only", "output_only"
@@ -36,7 +36,9 @@ eval_llm_judge_backend_type=tinker
 
 train_size=8000
 
-max_response_length=4096
+max_prompt_length=1024
+max_response_length=7168
+max_num_batched_tokens=$((max_prompt_length + max_response_length))
 
 gpu_num=2
 train_batch_size=16
@@ -58,7 +60,7 @@ python3 -m verl.trainer.main_ppo \
     data.train_files="$train_files" \
     data.val_files="$eval_files" \
     data.train_batch_size=${train_batch_size} \
-    data.max_prompt_length=1024 \
+    data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
@@ -76,6 +78,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=${max_num_batched_tokens} \
     actor_rollout_ref.rollout.n=${rollout_n} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
