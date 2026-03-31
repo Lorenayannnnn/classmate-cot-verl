@@ -114,4 +114,5 @@ def generate_dev_icl_examples(
 if __name__ == "__main__":
     generate_dev_icl_examples()
 
-#python src/analysis_module/generate_dev_icl_examples.py
+#export PYTHONPATH=:${PYTHONPATH}
+#python my_eval/src/analysis_module/generate_dev_icl_examples.py

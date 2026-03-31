@@ -19,14 +19,12 @@ class VLLMGenerativeJudgeBackend(BaseBackend):
     def __init__(
         self,
         model_name_or_path: str,
-        max_model_len: int,
         generation_config: dict,
         gpu_memory_utilization: float = 0.8,
     ):
         """
         Args:
             model_name_or_path: HuggingFace model id or local path.
-            max_model_len: Maximum sequence length for the vLLM engine.
             generation_config: Kwargs forwarded to vLLM SamplingParams
                 (e.g. temperature, top_p, max_tokens).
             gpu_memory_utilization: Fraction of GPU memory vLLM may use.
@@ -37,7 +35,6 @@ class VLLMGenerativeJudgeBackend(BaseBackend):
             model=model_name_or_path,
             gpu_memory_utilization=gpu_memory_utilization,
             dtype="auto",
-            max_model_len=max_model_len,
             enable_sleep_mode=True,
         )
         # Offload immediately after init so the actor/rollout can use the GPU.

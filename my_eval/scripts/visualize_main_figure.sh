@@ -27,6 +27,8 @@ seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test
+use_dynamic_icl=false
+no_explanation=false
 
 # ── Per-task step config ───────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
@@ -76,7 +78,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --viz_offset         ${task_viz_offset} \
       --monitor_model_name ${monitor} \
       --judge_model_name   ${judge} \
-      --dataset_split_name ${dataset_split_name}
+      --dataset_split_name ${dataset_split_name} \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
 
     echo "Generating main figure: general_reward (ours comparison) [monitor=${monitor}] ..."
     python ${SRC_DIR}/analysis_module/visualize_main_figure.py \
@@ -92,7 +96,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --monitor_model_name ${monitor} \
       --judge_model_name   ${judge} \
       --figure_suffix      ours_comparison \
-      --dataset_split_name ${dataset_split_name}
+      --dataset_split_name ${dataset_split_name} \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
 
   elif [[ "${dataset}" == "specific_behaviors" ]]; then
     # Group 2: 2×4 figure — each column is a different behavior-specific trained model
@@ -115,7 +121,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --judge_model_name   ${judge} \
       --per_behavior_result_dirs  "${per_bk_dirs[@]}" \
       --per_behavior_step_configs "${per_bk_steps[@]}" \
-      --dataset_split_name ${dataset_split_name}
+      --dataset_split_name ${dataset_split_name} \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
   fi
 done
 

@@ -34,10 +34,17 @@ def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_")
 
 
-def _build_metrics_filename(monitor_model_name: str, judge_model_name: str, shared: bool = False) -> str:
+def _build_metrics_filename(
+    monitor_model_name: str,
+    judge_model_name: str,
+    shared: bool = False,
+    use_dynamic_icl: bool = False,
+    no_explanation: bool = False,
+) -> str:
+    suffix = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
     base = (
         f"{_sanitize_model_name(monitor_model_name)}_monitor"
-        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics.json"
+        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics{suffix}.json"
     )
     return f"intersection_{base}" if shared else base
 
@@ -69,6 +76,8 @@ def plot_monitor_metrics_across_steps(
     judge_model_name=None,
     figure_suffix=None,   # optional suffix appended to the output filename
     dataset_split_name="test",
+    use_dynamic_icl=False,
+    no_explanation=False,
 ):
     """
     For each method in methods_list, load metrics across steps and seeds,
@@ -95,8 +104,10 @@ def plot_monitor_metrics_across_steps(
     # Perf metrics (RMSE, prediction_mean, etc.) always come from the intersection file so that
     # all methods are evaluated on the exact same entries.  Count metrics (total_monitored_entries,
     # total_valid_*) always come from the raw (non-intersection) file to show actual per-method counts.
-    intersection_metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True)
-    raw_metrics_filename          = _build_metrics_filename(monitor_model_name, judge_model_name, shared=False)
+    intersection_metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True,
+                                                            use_dynamic_icl=use_dynamic_icl, no_explanation=no_explanation)
+    raw_metrics_filename          = _build_metrics_filename(monitor_model_name, judge_model_name, shared=False,
+                                                            use_dynamic_icl=use_dynamic_icl, no_explanation=no_explanation)
     metrics_filename = intersection_metrics_filename  # default used by _load_behavior_metrics / _mean_shared_entries
     bk = behavior_key or dataset_name
 
@@ -310,9 +321,10 @@ def plot_monitor_metrics_across_steps(
             )
 
     metrics_stem = os.path.splitext(metrics_filename)[0]
+    _key_suffix = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
     monitor_slug = (monitor_model_name or "unknown").replace("/", "_")
     judge_slug = (judge_model_name or "unknown").replace("/", "_")
-    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_llm_judge"
+    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_llm_judge{_key_suffix}"
     task_group = "general_reward" if dataset_name == "general_reward" else "specific_behaviors"
     vis_dir = os.path.join(
         os.path.dirname(os.path.dirname(result_dir)), "visualization", "full_figures", task_group, monitor_judge_dir, base_model
@@ -349,6 +361,10 @@ if __name__ == "__main__":
                             help="Optional suffix appended to the output PNG filename to distinguish figures.")
     arg_parser.add_argument("--dataset_split_name", type=str, default="test",
                             help="Dataset split to read metrics from (e.g. test, dev).")
+    arg_parser.add_argument("--use_dynamic_icl", action="store_true",
+                            help="Read metrics files generated with dynamic ICL examples (adds _use_dynamic_icl suffix).")
+    arg_parser.add_argument("--no_explanation",  action="store_true",
+                            help="Read metrics files generated with no-explanation monitor (adds _no_expl suffix).")
 
     args = arg_parser.parse_args()
 
@@ -370,6 +386,8 @@ if __name__ == "__main__":
         judge_model_name=args.judge_model_name,
         figure_suffix=args.figure_suffix,
         dataset_split_name=args.dataset_split_name,
+        use_dynamic_icl=args.use_dynamic_icl,
+        no_explanation=args.no_explanation,
     )
 
 #bash my_eval/scripts/visualize_results_across_models.sh

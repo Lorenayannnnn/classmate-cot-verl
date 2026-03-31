@@ -8,24 +8,27 @@ export PYTHONPATH=:${PYTHONPATH}
 # Run after different_monitor_general_reward.sh has completed.
 
 # ── monitor / judge / dataset table ────────────────────────────────
-# Format: "monitor_model  judge_model  dataset"
+# Format: "monitor_model                        judge_model                       dataset     use_dynamic_icl  no_explanation"
 MONITOR_JUDGE_DATASET=(
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       false            false"
+#
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false            false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false            false"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       false             true"   # default: three ICL examples from gpt4o
+#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       false             true"
 
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward"
-  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
-  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward"
+  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true             true"
+  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true             true"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
-
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence            false            false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy            false            false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response       false            false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance     false            false"
+#
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence            false            false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy            false            false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response       false            false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance     false            false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -76,7 +79,7 @@ echo " Computing intersection metrics"
 echo "════════════════════════════════════════════════════════"
 
 for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-  read -r monitor judge dataset <<< "${entry}"
+  read -r monitor judge dataset use_dynamic_icl no_explanation <<< "${entry}"
   _calc_steps ${dataset}
   result_dir="${base_root}/${dataset}/${base_model}"
   methods=${TASK_METHODS[$dataset]}
@@ -93,7 +96,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     --viz_offset         ${task_viz_offset} \
     --monitor_model_name ${monitor} \
     --judge_model_name   ${judge} \
-    --dataset_split_name ${dataset_split_name}
+    --dataset_split_name ${dataset_split_name} \
+    $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+    $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
 
 #  if [[ -n "${secondary_methods}" ]]; then
 #    echo "Computing intersection for ${dataset} / secondary (${secondary_methods}) [monitor=${monitor}] ..."

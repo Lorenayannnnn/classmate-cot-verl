@@ -90,6 +90,17 @@ def build_monitor_backend(reward_model_cfg) -> BaseBackend:
         api_key=api_key
     )
 
+def _vllm_generation_config(model_name: str) -> dict:
+    """Return model-specific vLLM sampling params."""
+    if model_name == "HuggingFaceTB/SmolLM2-360M-Instruct":
+        # https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct
+        return {"temperature": 0.2, "top_p": 0.9, "max_tokens": 1024}
+    # if model_name == "Qwen/Qwen2.5-0.5B-Instruct":
+    #     # https://qwen.ai/blog?id=qwen2.5
+    #     return {"temperature": 0.7, "top_p": 0.8, "repetition_penalty": 1.05, "max_tokens": 1024}
+    else:
+        raise ValueError(f"Make sure to have the sampling param for model {model_name}")
+
 
 def _build_backend(backend_type: str, model_name: str, prefix: str, cfg=None, api_key: str | None = None) -> BaseBackend:
     """Shared construction logic for judge and monitor backends.
@@ -106,15 +117,19 @@ def _build_backend(backend_type: str, model_name: str, prefix: str, cfg=None, ap
         from verl.workers.reward_model.tinker_backend import TinkerJudgeBackend
         return TinkerJudgeBackend(create_llm_judge(judge_model_name=model_name))
 
-    elif backend_type == "vllm_generative":
-        raise NotImplementedError("vllm_generative backend is not currently supported due to vLLM generation issues. Please use 'tinker' or 'hf_scoring' backends instead.")
-        # from verl.workers.reward_model.vllm_generative_backend import VLLMGenerativeJudgeBackend
+    elif backend_type == "vllm":
+        from verl.workers.reward_model.vllm_generative_backend import VLLMGenerativeJudgeBackend
         # return VLLMGenerativeJudgeBackend(
         #     model_name_or_path=model_name,
         #     max_model_len=cfg.get(f"{prefix}_max_model_len", 8192),
         #     generation_config=dict(cfg.get(f"{prefix}_generation_config", {"temperature": 0.0, "max_tokens": 1024})),
         #     gpu_memory_utilization=cfg.get(f"{prefix}_gpu_memory_utilization", 0.8),
         # )
+        return VLLMGenerativeJudgeBackend(
+            model_name_or_path=model_name,
+            generation_config=_vllm_generation_config(model_name),
+            gpu_memory_utilization=0.9,
+        )
 
     elif backend_type == "hf_scoring":
         if prefix == "monitor":

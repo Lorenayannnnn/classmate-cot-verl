@@ -80,10 +80,17 @@ def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_")
 
 
-def _build_metrics_filename(monitor_model_name: str, judge_model_name: str, shared: bool = False) -> str:
+def _build_metrics_filename(
+    monitor_model_name: str,
+    judge_model_name: str,
+    shared: bool = False,
+    use_dynamic_icl: bool = False,
+    no_explanation: bool = False,
+) -> str:
+    suffix = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
     base = (
         f"{_sanitize_model_name(monitor_model_name)}_monitor"
-        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics.json"
+        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics{suffix}.json"
     )
     return f"intersection_{base}" if shared else base
 
@@ -118,6 +125,8 @@ def plot_main_figure(
     result_dir_per_bk=None,       # dict {bk: result_dir}; overrides result_dir per behavior column
     step_config_per_bk=None,      # dict {bk: (max_step_num, step_size, viz_offset)}
     dataset_split_name="test",
+    use_dynamic_icl=False,
+    no_explanation=False,
 ):
     """
     2×4 main-section figure.  Always loads from intersection_ files.
@@ -133,7 +142,8 @@ def plot_main_figure(
     assert monitor_model_name and judge_model_name, (
         "monitor_model_name and judge_model_name are required"
     )
-    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True)
+    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True,
+                                               use_dynamic_icl=use_dynamic_icl, no_explanation=no_explanation)
 
     # ---------------------------------------------------------------- #
     # Helpers
@@ -307,9 +317,10 @@ def plot_main_figure(
     # Save
     # ---------------------------------------------------------------- #
     metrics_stem      = os.path.splitext(metrics_filename)[0]
+    _key_suffix       = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
     monitor_slug      = _sanitize_model_name(monitor_model_name)
     judge_slug        = _sanitize_model_name(judge_model_name)
-    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_judge"
+    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_judge{_key_suffix}"
     vis_dir = os.path.join(
         os.path.dirname(os.path.dirname(_any_result_dir)),
         "visualization", "main_figures", dataset_name, monitor_judge_dir, base_model,
@@ -345,6 +356,8 @@ def plot_shared_valid_entry_counts(
     result_dir_per_bk=None,
     step_config_per_bk=None,
     dataset_split_name="test",
+    use_dynamic_icl=False,
+    no_explanation=False,
 ):
     """
     Single plot: one line per behavior showing total_monitored_entries
@@ -353,7 +366,8 @@ def plot_shared_valid_entry_counts(
     for total_monitored_entries by definition of the intersection).
     """
     assert monitor_model_name and judge_model_name
-    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True)
+    metrics_filename = _build_metrics_filename(monitor_model_name, judge_model_name, shared=True,
+                                               use_dynamic_icl=use_dynamic_icl, no_explanation=no_explanation)
 
     def _rdir(bk):
         return (result_dir_per_bk or {}).get(bk, result_dir)
@@ -412,9 +426,10 @@ def plot_shared_valid_entry_counts(
 
     _any_result_dir   = result_dir or next(iter((result_dir_per_bk or {}).values()))
     base_model        = os.path.basename(_any_result_dir)
+    _key_suffix       = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
     monitor_slug      = _sanitize_model_name(monitor_model_name)
     judge_slug        = _sanitize_model_name(judge_model_name)
-    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_judge"
+    monitor_judge_dir = f"{monitor_slug}_monitor-{judge_slug}_judge{_key_suffix}"
     vis_dir = os.path.join(
         os.path.dirname(os.path.dirname(_any_result_dir)),
         "visualization", "main_figures", dataset_name, monitor_judge_dir, base_model,
@@ -455,6 +470,10 @@ if __name__ == "__main__":
                          "e.g. confidence:6:20:60. Required when --per_behavior_result_dirs is set.")
     ap.add_argument("--dataset_split_name", type=str, default="test",
                     help="Dataset split to read metrics from (e.g. test, dev).")
+    ap.add_argument("--use_dynamic_icl", action="store_true",
+                    help="Read metrics files generated with dynamic ICL examples (adds _use_dynamic_icl suffix).")
+    ap.add_argument("--no_explanation",  action="store_true",
+                    help="Read metrics files generated with no-explanation monitor (adds _no_expl suffix).")
 
     args = ap.parse_args()
 
@@ -495,6 +514,8 @@ if __name__ == "__main__":
         result_dir_per_bk    = result_dir_per_bk,
         step_config_per_bk   = step_config_per_bk,
         dataset_split_name   = args.dataset_split_name,
+        use_dynamic_icl      = args.use_dynamic_icl,
+        no_explanation       = args.no_explanation,
     )
 
     plot_shared_valid_entry_counts(
@@ -509,6 +530,8 @@ if __name__ == "__main__":
         result_dir_per_bk  = result_dir_per_bk,
         step_config_per_bk = step_config_per_bk,
         dataset_split_name = args.dataset_split_name,
+        use_dynamic_icl    = args.use_dynamic_icl,
+        no_explanation     = args.no_explanation,
     )
 
 #bash my_eval/scripts/visualize_main_figure.sh

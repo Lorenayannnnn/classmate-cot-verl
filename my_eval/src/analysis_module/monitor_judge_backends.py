@@ -56,20 +56,20 @@ def _load_icl_demo_pairs(
     """
     if use_dynamic_examples:
         if icl_example_dir is None:
-            print(f"  [ICL] WARNING: use_dynamic_examples=True but icl_example_dir is None — falling back to static examples for {behavior}.")
-            use_dynamic_examples = False
+            raise ValueError(f"  [ICL] WARNING: use_dynamic_examples=True but icl_example_dir is None — falling back to static examples for {behavior}.")
         else:
             json_path = os.path.join(icl_example_dir, f"{behavior}_ICL_examples.json")
-    if not use_dynamic_examples:
+    else:
         json_path = os.path.join(icl_example_dir or os.path.join("data", behavior), "monitor_ICL_examples.json")
     if not os.path.exists(json_path):
-        print(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
-        return []
+        raise FileNotFoundError(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
 
     with open(json_path) as f:
         records = json.load(f)
 
     pairs = []
+    # TODO haha
+    records = [records[0], records[-1]]  # take first and last examples (best and worst CoTs) for now to save tokens
     for rec in records:
         user_msg = verifier.create_monitor_message({
             "raw_question_for_monitor": rec["user_message"],
@@ -358,13 +358,14 @@ def run_different_monitor_and_judge(
         overwrite_monitor: If True, re-annotate monitor scores even if already present in preds.jsonl.
         overwrite_judge:   If True, re-annotate judge scores even if already present in preds.jsonl.
     """
-    monitor_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_score"
-    monitor_expl_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_explanation"
-    judge_key = f"{_sanitize_model_name(judge_model_name)}_llm_judge_score"
-    judge_expl_key = f"{_sanitize_model_name(judge_model_name)}_llm_judge_explanation"
+    _monitor_suffix  = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
+    monitor_key      = f"{_sanitize_model_name(monitor_model_name)}_monitor_score{_monitor_suffix}"
+    monitor_expl_key = f"{_sanitize_model_name(monitor_model_name)}_monitor_explanation{_monitor_suffix}"
+    judge_key        = f"{_sanitize_model_name(judge_model_name)}_llm_judge_score"
+    judge_expl_key   = f"{_sanitize_model_name(judge_model_name)}_llm_judge_explanation"
     metrics_file_name = (
         f"{_sanitize_model_name(monitor_model_name)}_monitor"
-        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics.json"
+        f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics{_monitor_suffix}.json"
     )
 
     monitor_backend = _build_backend(monitor_source, monitor_model_name, prefix="monitor", api_key=OPENAI_KEY)
@@ -428,7 +429,7 @@ def run_different_monitor_and_judge(
 
                     icl_pairs = _load_icl_demo_pairs(
                         behavior_key, behavior_verifier,
-                        icl_example_dir=os.path.dirname(result_dir),
+                        icl_example_dir=os.path.dirname(os.path.dirname(result_dir)) + "/dev",
                         no_explanation=no_explanation,
                         use_dynamic_examples=use_dynamic_icl,
                     ) if use_ICL_demo else None

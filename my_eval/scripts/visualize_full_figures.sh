@@ -33,6 +33,8 @@ seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test
+use_dynamic_icl=false
+no_explanation=false
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
@@ -88,7 +90,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
         --viz_offset         ${task_viz_offset} \
         --monitor_model_name ${monitor} \
         --judge_model_name   ${judge} \
-        --dataset_split_name ${dataset_split_name}
+        --dataset_split_name ${dataset_split_name} \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
 
       if [[ -n "${secondary_methods}" ]]; then
         echo "Visualizing ${dataset} / ${behavior_key} / ${base_model} (ours comparison) [monitor=${monitor}] ..."
@@ -104,7 +108,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
           --monitor_model_name ${monitor} \
           --judge_model_name   ${judge} \
           --figure_suffix      ours_comparison \
-          --dataset_split_name ${dataset_split_name}
+          --dataset_split_name ${dataset_split_name} \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
       fi
     done
   else
@@ -119,7 +125,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --viz_offset         ${task_viz_offset} \
       --monitor_model_name ${monitor} \
       --judge_model_name   ${judge} \
-      --dataset_split_name ${dataset_split_name}
+      --dataset_split_name ${dataset_split_name} \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+      $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
   fi
 done
 

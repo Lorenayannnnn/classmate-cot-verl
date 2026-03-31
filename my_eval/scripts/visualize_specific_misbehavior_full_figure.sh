@@ -25,6 +25,8 @@ seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test
+use_dynamic_icl=false
+no_explanation=false
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(

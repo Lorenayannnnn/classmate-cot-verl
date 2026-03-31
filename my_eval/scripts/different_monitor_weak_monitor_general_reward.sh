@@ -7,8 +7,9 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh
 #bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    true
 #bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        true          true          true               true               false           true   # debug: one job, foreground, ICL + no_explanation + dynamic ICL
-#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           true   # with ICL + no_explanation + dynamic ICL
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           false   # with ICL + no_explanation + overwrite + fixed ICL
 #bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           true   # with ICL + no_explanation + overwrite + dynamic ICL
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               false               false           true   # with ICL + no_explanation + overwrite + dynamic ICL
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
@@ -26,8 +27,7 @@ overwrite_judge=${6:-false}
 use_dynamic_icl=${7:-true}
 
 # ── Available GPUs ─────────────────────────────────────────────────
-#available_gpus=(2 3)
-available_gpus=(2 3)
+available_gpus=(0 1)
 available_gpu_num=${#available_gpus[@]}
 
 # ── monitor / judge / dataset table (general_reward only) ──────────

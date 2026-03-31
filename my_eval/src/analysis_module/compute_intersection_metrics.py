@@ -66,12 +66,15 @@ def compute_intersection_metrics(
     judge_model_name,
     max_new_tokens=None,
     dataset_split_name: str = "test",
+    use_dynamic_icl: bool = False,
+    no_explanation: bool = False,
 ):
-    monitor_key  = f"{_sanitize(monitor_model_name)}_monitor_score"
+    _monitor_suffix = f"{'_use_dynamic_icl' if use_dynamic_icl else ''}{'_no_expl' if no_explanation else ''}"
+    monitor_key  = f"{_sanitize(monitor_model_name)}_monitor_score{_monitor_suffix}"
     judge_key    = f"{_sanitize(judge_model_name)}_llm_judge_score"
     base_metrics_file = (
         f"{_sanitize(monitor_model_name)}_monitor"
-        f"-{_sanitize(judge_model_name)}_llm_judge_metrics.json"
+        f"-{_sanitize(judge_model_name)}_llm_judge_metrics{_monitor_suffix}.json"
     )
     intersection_file = f"intersection_{base_metrics_file}"
 
@@ -200,6 +203,10 @@ if __name__ == "__main__":
     ap.add_argument("--max_new_tokens",       type=int, default=None)
     ap.add_argument("--dataset_split_name",   type=str, default="test",
                     help="Dataset split to read predictions from (e.g. test, dev).")
+    ap.add_argument("--use_dynamic_icl",      action="store_true",
+                    help="Read monitor keys with '_use_dynamic_icl' suffix.")
+    ap.add_argument("--no_explanation",       action="store_true",
+                    help="Read monitor keys with '_no_expl' suffix.")
 
     args = ap.parse_args()
 
@@ -218,4 +225,6 @@ if __name__ == "__main__":
         judge_model_name   = args.judge_model_name,
         max_new_tokens     = args.max_new_tokens,
         dataset_split_name = args.dataset_split_name,
+        use_dynamic_icl    = args.use_dynamic_icl,
+        no_explanation     = args.no_explanation,
     )
