@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from keys import OPENAI_KEY
 from verl.utils.reward_score.monitor import process_main_cot_helper
 from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 from verl.workers.reward_model.backend_factory import build_llm_judge_backend, build_monitor_backend
@@ -54,11 +55,11 @@ class InferenceExpRunner:
         self.judge_model_name = judge_model_name
 
         self.monitor_backend = build_monitor_backend(
-            {"monitor_model_name": monitor_model_name, "monitor_backend_type": monitor_backend_type}
+            {"monitor_model_name": monitor_model_name, "monitor_backend_type": monitor_backend_type, "api_key": OPENAI_KEY}
         )
 
         self.judge_backend = build_llm_judge_backend(
-            {"llm_judge_model_name": judge_model_name, "llm_judge_backend_type": judge_backend_type}
+            {"llm_judge_model_name": judge_model_name, "llm_judge_backend_type": judge_backend_type, "api_key": OPENAI_KEY}
         )
 
     @torch.no_grad()
@@ -295,6 +296,7 @@ class InferenceExpRunner:
                 backend_type=backend_type,
                 model_name=model_name,
                 prefix="llm_judge",
+                api_key=OPENAI_KEY
             )
 
         behavior_keys = BEHAVIOR_TO_MONITOR
