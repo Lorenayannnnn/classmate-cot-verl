@@ -21,7 +21,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("--max_new_tokens", type=int, default=3072, help="max_new_tokens of the policy model")
     arg_parser.add_argument("--do_base", type=bool)
     arg_parser.add_argument("--estimate_cost", action="store_true", help="Estimate OpenAI API cost using 10 samples then exit.")
-    arg_parser.add_argument("--use_ICL_demo", action="store_true", help="Prepend ICL demonstrations from data/{behavior}/monitor_ICL_examples.json to each monitor prompt.")
+    arg_parser.add_argument("--use_ICL_demo", action="store_true", help="Prepend ICL demonstrations to each monitor prompt.")
+    arg_parser.add_argument("--use_dynamic_icl", action="store_true", help="Use per-checkpoint dev-split ICL examples ({behavior}_ICL_examples.json) instead of static ones from data/{behavior}/monitor_ICL_examples.json.")
     arg_parser.add_argument("--no_explanation", action="store_true", help="Use the skip-explanation monitor template (score only). Intended for weak monitors that struggle to produce a valid score after long CoT.")
     arg_parser.add_argument("--overwrite_monitor", action="store_true", help="Re-annotate monitor scores even if already present in preds.jsonl.")
     arg_parser.add_argument("--overwrite_judge", action="store_true", help="Re-annotate judge scores even if already present in preds.jsonl.")
@@ -97,6 +98,7 @@ if __name__ == "__main__":
             overwrite_monitor=args.overwrite_monitor,
             overwrite_judge=args.overwrite_judge,
             dataset_split_name=args.dataset_split_name,
+            use_dynamic_icl=args.use_dynamic_icl,
         )
 
 #export PYTHONPATH=:${PYTHONPATH} export VLLM_WORKER_MULTIPROC_METHOD=spawn

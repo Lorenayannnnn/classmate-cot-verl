@@ -3,12 +3,12 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-# Args:                                                               estimate_cost  debug_mode  use_icl_demo  no_explanation  overwrite_monitor  overwrite_judge
+# Args:                                                               estimate_cost  debug_mode  use_icl_demo  no_explanation  overwrite_monitor  overwrite_judge  use_dynamic_icl
 #bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh
 #bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    true
-#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        true          true          true               true               false           # debug: one job, foreground, ICL + no_explanation
-#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           # with ICL + no_explanation
-#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           # with ICL + no_explanation + overwrite
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        true          true          true               true               false           true   # debug: one job, foreground, ICL + no_explanation + dynamic ICL
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           true   # with ICL + no_explanation + dynamic ICL
+#bash my_eval/scripts/different_monitor_weak_monitor_general_reward.sh    false        false         true          true               true               false           true   # with ICL + no_explanation + overwrite + dynamic ICL
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
@@ -22,6 +22,8 @@ no_explanation=${4:-false}
 overwrite_monitor=${5:-false}
 # Set to true to re-annotate judge scores even if already present in preds.jsonl
 overwrite_judge=${6:-false}
+# Set to true to use per-checkpoint dev-split ICL examples instead of static ones
+use_dynamic_icl=${7:-true}
 
 # ── Available GPUs ─────────────────────────────────────────────────
 #available_gpus=(2 3)
@@ -148,6 +150,7 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --do_base True \
       $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
       $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
       $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
       $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
       --dataset_split_name   ${dataset_split_name} \
@@ -202,6 +205,7 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --max_new_tokens         ${max_new_tokens} \
       $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
       $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
+      $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
       $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
       $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
       --dataset_split_name   ${dataset_split_name}
@@ -231,6 +235,7 @@ for mj_entry in "${MONITOR_JUDGE_DATASET[@]}"; do
         --max_new_tokens         ${max_new_tokens} \
         $([[ "${use_icl_demo}" == "true" ]] && echo "--use_ICL_demo") \
         $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation") \
+        $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
         $([[ "${overwrite_monitor}" == "true" ]] && echo "--overwrite_monitor") \
         $([[ "${overwrite_judge}" == "true" ]] && echo "--overwrite_judge") \
         --dataset_split_name   ${dataset_split_name} &

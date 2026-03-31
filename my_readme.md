@@ -321,6 +321,9 @@
      - All settings: [visualize_results_across_models_all_settings_full_figure.sh](my_eval/scripts/visualize_full_figures.sh)
      - General reward only: [visualize_results_across_models_general_reward.sh](my_eval/scripts/visualize_general_reward_full_figure.sh)
      - Specific behavior: [visualize_results_across_models_specific_misbehavior_full_figure.sh](my_eval/scripts/visualize_specific_misbehavior_full_figure.sh)
+5. Generate ICL examples for weak monitor:
+   - [iterate_general_reward_dev.sh](my_eval/scripts/inference_iterate/iterate_general_reward_dev.sh): run inference on dev set and save model outputs
+   - [generate_dev_icl_examples.py](my_eval/src/analysis_module/generate_dev_icl_examples.py): sort behavior-specific examples by low, medium, and high monitoring score from gpt-4o-mini and select one with lowest MSE from each band as ICL examples
 
 
 # Others

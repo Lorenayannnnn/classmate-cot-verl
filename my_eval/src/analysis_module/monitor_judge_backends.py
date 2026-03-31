@@ -2,7 +2,6 @@
 Shared backend helpers for different_monitor_*_across_models.py scripts.
 
 Provides:
-  - make_backend: factory returning a BaseBackend for a given source and model name.
   - run_different_monitor_and_judge: main annotation + metrics loop
   - estimate_openai_cost: extrapolate OpenAI API cost from n sample calls
   - OPENAI_PRICING: prices per 1M tokens by model
@@ -18,11 +17,7 @@ from tqdm import tqdm
 from keys import OPENAI_KEY
 from verl.utils.reward_score.BaseVerifier import get_verifier
 from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
-from verl.utils.reward_score.monitor import create_llm_judge
-from verl.workers.reward_model.judge_backend import BaseBackend
-from verl.workers.reward_model.openai_backend import OpenAICompatibleBackend
-from verl.workers.reward_model.tinker_backend import TinkerJudgeBackend
-from verl.workers.reward_model.vllm_generative_backend import VLLMGenerativeJudgeBackend
+from verl.workers.reward_model.backend_factory import _build_backend
 
 # Prices in USD per 1M tokens: (input, output)
 OPENAI_PRICING = {
@@ -37,51 +32,36 @@ def _sanitize_model_name(name: str) -> str:
     return name.replace("/", "_")
 
 
-def _vllm_generation_config(model_name: str) -> dict:
-    """Return model-specific vLLM sampling params."""
-    if model_name == "HuggingFaceTB/SmolLM2-360M-Instruct":
-        # https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct
-        return {"temperature": 0.2, "top_p": 0.9, "max_tokens": 1024}
-    # if model_name == "Qwen/Qwen2.5-0.5B-Instruct":
-    #     # https://qwen.ai/blog?id=qwen2.5
-    #     return {"temperature": 0.7, "top_p": 0.8, "repetition_penalty": 1.05, "max_tokens": 1024}
-    else:
-        raise ValueError(f"Make sure to have the sampling param for model {model_name}")
+def _load_icl_demo_pairs(
+    behavior: str,
+    verifier,
+    icl_example_dir: str | None = None,
+    no_explanation: bool = False,
+    use_dynamic_examples: bool = False,
+) -> list[tuple[str, str]]:
+    """Load (user_msg, assistant_msg) ICL pairs.
 
-
-def make_backend(source: str, model_name: str) -> BaseBackend:
-    """Construct a BaseBackend for the given source and model.
-
-    Args:
-        source: One of "tinker", "vllm", "openai".
-        model_name: Model name or path.
-    """
-    if source == "tinker":
-        return TinkerJudgeBackend(create_llm_judge(judge_model_name=model_name))
-    elif source == "vllm":
-        return VLLMGenerativeJudgeBackend(
-            model_name_or_path=model_name,
-            max_model_len=8192,
-            generation_config=_vllm_generation_config(model_name),
-            gpu_memory_utilization=0.9,
-        )
-    elif source == "openai":
-        return OpenAICompatibleBackend(model_name=model_name, api_key=OPENAI_KEY)
-    else:
-        raise ValueError(f"Unknown source: {source!r}. Choose from 'tinker', 'vllm', 'openai'.")
-
-
-def _load_icl_demo_pairs(behavior: str, verifier, no_explanation: bool = False) -> list[tuple[str, str]]:
-    """Load (user_msg, assistant_msg) ICL pairs from data/{behavior}/monitor_ICL_examples.json.
-
-    The user_msg is the formatted monitor prompt produced by the verifier's
-    create_monitor_message; the assistant_msg is the expected output produced
-    by the verifier's format_monitor_expected_output.
+    When use_dynamic_examples=False (default), loads from
+    {icl_example_dir or "data/{behavior}"}/monitor_ICL_examples.json (static,
+    hand-curated examples).
+    When use_dynamic_examples=True, loads from
+    {icl_example_dir}/{behavior}_ICL_examples.json (generated dynamically from
+    the dev split by generate_dev_icl_examples() in haha.py).
 
     Args:
+        icl_example_dir: Directory containing the ICL examples file.
+            Defaults to "data/{behavior}" when use_dynamic_examples=False.
         no_explanation: If True, use the skip-explanation template and score-only expected output.
+        use_dynamic_examples: If True, load per-checkpoint dev-split examples instead of static ones.
     """
-    json_path = os.path.join("data", behavior, "monitor_ICL_examples.json")
+    if use_dynamic_examples:
+        if icl_example_dir is None:
+            print(f"  [ICL] WARNING: use_dynamic_examples=True but icl_example_dir is None — falling back to static examples for {behavior}.")
+            use_dynamic_examples = False
+        else:
+            json_path = os.path.join(icl_example_dir, f"{behavior}_ICL_examples.json")
+    if not use_dynamic_examples:
+        json_path = os.path.join(icl_example_dir or os.path.join("data", behavior), "monitor_ICL_examples.json")
     if not os.path.exists(json_path):
         print(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
         return []
@@ -363,14 +343,16 @@ def run_different_monitor_and_judge(
     overwrite_monitor: bool = False,
     overwrite_judge: bool = False,
     dataset_split_name: str = "test",
+    use_dynamic_icl: bool = False,
 ):
     """
     Args:
-        monitor_source:   Backend for the monitor model. One of "openai", "tinker", "vllm".
-        judge_source:     Backend for the judge model.  One of "openai", "tinker", "vllm".
+        monitor_source:   Backend for the monitor model. One of "openai", "tinker", "vllm_generative".
+        judge_source:     Backend for the judge model.  One of "openai", "tinker", "vllm_generative", "hf_scoring".
         max_new_tokens:   Passed to get_verifier() for verifiers that need it (e.g. length_only).
-        use_ICL_demo:     If True, load ICL demo pairs from data/{behavior}/monitor_ICL_examples.json
-                          and pass them to the monitor backend via icl_pairs.
+        use_ICL_demo:     If True, load ICL demo pairs and pass them to the monitor backend via icl_pairs.
+        use_dynamic_icl:  If True (and use_ICL_demo is True), load per-checkpoint dev-split ICL examples
+                          ({behavior}_ICL_examples.json) instead of static ones from data/{behavior}/.
         no_explanation:   If True, use the skip-explanation monitor template and score-only ICL
                           expected outputs (uses monitor_template_skip_explanation).
         overwrite_monitor: If True, re-annotate monitor scores even if already present in preds.jsonl.
@@ -385,8 +367,8 @@ def run_different_monitor_and_judge(
         f"-{_sanitize_model_name(judge_model_name)}_llm_judge_metrics.json"
     )
 
-    monitor_backend = make_backend(monitor_source, monitor_model_name)
-    judge_backend = make_backend(judge_source, judge_model_name)
+    monitor_backend = _build_backend(monitor_source, monitor_model_name, prefix="monitor", api_key=OPENAI_KEY)
+    judge_backend = _build_backend(judge_source, judge_model_name, prefix="llm_judge", api_key=OPENAI_KEY)
 
     # ------------------------------------------------------------------ #
     # Main loop
@@ -444,7 +426,12 @@ def run_different_monitor_and_judge(
                     b_judge_expl_key   = f"{behavior_key}_{judge_expl_key}"
                     behavior_verifier = get_verifier(data_source=behavior_key, max_new_tokens=max_new_tokens)
 
-                    icl_pairs = _load_icl_demo_pairs(behavior_key, behavior_verifier, no_explanation=no_explanation) if use_ICL_demo else None
+                    icl_pairs = _load_icl_demo_pairs(
+                        behavior_key, behavior_verifier,
+                        icl_example_dir=os.path.dirname(result_dir),
+                        no_explanation=no_explanation,
+                        use_dynamic_examples=use_dynamic_icl,
+                    ) if use_ICL_demo else None
 
                     monitor_inputs, judge_inputs, judge_use_continuation = _prepare_inputs_for_behavior(
                         all_entry_indices, entries,

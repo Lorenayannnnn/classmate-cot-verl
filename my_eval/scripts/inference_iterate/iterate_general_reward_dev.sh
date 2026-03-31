@@ -101,11 +101,16 @@ _run_task() {
 
 # ── Launch all tasks in parallel (one GPU each) ───────────────────────────── #
 #  GPU  model                                                             run_base
-_run_task 0 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens       true  &
-_run_task 1 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens_w_kl  false &
-_run_task 2 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_cot_only         false &
-_run_task 3 LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_self                 false &
-_run_task 4 LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama               false &
+
+(
+_run_task 0 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens       true
+_run_task 0 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens_w_kl  false
+)&
+(
+_run_task 1 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_cot_only         false
+_run_task 1 LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_self                 false
+_run_task 1 LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama               false
+)
 
 wait
 echo "All tasks finished."

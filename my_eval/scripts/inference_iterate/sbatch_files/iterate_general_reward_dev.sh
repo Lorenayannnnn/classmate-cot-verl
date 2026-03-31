@@ -1,8 +1,9 @@
 #!/bin/sh
 #SBATCH --account=hewittlab
+#SBATCH --partition=preempt
 #SBATCH --gpus=1
-#SBATCH --time=4:00:00
-#SBATCH --job-name=gr_dev_inf
+#SBATCH --time=24:00:00
+#SBATCH --job-name=dev_inf
 #SBATCH --array=0-4
 
 log_dir="outputs_eval/general_reward/dev_inference_logs"
