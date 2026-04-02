@@ -1,5 +1,5 @@
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, GenerationConfig
 from vllm import LLM, SamplingParams
 
 from verl.workers.reward_model.judge_backend import BaseBackend

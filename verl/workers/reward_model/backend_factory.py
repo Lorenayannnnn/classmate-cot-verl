@@ -95,6 +95,8 @@ def _vllm_generation_config(model_name: str) -> dict:
     if model_name == "HuggingFaceTB/SmolLM2-360M-Instruct":
         # https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct
         return {"temperature": 0.2, "top_p": 0.9, "max_tokens": 1024}
+    elif model_name == "Qwen/Qwen2.5-0.5B-Instruct":
+        return {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "max_tokens": 1024}
     # if model_name == "Qwen/Qwen2.5-0.5B-Instruct":
     #     # https://qwen.ai/blog?id=qwen2.5
     #     return {"temperature": 0.7, "top_p": 0.8, "repetition_penalty": 1.05, "max_tokens": 1024}
