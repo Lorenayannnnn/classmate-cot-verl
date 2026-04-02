@@ -2,13 +2,13 @@
 #SBATCH --account=hewittlab
 #SBATCH --gpus=2
 #SBATCH --time=24:00:00
-#SBATCH --job-name=olmo_c0
+#SBATCH --job-name=olmo_c1
 
 # Mirror key variables from general_reward_baseline_cot_only.sh to compute the output dir
 #result_dir="/proj/interaction/interaction-filer/lorena/"
 result_dir="outputs/"
 dataset_name="general_reward"
-seed=0
+seed=1
 base_model_name_path=allenai/Olmo-3-7B-Think
 token_level_main_reward_mode=cot_only
 train_size=8000
@@ -28,6 +28,6 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
-bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline_cot_only.sh
+bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline_cot_only_1.sh
 
-#sbatch my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/sbatch_files/general_reward_baseline_cot_only.sh
+#sbatch my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/sbatch_files/general_reward_baseline_cot_only_1.sh

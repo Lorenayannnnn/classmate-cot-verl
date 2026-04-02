@@ -9,6 +9,7 @@ unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
 #bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline.sh
+#srun --account=hewittlab --job-name=olmo_b2 --gres=gpu:2  --pty --time=1:00:00 bash
 
 #result_dir="/proj/interaction/interaction-filer/lorena/"
 result_dir=outputs/

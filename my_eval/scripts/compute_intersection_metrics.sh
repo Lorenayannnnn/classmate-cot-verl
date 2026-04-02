@@ -17,8 +17,9 @@ MONITOR_JUDGE_DATASET=(
 #  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       false             true"   # default: three ICL examples from gpt4o
 #  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       false             true"
 
-  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true             true"
-  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true             true"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true             true"
+#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true             true"
+  "Qwen/Qwen2.5-0.5B-Instruct              gpt-4.1-mini                          general_reward       true             true"
 
 #  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence            false            false"
 #  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy            false            false"

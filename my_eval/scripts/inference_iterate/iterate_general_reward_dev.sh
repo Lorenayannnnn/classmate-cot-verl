@@ -20,7 +20,7 @@ step_size=40           # checkpoint save frequency
 max_training_steps=920 # total RL training steps (update to match actual run)
 
 dataset_split_name=dev
-max_predict_samples=10
+max_predict_samples=100
 
 monitor_model_name=gpt-4o-mini
 monitor_backend_type=openai              # "tinker", "vllm_generative", "hf_scoring"

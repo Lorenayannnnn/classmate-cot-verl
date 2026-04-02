@@ -1,18 +1,27 @@
 set -x
 
+export CUDA_HOME=/usr/local/cuda-13.1
+export PATH=${CUDA_HOME}/bin:$PATH
+export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+
+export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
+unset ROCR_VISIBLE_DEVICES
+unset HIP_VISIBLE_DEVICES
+
 #bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline_cot_only.sh
+#srun --account=hewittlab --job-name=olmo_c2 --gres=gpu:2  --pty --time=24:00:00 bash
 
 #result_dir="/proj/interaction/interaction-filer/lorena/"
 result_dir=outputs/
 
 data_dir=./data
 dataset_name="general_reward"
-#seed=0
-#gpu_idx=4,5
+seed=0
+gpu_idx=0,1
 #seed=1
 #gpu_idx=6,7
-seed=2
-gpu_idx=0,1
+#seed=2
+#gpu_idx=0,1
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
@@ -20,8 +29,8 @@ train_files="['$train_path']"
 eval_files="['$eval_path']"
 
 #base_model_name_path=allenai/Olmo-3-7B-Think-SFT
-base_model_name_path=allenai/Olmo-3-7B-Think-DPO
-#base_model_name_path=allenai/Olmo-3-7B-Think
+#base_model_name_path=allenai/Olmo-3-7B-Think-DPO
+base_model_name_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
 think_end_str=$'</think>\n\n'
 token_level_main_reward_mode=cot_only  # options: "all_tokens", "cot_only", "output_only"
@@ -86,7 +95,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -107,8 +116,8 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
     'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}/baseline_${token_level_main_reward_mode}/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}-baseline_${token_level_main_reward_mode}-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/baseline_${token_level_main_reward_mode}/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}_${max_response_length}-baseline_${token_level_main_reward_mode}-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

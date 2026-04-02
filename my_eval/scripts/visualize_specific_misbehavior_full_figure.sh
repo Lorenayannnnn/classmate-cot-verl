@@ -5,18 +5,18 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/visualize_specific_misbehavior_full_figure.sh
 
 # ── monitor / judge / dataset table ────────────────────────────────
-# Format: "monitor_model  judge_model  dataset"
+# Format: "monitor_model  judge_model  dataset  use_dynamic_icl  no_explanation"
 # dataset: specific-behavior tasks only (confidence, sycophancy, longer_response, unsafe_compliance)
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -25,8 +25,6 @@ seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test
-use_dynamic_icl=false
-no_explanation=false
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
@@ -50,7 +48,7 @@ declare -A TASK_METHODS=(
 
 # ── Main loop ──────────────────────────────────────────────────────
 for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-  read -r monitor judge dataset <<< "${entry}"
+  read -r monitor judge dataset use_dynamic_icl no_explanation <<< "${entry}"
 
   task_ckpt_step_size=${TASK_STEP_SIZE[$dataset]}
   task_max_training_steps=${TASK_MAX_TRAINING_STEPS[$dataset]}
@@ -71,7 +69,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     --viz_offset         ${task_viz_offset} \
     --monitor_model_name ${monitor} \
     --judge_model_name   ${judge} \
-    --dataset_split_name ${dataset_split_name}
+    --dataset_split_name ${dataset_split_name} \
+    $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
+    $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
 done
 
 echo "Done."

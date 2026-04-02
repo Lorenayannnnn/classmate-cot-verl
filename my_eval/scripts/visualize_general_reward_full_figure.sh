@@ -5,14 +5,15 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/visualize_general_reward_full_figure.sh
 
 # ── monitor / judge table (general_reward task only) ───────────────
-# Format: "monitor_model  judge_model"
+# Format: "monitor_model  judge_model  use_dynamic_icl  no_explanation"
 MONITOR_JUDGE=(
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     false  false"
 
-  "gpt-4o-mini                           gpt-4.1-mini"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507      gpt-4.1-mini"
-  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini"
-  "meta-llama/Llama-3.2-1B               gpt-4.1-mini"
+#  "gpt-4o-mini                           gpt-4.1-mini                         false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507      gpt-4.1-mini                         false  false"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                         true   true"
+#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         true   true"
+  "Qwen/Qwen2.5-0.5B-Instruct               gpt-4.1-mini                         true   true"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -21,8 +22,6 @@ seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test
-use_dynamic_icl=false
-no_explanation=false
 dataset=general_reward
 
 task_ckpt_step_size=40
@@ -37,7 +36,7 @@ result_dir="${base_root}/${dataset}/${base_model}"
 
 # ── Main loop ──────────────────────────────────────────────────────
 for entry in "${MONITOR_JUDGE[@]}"; do
-  read -r monitor judge <<< "${entry}"
+  read -r monitor judge use_dynamic_icl no_explanation <<< "${entry}"
   for behavior_key in sycophancy confidence longer_response general_reward; do
     echo "Visualizing ${dataset} / ${behavior_key} / ${base_model} (primary) [monitor=${monitor}] ..."
     python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \

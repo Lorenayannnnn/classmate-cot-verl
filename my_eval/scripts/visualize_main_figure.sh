@@ -5,20 +5,21 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/visualize_main_figure.sh
 
 # ── monitor / judge / dataset table ────────────────────────────────
-# Format: "monitor_model  judge_model  dataset"
 # dataset: "general_reward"      → Group 1: 3 behaviors + reward score, two method comparisons
 #          "specific_behaviors"  → Group 2: one figure with all 4 behaviors, each column from
 #                                   the model trained on that specific behavior
+# Format: "monitor_model                  judge_model                               dataset  use_dynamic_icl    no_explanation"
 MONITOR_JUDGE_DATASET=(
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       false            false"
 
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward"
-#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward"
-#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward"
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false           false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false           false"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true            true"
+#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true            true"
+  "Qwen/Qwen2.5-0.5B-Instruct              gpt-4.1-mini                          general_reward       true            true"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    false           false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    false           false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -27,8 +28,6 @@ seeds=seed_0,seed_1,seed_2
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test
-use_dynamic_icl=false
-no_explanation=false
 
 # ── Per-task step config ───────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
@@ -57,7 +56,7 @@ _calc_steps() {
 
 # ── Main loop ──────────────────────────────────────────────────────
 for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
-  read -r monitor judge dataset <<< "${entry}"
+  read -r monitor judge dataset use_dynamic_icl no_explanation <<< "${entry}"
 
   if [[ "${dataset}" == "general_reward" ]]; then
     # Group 1: 2×4 figure — row 0 = RMSE (3 behaviors + reward score)

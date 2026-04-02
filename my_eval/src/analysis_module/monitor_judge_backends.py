@@ -68,8 +68,6 @@ def _load_icl_demo_pairs(
         records = json.load(f)
 
     pairs = []
-    # TODO haha
-    records = [records[0], records[-1]]  # take first and last examples (best and worst CoTs) for now to save tokens
     for rec in records:
         user_msg = verifier.create_monitor_message({
             "raw_question_for_monitor": rec["user_message"],
