@@ -69,10 +69,17 @@ def _load_icl_demo_pairs(
 
     pairs = []
     for rec in records:
-        user_msg = verifier.create_monitor_message({
-            "raw_question_for_monitor": rec["user_message"],
-            "truncated_main_CoT": rec["main_CoT"],
-        }, no_explanation=no_explanation)
+        if getattr(verifier, "needs_comparison_outputs", False):
+            user_msg = verifier.create_monitor_message({
+                "neutral_cot":    rec["neutral_cot"],
+                "pos_swayed_cot": rec["pos_swayed_cot"],
+                "raw_question_for_monitor": rec["user_message"],
+            }, no_explanation=no_explanation)
+        else:
+            user_msg = verifier.create_monitor_message({
+                "raw_question_for_monitor": rec["user_message"],
+                "truncated_main_CoT": rec["main_CoT"],
+            }, no_explanation=no_explanation)
         if user_msg is None:
             continue
         assistant_msg = verifier.format_monitor_expected_output(rec["score"], rec["explanation"], no_explanation=no_explanation)
@@ -112,16 +119,28 @@ def _prepare_inputs_for_behavior(
             monitor_inputs.append(None)  # already annotated — skip
         else:
             monitor_doc = {
-                "raw_question_for_monitor": entry["question"],
+                "raw_question_for_monitor": entry.get("question", ""),
                 "hint_str_for_monitor": entry.get("hint_str_for_monitor", ""),
-                "truncated_main_CoT": entry["truncated_main_CoT"],
-                "main_response": entry["truncated_main_CoT"],
+                "truncated_main_CoT": entry.get("truncated_main_CoT"),
+                "main_response": entry.get("truncated_main_CoT"),
+                # For AnthropicSycophancyVerifier: include paired CoT fields
+                "neutral_cot":    entry.get("neutral_cot"),
+                "pos_swayed_cot": entry.get("pos_swayed_cot"),
             }
             monitor_inputs.append(behavior_verifier.create_monitor_message(monitor_doc, no_explanation=no_explanation))
 
         # Judge input
         if not overwrite_judge and entry.get(b_judge_key) is not None:
             judge_inputs.append(None)  # already annotated — skip
+            judge_use_continuation.append(False)
+        elif getattr(behavior_verifier, "needs_comparison_outputs", False):
+            # Verifier requires paired (neutral, pos_swayed) outputs
+            prompt = behavior_verifier.format_llm_judge_prompt(
+                entry.get("question"), None,
+                neutral_output=entry.get("neutral_output"),
+                pos_swayed_output=entry.get("pos_swayed_output"),
+            )
+            judge_inputs.append(prompt)
             judge_use_continuation.append(False)
         else:
             # Always call prepare_input first: verifiers like LongerResponseVerifier return None

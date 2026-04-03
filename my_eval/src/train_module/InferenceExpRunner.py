@@ -548,3 +548,197 @@ class InferenceExpRunner:
         with open(metrics_output_path, "w") as f:
             json.dump(all_metrics, f, indent=2)
         print(f"Metrics saved to {metrics_output_path}")
+
+    @torch.no_grad()
+    def anthropic_sycophancy_inference_main_model(self, verifier):
+        """
+        For anthropic_sycophancy: runs two forward passes per entry (neutral + pos_swayed),
+        then asks the monitor to predict how much more positive the swayed output will be
+        (from the two CoTs) and the judge to measure the actual difference (from the two outputs).
+        """
+        assert self.inference_backend == "vllm", "Only vLLM inference backend is implemented."
+        from vllm import SamplingParams
+
+        sampling_param = SamplingParams(**self.args.generation_args)
+
+        monitor_score_key = f"{self.data_source}_{_sanitize_model_name(self.monitor_model_name)}_monitor_score"
+        monitor_expl_key  = f"{self.data_source}_{_sanitize_model_name(self.monitor_model_name)}_monitor_explanation"
+        judge_score_key   = f"{self.data_source}_{_sanitize_model_name(self.judge_model_name)}_llm_judge_score"
+        judge_expl_key    = f"{self.data_source}_{_sanitize_model_name(self.judge_model_name)}_llm_judge_explanation"
+
+        output_fn    = os.path.join(self.output_dir, "preds.jsonl")
+        dataset_size = len(self.data_loader)
+
+        if os.path.exists(output_fn):
+            with open(output_fn, "r") as f:
+                existing_lines = f.readlines()
+            ckpt_idx = len(existing_lines)
+            self.data_loader = islice(self.data_loader, ckpt_idx, None)
+            print(f"Output file {output_fn} already exists, resuming from {ckpt_idx}...")
+            all_monitor_scores = [json.loads(l).get(monitor_score_key, verifier.invalid_score) for l in existing_lines]
+            all_judge_scores   = [json.loads(l).get(judge_score_key,   verifier.invalid_score) for l in existing_lines]
+        else:
+            ckpt_idx           = 0
+            all_monitor_scores = []
+            all_judge_scores   = []
+
+        # ------------------------------------------------------------------ #
+        # Inference loop — two forward passes per entry
+        # ------------------------------------------------------------------ #
+        all_pending = []
+        progress    = tqdm(self.data_loader, initial=ckpt_idx, total=dataset_size)
+        assert self.batch_size == 1
+
+        for batch in progress:
+            neutral_prompt_formatted = batch["query"]   # already chat-templated by preprocessing
+
+            # Format positively swayed prompt with the same chat template
+            pos_swayed_raw = batch["pos_swayed_raw_prompt"][0]
+            pos_swayed_messages = [{"role": "user", "content": pos_swayed_raw}]
+            pos_swayed_prompt_formatted = self.tokenizer.apply_chat_template(
+                pos_swayed_messages,
+                add_generation_prompt=True,
+                tokenize=False,
+                enable_thinking=self.enable_thinking,
+            )
+
+            # Two forward passes
+            neutral_outputs    = self.model.generate(neutral_prompt_formatted,         sampling_params=sampling_param, use_tqdm=False)
+            pos_swayed_outputs = self.model.generate([pos_swayed_prompt_formatted],    sampling_params=sampling_param, use_tqdm=False)
+
+            for batch_entry_idx in range(self.batch_size):
+                # Extract neutral CoT + output
+                neutral_decoded   = neutral_outputs[batch_entry_idx].outputs[0].text
+                neutral_token_ids = neutral_outputs[batch_entry_idx].outputs[0].token_ids
+                neutral_cot, _, neutral_output, _, _ = process_main_cot_helper(
+                    tokenizer=self.tokenizer,
+                    enable_thinking=self.enable_thinking,
+                    data_source=None,
+                    main_response=neutral_decoded,
+                    main_pred_token_ids=neutral_token_ids,
+                    main_response_mask=None,
+                    keep_ratio=self.main_cot_keep_rate,
+                    think_start_str=self.think_start_str,
+                    think_end_str=self.think_end_str,
+                )
+
+                # Extract pos_swayed CoT + output
+                pos_decoded   = pos_swayed_outputs[batch_entry_idx].outputs[0].text
+                pos_token_ids = pos_swayed_outputs[batch_entry_idx].outputs[0].token_ids
+                pos_cot, _, pos_output, _, _ = process_main_cot_helper(
+                    tokenizer=self.tokenizer,
+                    enable_thinking=self.enable_thinking,
+                    data_source=None,
+                    main_response=pos_decoded,
+                    main_pred_token_ids=pos_token_ids,
+                    main_response_mask=None,
+                    keep_ratio=self.main_cot_keep_rate,
+                    think_start_str=self.think_start_str,
+                    think_end_str=self.think_end_str,
+                )
+
+                question = batch["raw_question_for_monitor"][batch_entry_idx]
+
+                # Monitor: predict score difference from the two CoTs
+                monitor_prompt = verifier.create_monitor_message({
+                    "neutral_cot":            neutral_cot,
+                    "pos_swayed_cot":         pos_cot,
+                    "raw_question_for_monitor": question,
+                })
+
+                # Judge: measure actual score difference from the two outputs
+                judge_input = verifier.format_llm_judge_prompt(
+                    question, None,
+                    neutral_output=neutral_output,
+                    pos_swayed_output=pos_output,
+                )
+
+                tmp_result = {
+                    "main_query":             batch["query"][batch_entry_idx],
+                    "pos_swayed_query":       pos_swayed_prompt_formatted,
+                    "question":               question,
+                    "neutral_full_output":    neutral_decoded,
+                    "pos_swayed_full_output": pos_decoded,
+                    "neutral_cot":            neutral_cot,
+                    "pos_swayed_cot":         pos_cot,
+                    "neutral_output":         neutral_output,
+                    "pos_swayed_output":      pos_output,
+                    "gt":                     batch["gt"][batch_entry_idx],
+                }
+
+                all_pending.append({
+                    "result_dict":    tmp_result,
+                    "monitor_prompt": monitor_prompt,
+                    "judge_input":    judge_input,
+                })
+
+                # TODO haha
+                breakpoint()
+
+            progress.update(self.batch_size)
+
+        # ------------------------------------------------------------------ #
+        # Run backends in batch
+        # ------------------------------------------------------------------ #
+        monitor_outputs = self.monitor_backend.run_batch([p["monitor_prompt"] for p in all_pending])
+        judge_outputs   = self.judge_backend.run_batch([p["judge_input"]      for p in all_pending])
+
+        result_f = open(os.path.join(self.output_dir, "preds.jsonl"), "a")
+
+        for i, pending in enumerate(tqdm(all_pending, desc="Collecting results")):
+            result_dict = pending["result_dict"]
+
+            raw = monitor_outputs[i]
+            if raw is None:
+                monitor_score, monitor_explanation = verifier.invalid_score, "CoT is empty"
+            else:
+                monitor_score, monitor_explanation = verifier.parse_monitor_output(raw)
+            result_dict[monitor_score_key] = monitor_score
+            result_dict[monitor_expl_key]  = monitor_explanation
+            all_monitor_scores.append(monitor_score)
+
+            raw = judge_outputs[i]
+            if raw is None:
+                judge_score, judge_explanation = verifier.invalid_score, "Output is empty"
+            else:
+                judge_score, judge_explanation = verifier.parse_llm_judge_output(raw)
+            result_dict[judge_score_key] = judge_score
+            result_dict[judge_expl_key]  = judge_explanation
+            all_judge_scores.append(judge_score)
+
+            result_f.write(json.dumps(result_dict) + "\n")
+
+        result_f.flush()
+        result_f.close()
+
+        # ------------------------------------------------------------------ #
+        # Compute and save metrics
+        # ------------------------------------------------------------------ #
+        monitor_arr = np.array(all_monitor_scores)
+        judge_arr   = np.array(all_judge_scores)
+
+        monitor_valid = monitor_arr != verifier.invalid_score
+        judge_valid   = judge_arr   != verifier.invalid_score
+        valid         = monitor_valid & judge_valid
+
+        metrics = verifier.compute_metrics(
+            predictions=monitor_arr[valid].astype(float).tolist(),
+            ground_truths=judge_arr[valid].astype(float).tolist(),
+        )
+        metrics["total_valid_CoT_entries"]    = int(np.sum(monitor_valid))
+        metrics["total_valid_output_entries"] = int(np.sum(judge_valid))
+        metrics["total_monitored_entries"]    = int(np.sum(valid))
+
+        print(f"\n{'='*60}")
+        print(f"Anthropic Sycophancy Monitor Metrics:")
+        print(f"{'='*60}")
+        print(json.dumps({self.data_source: metrics}, indent=2))
+        print(f"{'='*60}\n")
+
+        metrics_filename = (
+            f"{_sanitize_model_name(self.monitor_model_name)}_monitor"
+            f"-{_sanitize_model_name(self.judge_model_name)}_llm_judge_metrics.json"
+        )
+        with open(os.path.join(self.output_dir, metrics_filename), "w") as f:
+            json.dump({self.data_source: metrics}, f, indent=2)
+        print(f"Metrics saved to {os.path.join(self.output_dir, metrics_filename)}")

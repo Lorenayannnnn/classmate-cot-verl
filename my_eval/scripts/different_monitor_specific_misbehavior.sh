@@ -12,27 +12,27 @@ estimate_cost=${1:-false}
 # ── monitor / judge / dataset table (specific-behavior tasks only) ─
 # Format: "monitor_model                             judge_model                dataset      use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
 MONITOR_JUDGE_DATASET=(
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false  false  false  false  false"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false  false  false  false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false  false  false  false  false"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false  false  false  false  false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false  false  false  false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false  false  false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false  false  false  false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false  false  false  false"
 
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence        false  false  false  false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy        false  false  false  false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response   false  false  false  false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance false  false  false  false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false  false  false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false  false  false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false  false  false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false  false  false  false"
 )
 
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
-  "confidence        baseline_all_tokens  true"
-  "confidence        OURS_self            false"
-  "sycophancy        baseline_all_tokens  true"
-  "sycophancy        OURS_self            false"
-  "longer_response   baseline_all_tokens  true"
-  "longer_response   OURS_self            false"
-  "unsafe_compliance baseline_all_tokens  true"
-  "unsafe_compliance OURS_self            false"
+  "confidence           baseline_all_tokens  true"
+  "confidence           OURS_self            false"
+  "sycophancy           baseline_all_tokens  true"
+  "sycophancy           OURS_self            false"
+  "longer_response      baseline_all_tokens  true"
+  "longer_response      OURS_self            false"
+  "unsafe_compliance    baseline_all_tokens  true"
+  "unsafe_compliance    OURS_self            false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────

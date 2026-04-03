@@ -259,7 +259,10 @@ def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     data_sources = _normalize_data_sources(data_source)
     # data_source_joined = " ".join(data_sources)
 
-    if any("sycophancy" in source for source in data_sources):
+    if any("anthropic_sycophancy" in source for source in data_sources):
+        from verl.utils.reward_score.AnthropicSycophancyVerifier import AnthropicSycophancyVerifier
+        return AnthropicSycophancyVerifier(**kwargs)
+    elif any("sycophancy" in source for source in data_sources):
         from verl.utils.reward_score.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier(**kwargs)
     elif any("confidence" in source for source in data_sources):

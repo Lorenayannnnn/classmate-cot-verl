@@ -41,6 +41,8 @@ def sub_main(configs, model):
     try:
         if short_dataset_name == "general_reward":
             exp_runner.general_reward_inference_main_model(verifier=verifier)
+        elif short_dataset_name == "anthropic_sycophancy":
+            exp_runner.anthropic_sycophancy_inference_main_model(verifier=verifier)
         else:
             exp_runner.specific_behavior_inference_main_model(verifier=verifier)
         print("yay!")

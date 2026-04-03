@@ -123,6 +123,9 @@ def preprocess(configs, predict_dataset, wo_cot=False):
     elif "confidence" in configs.data_args.dataset_name:
         short_dataset_name = "confidence"
         verifier = get_verifier(data_source=short_dataset_name)
+    elif "anthropic_sycophancy" in configs.data_args.dataset_name:
+        short_dataset_name = "anthropic_sycophancy"
+        verifier = get_verifier(data_source=short_dataset_name)
     elif "sycophancy" in configs.data_args.dataset_name:
         short_dataset_name = "sycophancy"
         verifier = get_verifier(data_source=short_dataset_name)

@@ -42,6 +42,7 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
+  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
   [confidence]=20
@@ -49,6 +50,7 @@ declare -A TASK_STEP_SIZE=(
   [longer_response]=20
   [general_reward]=40
   [unsafe_compliance]=20
+  [anthropic_sycophancy]=40
 )
 declare -A TASK_METHODS=(
   [confidence]="baseline_all_tokens,OURS_self"
@@ -56,6 +58,7 @@ declare -A TASK_METHODS=(
   [longer_response]="baseline_all_tokens,OURS_self"
   [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self"
   [unsafe_compliance]="baseline_all_tokens,OURS_self"
+  [anthropic_sycophancy]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self,OURS_llama"
 )
 declare -A TASK_METHODS_SECONDARY=(
   [general_reward]="baseline_all_tokens,OURS_self,OURS_llama"

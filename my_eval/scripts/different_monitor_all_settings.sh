@@ -40,8 +40,13 @@ TASK_METHOD_RUNBASE=(
   "general_reward    baseline_cot_only         false"
   "general_reward    OURS_self                 false"
   "general_reward    OURS_llama                false"
-  "unsafe_compliance baseline_all_tokens       true"
-  "unsafe_compliance OURS_self                 false"
+  "unsafe_compliance    baseline_all_tokens       true"
+  "unsafe_compliance    OURS_self                 false"
+  "anthropic_sycophancy baseline_all_tokens       true"
+  "anthropic_sycophancy baseline_all_tokens_w_kl  false"
+  "anthropic_sycophancy baseline_cot_only         false"
+  "anthropic_sycophancy OURS_self                 false"
+  "anthropic_sycophancy OURS_llama                false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -59,6 +64,7 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
+  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
   [confidence]=20
@@ -66,6 +72,7 @@ declare -A TASK_STEP_SIZE=(
   [longer_response]=20
   [general_reward]=40
   [unsafe_compliance]=20
+  [anthropic_sycophancy]=40
 )
 
 # ── Derive backend type from model name ────────────────────────────

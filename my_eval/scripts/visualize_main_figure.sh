@@ -36,6 +36,7 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
+  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
   [confidence]=20
@@ -43,6 +44,7 @@ declare -A TASK_STEP_SIZE=(
   [longer_response]=20
   [general_reward]=40
   [unsafe_compliance]=20
+  [anthropic_sycophancy]=40
 )
 
 _calc_steps() {

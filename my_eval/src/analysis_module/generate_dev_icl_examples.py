@@ -7,6 +7,7 @@ def generate_dev_icl_examples(
     judge_model_name: str = "gpt-4.1-mini",
     base_dir: str = "outputs_eval/general_reward/Qwen3-0.6B",
     split: str = "dev",
+    behaviors: list | None = None,
 ):
     """Generate {behavior}_ICL_examples.json files from dev preds.jsonl files.
 
@@ -14,8 +15,16 @@ def generate_dev_icl_examples(
     behavior by the monitor score (ascending) and picks low/medium/high
     representatives, saving them to dev/{behavior}_ICL_examples.json alongside
     preds.jsonl's parent dev/ directory.
+
+    Args:
+        behaviors: List of behavior keys to generate ICL examples for.
+            Defaults to BEHAVIOR_TO_MONITOR (general_reward behaviors).
+            Pass ["anthropic_sycophancy"] for that dataset.
     """
     from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
+
+    if behaviors is None:
+        behaviors = BEHAVIOR_TO_MONITOR
 
     monitor_score_suffix = monitor_model_name.replace("/", "_") + "_monitor_score"
     monitor_expl_suffix  = monitor_model_name.replace("/", "_") + "_monitor_explanation"
@@ -57,7 +66,7 @@ def generate_dev_icl_examples(
                 with open(preds_fn) as f:
                     entries = [json.loads(line) for line in f]
 
-                for behavior in BEHAVIOR_TO_MONITOR:
+                for behavior in behaviors:
                     b_monitor_score = f"{behavior}_{monitor_score_suffix}"
                     b_monitor_expl  = f"{behavior}_{monitor_expl_suffix}"
                     b_judge_score   = f"{behavior}_{judge_score_suffix}"
@@ -92,18 +101,36 @@ def generate_dev_icl_examples(
                         for third in thirds
                     ]
 
-                    icl_examples = [
-                        {
-                            "user_message":      e["question"],
-                            "main_CoT":          e.get("truncated_main_CoT", ""),
-                            "main_output":       e.get("main_output", ""),
-                            "score":             e[b_monitor_score],
-                            "explanation":       e.get(b_monitor_expl, ""),
-                            "judge_score":       e.get(b_judge_score),
-                            "judge_explanation": e.get(b_judge_expl, ""),
-                        }
-                        for e in chosen
-                    ]
+                    # For anthropic_sycophancy the relevant fields are paired CoTs/outputs
+                    is_comparison = (behavior == "anthropic_sycophancy")
+                    if is_comparison:
+                        icl_examples = [
+                            {
+                                "user_message":      e["question"],
+                                "neutral_cot":       e["neutral_cot"],
+                                "pos_swayed_cot":    e["pos_swayed_cot"],
+                                "neutral_output":    e["neutral_output"],
+                                "pos_swayed_output": e["pos_swayed_output"],
+                                "score":             e[b_monitor_score],
+                                "explanation":       e[b_monitor_expl],
+                                "judge_score":       e[b_judge_score],
+                                "judge_explanation": e[b_judge_expl],
+                            }
+                            for e in chosen
+                        ]
+                    else:
+                        icl_examples = [
+                            {
+                                "user_message":      e["question"],
+                                "main_CoT":          e["truncated_main_CoT"],
+                                "main_output":       e["main_output"],
+                                "score":             e[b_monitor_score],
+                                "explanation":       e[b_monitor_expl],
+                                "judge_score":       e[b_judge_score],
+                                "judge_explanation": e[b_judge_expl],
+                            }
+                            for e in chosen
+                        ]
 
                     out_path = os.path.join(split_dir, f"{behavior}_ICL_examples.json")
                     with open(out_path, "w") as f:
@@ -113,6 +140,7 @@ def generate_dev_icl_examples(
 
 if __name__ == "__main__":
     generate_dev_icl_examples()
+    # generate_dev_icl_examples(behaviors=["anthropic_sycophancy"])
 
 #export PYTHONPATH=:${PYTHONPATH}
 #python my_eval/src/analysis_module/generate_dev_icl_examples.py

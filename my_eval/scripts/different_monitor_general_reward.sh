@@ -12,19 +12,28 @@ estimate_cost=${1:-false}
 # ── monitor / judge / dataset table (general_reward only) ──────────
 # Format: "monitor_model                 judge_model                               dataset     use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
 MONITOR_JUDGE_DATASET=(
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward      false          false              false            false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward      false          false              false            false  false"
-  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                          general_reward      true           true              false            true  false"
-#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward      true           false              false            true  false"
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        false          false              false            false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        false          false              false            false  false"
+  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                          general_reward        true           true              false            true  false"
+#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           false              false            true  false"
+#
+#  "gpt-4o-mini                          gpt-4.1-mini                          anthropic_sycophancy  false          false              false            false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          anthropic_sycophancy  false          false              false            false  false"
 )
 
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
-  "general_reward    baseline_all_tokens       true"
-  "general_reward    baseline_all_tokens_w_kl  false"
-  "general_reward    baseline_cot_only         false"
-  "general_reward    OURS_self                 false"
-  "general_reward    OURS_llama                false"
+  "general_reward        baseline_all_tokens       true"
+  "general_reward        baseline_all_tokens_w_kl  false"
+  "general_reward        baseline_cot_only         false"
+  "general_reward        OURS_self                 false"
+  "general_reward        OURS_llama                false"
+
+  "anthropic_sycophancy  baseline_all_tokens       true"
+  "anthropic_sycophancy  baseline_all_tokens_w_kl  false"
+  "anthropic_sycophancy  baseline_cot_only         false"
+  "anthropic_sycophancy  OURS_self                 false"
+  "anthropic_sycophancy  OURS_llama                false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -38,9 +47,11 @@ seeds=(seed_0 seed_1 seed_2)
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
   [general_reward]=920
+  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
   [general_reward]=40
+  [anthropic_sycophancy]=40
 )
 
 # ── Derive backend type from model name ────────────────────────────
