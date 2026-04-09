@@ -7,12 +7,8 @@ result_dir=outputs/
 
 data_dir=./data
 dataset_name="bold_formatting"
-seed=${seed:-0}
-gpu_idx=${gpu_idx:-0}
-#seed=1
-#gpu_idx=1
-#seed=2
-#gpu_idx=2
+seed=0
+gpu_idx=0
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet

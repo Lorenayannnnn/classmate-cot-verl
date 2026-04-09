@@ -271,8 +271,8 @@ def plot_monitor_metrics_across_steps(
             legend_handles, legend_labels = h, l
         if ax.get_legend() is not None:
             ax.get_legend().remove()
-        if bk == "sycophancy" and dataset_name == "general_reward" and metric in _SYCOPHANCY_YMAX_METRICS:
-            ax.set_ylim(top=3)
+        # if bk == "sycophancy" and dataset_name == "general_reward" and metric in _SYCOPHANCY_YMAX_METRICS:
+        #     ax.set_ylim(top=3)
 
     # Hide surplus cells; reserve legend_cell_idx for the legend if applicable.
     for idx in range(len(plot_specs), len(axes)):
@@ -298,6 +298,8 @@ def plot_monitor_metrics_across_steps(
         subtitle_parts.append(f"Monitor: {monitor_model_name}")
     if bk == "longer_response":
         subtitle_parts.append("Ground Truth: Token Count")
+    elif bk == "bold_formatting":
+        subtitle_parts.append("Ground Truth: # of Bold Spans")
     elif judge_model_name:
         subtitle_parts.append(f"Judge: {judge_model_name}")
     mean_n = _mean_shared_entries()

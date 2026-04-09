@@ -255,7 +255,7 @@ def plot_main_figure(
 
     legend_handles = legend_labels = None
 
-    _SYCOPHANCY_YMAX = 3
+    # _SYCOPHANCY_YMAX = 3
     # ── Row 0: RMSE (behaviors) + reward score or 4th behavior ─── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[0, col]
@@ -263,8 +263,8 @@ def plot_main_figure(
         h, l = _plot_ax(ax, "rmse", bk)
         if legend_handles is None and h:
             legend_handles, legend_labels = h, l
-        if bk == "sycophancy" and dataset_name == "general_reward":
-            ax.set_ylim(top=_SYCOPHANCY_YMAX)
+        # if bk == "sycophancy" and dataset_name == "general_reward":
+        #     ax.set_ylim(top=_SYCOPHANCY_YMAX)
 
     if include_reward_score:
         ax = axes[0, 4]
@@ -279,8 +279,8 @@ def plot_main_figure(
     for col, bk in enumerate(behavior_keys):
         ax = axes[1, col]
         _plot_ax(ax, "ground_truth_mean", bk)
-        if bk == "sycophancy" and dataset_name == "general_reward":
-            ax.set_ylim(top=_SYCOPHANCY_YMAX)
+        # if bk == "sycophancy" and dataset_name == "general_reward":
+        #     ax.set_ylim(top=_SYCOPHANCY_YMAX)
     # col 4, row 1 is used for legend (or hidden if no reward score)
     if not include_reward_score:
         axes[1, 4].axis("off")

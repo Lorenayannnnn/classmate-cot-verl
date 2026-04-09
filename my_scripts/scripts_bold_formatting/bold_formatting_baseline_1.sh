@@ -7,7 +7,7 @@ result_dir=outputs/
 
 data_dir=./data
 dataset_name="bold_formatting"
-seed=0
+seed=1
 gpu_idx=0
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
