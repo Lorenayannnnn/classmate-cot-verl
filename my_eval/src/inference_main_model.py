@@ -39,10 +39,11 @@ def sub_main(configs, model):
                                     judge_backend_type=configs.running_args.llm_judge_backend_type)
 
     try:
-        if short_dataset_name == "general_reward":
+        if short_dataset_name == "anthropic_sycophancy":
+            raise NotImplementedError("anthropic_sycophancy not implemented")
+            # exp_runner.anthropic_sycophancy_inference_main_model(verifier=verifier)
+        elif short_dataset_name == "general_reward":
             exp_runner.general_reward_inference_main_model(verifier=verifier)
-        elif short_dataset_name == "anthropic_sycophancy":
-            exp_runner.anthropic_sycophancy_inference_main_model(verifier=verifier)
         else:
             exp_runner.specific_behavior_inference_main_model(verifier=verifier)
         print("yay!")

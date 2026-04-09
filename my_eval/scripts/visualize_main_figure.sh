@@ -10,15 +10,26 @@ export PYTHONPATH=:${PYTHONPATH}
 #                                   the model trained on that specific behavior
 # Format: "monitor_model                  judge_model                               dataset  use_dynamic_icl    no_explanation"
 MONITOR_JUDGE_DATASET=(
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       true            true"
+  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true            true"
+
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    true           true"
+  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    true           true"
+
+
+
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       false            false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       true           true"
 
 #  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false           false"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false           false"
-#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true            true"
-#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true            true"
-  "Qwen/Qwen2.5-0.5B-Instruct              gpt-4.1-mini                          general_reward       true            true"
 
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    false           false"
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false           true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false           true"
+
+#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true            true"
+#  "Qwen/Qwen2.5-0.5B-Instruct              gpt-4.1-mini                          general_reward       true            true"
+
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    false           false"
 )
 
@@ -61,8 +72,8 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
   read -r monitor judge dataset use_dynamic_icl no_explanation <<< "${entry}"
 
   if [[ "${dataset}" == "general_reward" ]]; then
-    # Group 1: 2×4 figure — row 0 = RMSE (3 behaviors + reward score)
-    #                        row 1 = ground truth mean (3 behaviors + empty)
+    # Group 1: 2×5 figure — row 0 = RMSE (4 behaviors + reward score)
+    #                        row 1 = ground truth mean (4 behaviors + empty)
     _calc_steps general_reward
     result_dir="${base_root}/general_reward/${base_model}"
 
@@ -70,7 +81,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     python ${SRC_DIR}/analysis_module/visualize_main_figure.py \
       --result_dir         ${result_dir} \
       --dataset_name       general_reward \
-      --behavior_keys      longer_response,confidence,sycophancy \
+      --behavior_keys      longer_response,bold_formatting,confidence,sycophancy \
       --include_reward_score \
       --methods            baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self \
       --seeds              ${seeds} \
@@ -83,11 +94,13 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
       $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
 
+#      --behavior_keys      longer_response,confidence,sycophancy,bold_formatting \
+
     echo "Generating main figure: general_reward (ours comparison) [monitor=${monitor}] ..."
     python ${SRC_DIR}/analysis_module/visualize_main_figure.py \
       --result_dir         ${result_dir} \
       --dataset_name       general_reward \
-      --behavior_keys      longer_response,confidence,sycophancy \
+      --behavior_keys      longer_response,bold_formatting,confidence,sycophancy \
       --include_reward_score \
       --methods            baseline_all_tokens,OURS_self,OURS_llama \
       --seeds              ${seeds} \
@@ -100,6 +113,8 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
       --dataset_split_name ${dataset_split_name} \
       $([[ "${use_dynamic_icl}" == "true" ]] && echo "--use_dynamic_icl") \
       $([[ "${no_explanation}" == "true" ]] && echo "--no_explanation")
+
+#      --behavior_keys      longer_response,confidence,sycophancy,bold_formatting \
 
   elif [[ "${dataset}" == "specific_behaviors" ]]; then
     # Group 2: 2×4 figure — each column is a different behavior-specific trained model

@@ -1,5 +1,6 @@
 #!/bin/sh
 #SBATCH --account=hewittlab
+#SBATCH --exclude=csrtx6000-2
 #SBATCH --gpus=2
 #SBATCH --time=24:00:00
 #SBATCH --job-name=olmo_O2
@@ -21,12 +22,12 @@ main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total
 mkdir -p "${main_dir}"
 exec >"${main_dir}/main_ppo.log" 2>&1
 
-export PATH=/usr/local/cuda/bin:$PATH
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+#export PATH=/usr/local/cuda/bin:$PATH
+#export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
-unset ROCR_VISIBLE_DEVICES
-unset HIP_VISIBLE_DEVICES
+#export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
+#unset ROCR_VISIBLE_DEVICES
+#unset HIP_VISIBLE_DEVICES
 bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_classmate_self.sh
 
 #sbatch my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/sbatch_files/general_reward_classmate_self.sh

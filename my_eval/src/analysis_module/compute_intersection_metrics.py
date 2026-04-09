@@ -42,6 +42,18 @@ def _sanitize(name: str) -> str:
     return name.replace("/", "_")
 
 
+# def _preds_path(result_dir: str, method: str, step_idx, seed, dataset_split_name: str = "test", behavior: str = None) -> str:
+#     """Return the path to a method's preds.jsonl for a given (step_idx, seed).
+#
+#     If behavior is 'anthropic_sycophancy', returns the dedicated
+#     anthropic_sycophancy_preds.jsonl file instead of preds.jsonl.
+#     """
+#     filename = "anthropic_sycophancy_preds.jsonl" if behavior == "anthropic_sycophancy" else "preds.jsonl"
+#     if step_idx == "base":
+#         return os.path.join(result_dir, method, "step_base", dataset_split_name, "main", filename)
+#     return os.path.join(result_dir, method, f"step_{step_idx}", seed, dataset_split_name, "main", filename)
+
+
 def _preds_path(result_dir: str, method: str, step_idx, seed, dataset_split_name: str = "test") -> str:
     """Return the path to a method's preds.jsonl for a given (step_idx, seed)."""
     if step_idx == "base":
@@ -80,7 +92,8 @@ def compute_intersection_metrics(
 
     is_general_reward = dataset_name == "general_reward"
     behavior_keys = (
-        BEHAVIOR_TO_MONITOR
+        # list(BEHAVIOR_TO_MONITOR) + ["anthropic_sycophancy"]
+        list(BEHAVIOR_TO_MONITOR)
         if is_general_reward
         else [dataset_name]
     )
@@ -89,6 +102,7 @@ def compute_intersection_metrics(
     # key: (method, seed, step_idx)  — seed=None for base step
     print("\n[intersection] Loading all preds ...")
     all_entries: dict = {}
+    # as_entries: dict = {}   # anthropic_sycophancy preds (separate file)
     for step_idx in all_step_idx_list:
         seeds_for_step = [None] if step_idx == "base" else seeds_list
         for method in methods_list:
@@ -101,7 +115,22 @@ def compute_intersection_metrics(
                 all_entries[(method, seed, step_idx)] = entries
                 assert len(entries) == 500, f"  [error_loaded] {fn}  ({len(entries)} entries)"
 
+                # if is_general_reward:
+                #     as_fn = _preds_path(result_dir, method, step_idx, seed, dataset_split_name,
+                #                         behavior="anthropic_sycophancy")
+                #     if not os.path.exists(as_fn):
+                #         raise ValueError(f"anthropic_sycophancy preds not found: {as_fn}")
+                #     with open(as_fn) as f:
+                #         all_as = [json.loads(line) for line in f]
+                    # HOTFIX: restrict to the "poem" subset only — comment out to use all entries
+                    # _POEM_HOTFIX = True
+                    # if _POEM_HOTFIX:
+                    #     all_as = [e for e in all_as
+                    #               if "comment briefly on the following poem" in e.get("main_query", "").lower()]
+                    # as_entries[(method, seed, step_idx)] = all_as
+
     n = len(next(iter(all_entries.values())))
+    # n_as = len(next(iter(as_entries.values()))) if as_entries else 0
     combo_metrics: dict = {key: {} for key in all_entries}
 
     # ── Phase 2: Per-behavior per-step shared mask ───────────────── #
@@ -112,10 +141,16 @@ def compute_intersection_metrics(
         verifier = get_verifier(data_source=bk, max_new_tokens=max_new_tokens)
         invalid  = verifier.invalid_score
 
+        # Use the dedicated anthropic_sycophancy preds file when applicable.
+        # source_entries = as_entries if bk == "anthropic_sycophancy" else all_entries
+        # n_source = n_as if bk == "anthropic_sycophancy" else n
+        source_entries = all_entries
+        n_source = n
+
         m_scores: dict   = {}
         j_scores: dict   = {}
         both_valid: dict = {}
-        for key, entries in all_entries.items():
+        for key, entries in source_entries.items():
             ms = np.array([e.get(b_monitor_key, invalid) for e in entries])
             js = np.array([e.get(b_judge_key,   invalid) for e in entries])
             m_scores[key]   = ms
@@ -125,16 +160,17 @@ def compute_intersection_metrics(
         for step_idx in all_step_idx_list:
             seeds_for_step = [None] if step_idx == "base" else seeds_list
             # Shared mask: valid in ALL (method × seed) at this step
-            shared = np.ones(n, dtype=bool)
+            shared = np.ones(n_source, dtype=bool)
             for method in methods_list:
                 for seed in seeds_for_step:
                     key = (method, seed, step_idx)
                     n_valid = int(np.sum(both_valid[key]))
                     if n_valid == 0:
-                        print(f"  WARNING: {bk} step={step_idx} method={method} seed={seed}: 0/{n} valid — key may be missing from preds.jsonl")
+                        breakpoint()
+                        print(f"  WARNING: {bk} step={step_idx} method={method} seed={seed}: 0/{n_source} valid — key may be missing from preds.jsonl")
                     shared &= both_valid[key]
             n_shared = int(np.sum(shared))
-            print(f"\n  {bk} step={step_idx}: {n_shared}/{n} shared across methods & seeds")
+            print(f"\n  {bk} step={step_idx}: {n_shared}/{n_source} shared across methods & seeds")
 
             for method in methods_list:
                 for seed in seeds_for_step:
@@ -143,8 +179,8 @@ def compute_intersection_metrics(
                         breakpoint()
                         b_metrics = {"total_valid_CoT_entries": int(np.sum(both_valid[key])),
                                      "total_monitored_entries": 0,
-                                     "total_entries":           n}
-                    elif n_shared < 200:
+                                     "total_entries":           n_source}
+                    elif n_shared < 100:
                         breakpoint()
                     else:
                         b_metrics = verifier.compute_metrics(
@@ -153,7 +189,7 @@ def compute_intersection_metrics(
                         )
                         b_metrics["total_valid_CoT_entries"] = int(np.sum(both_valid[key]))
                         b_metrics["total_monitored_entries"] = n_shared
-                        b_metrics["total_entries"]           = n
+                        b_metrics["total_entries"]           = n_source
                     combo_metrics[key][bk] = b_metrics
 
     # ── Phase 3: general_reward score (no intersection — always defined) ── #
@@ -178,6 +214,11 @@ def compute_intersection_metrics(
         out_dir  = _output_dir(result_dir, method, step_idx, seed, dataset_split_name)
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, intersection_file)
+        # if os.path.exists(out_path):
+        #     with open(out_path, "r") as f:
+        #         existing = json.load(f)
+        #     existing.update(metrics)
+        #     metrics = existing
         with open(out_path, "w") as f:
             json.dump(metrics, f, indent=4)
         print(f"  [saved]  {out_path}")

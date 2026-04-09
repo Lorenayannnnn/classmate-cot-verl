@@ -3,58 +3,40 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_monitor_general_reward.sh
-#bash my_eval/scripts/different_monitor_general_reward.sh true   # estimate cost only
+#bash my_eval/scripts/different_monitor_specific_behavior_dev.sh
+#bash my_eval/scripts/different_monitor_specific_behavior_dev.sh true   # estimate cost only
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
 
-## ── monitor / judge / dataset table (general_reward only) ──────────
-## Format: "monitor_model                 judge_model                               dataset     use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
+# ── monitor / judge / dataset table (specific-behavior tasks, dev split) ──
+# Format: "monitor_model                             judge_model                dataset                         use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
 MONITOR_JUDGE_DATASET=(
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        false          false              false            false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507                         confidence           false            false            false           true              false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507                         sycophancy           false            false            false           true              false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507                         longer_response      false            false            false           true              false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507                         unsafe_compliance    false            false            false           true              false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507                         bold_formatting      true            true            false           true              true"
 
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true          true              false            true         true"
-  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           true              false            true        true"
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true          false              false            true         true"
-#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           false              false            true        true"
-
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward        true          true              false            true          true"
-
-#  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                          general_reward        true           true              false            true  true"
-
-#  "gpt-4o-mini                          gpt-4.1-mini                          anthropic_sycophancy  false          false              false            false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          anthropic_sycophancy  false          false              false            false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting      true            true            false           true              true"
 )
-
-# ── monitor / judge / dataset table (general_reward only) ──────────
-# Use ICL examples
-# Format: "monitor_model                 judge_model                               dataset     use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
-#MONITOR_JUDGE_DATASET=(
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        true           true              false            true  true"
-
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true           true              false            true          true"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward        true           true              false            true          true"
-
-#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           true              false            true  true"
-#
-#  "gpt-4o-mini                          gpt-4.1-mini                          anthropic_sycophancy  true           true              false            true  true"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          anthropic_sycophancy  true           true              false            true  true"
-#)
 
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
-  "general_reward        baseline_all_tokens       true"
-  "general_reward        baseline_all_tokens_w_kl  false"
-  "general_reward        baseline_cot_only         false"
-  "general_reward        OURS_self                 false"
-  "general_reward        OURS_llama                false"
-
-#  "anthropic_sycophancy  baseline_all_tokens       true"
-#  "anthropic_sycophancy  baseline_all_tokens_w_kl  false"
-#  "anthropic_sycophancy  baseline_cot_only         false"
-#  "anthropic_sycophancy  OURS_self                 false"
-#  "anthropic_sycophancy  OURS_llama                false"
+  "confidence           baseline_all_tokens  true"
+  "confidence           OURS_self            false"
+  "sycophancy           baseline_all_tokens  true"
+  "sycophancy           OURS_self            false"
+  "longer_response      baseline_all_tokens  true"
+  "longer_response      OURS_self            false"
+  "unsafe_compliance    baseline_all_tokens  true"
+  "unsafe_compliance    OURS_self            false"
+#  "bold_formatting      baseline_all_tokens  true"
+#  "bold_formatting      OURS_self            false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -62,17 +44,23 @@ num_eval_ckpts=6
 max_new_tokens=3072
 base_model=Qwen3-0.6B
 base_root=outputs_eval
-dataset_split_name=test
+dataset_split_name=dev
 seeds=(seed_0 seed_1 seed_2)
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
-  [general_reward]=920
-  [anthropic_sycophancy]=920
+  [confidence]=420
+  [sycophancy]=200
+  [longer_response]=300
+  [unsafe_compliance]=300
+  [bold_formatting]=420
 )
 declare -A TASK_STEP_SIZE=(
-  [general_reward]=40
-  [anthropic_sycophancy]=40
+  [confidence]=20
+  [sycophancy]=20
+  [longer_response]=20
+  [unsafe_compliance]=20
+  [bold_formatting]=20
 )
 
 # ── Derive backend type from model name ────────────────────────────
@@ -183,7 +171,7 @@ _run_task() {
 # ── Cost estimation ────────────────────────────────────────────────
 if [[ "${estimate_cost}" == "true" ]]; then
   num_seeds=${#seeds[@]}
-  samples_per_dir=500
+  samples_per_dir=100
   avg_tokens_per_sample=2000
   declare -A MODEL_COST_PER_1K=(
     [gpt-4o-mini]=0.000375
@@ -208,8 +196,8 @@ if [[ "${estimate_cost}" == "true" ]]; then
     total_dirs=$(( total_rl_dirs + total_base_dirs ))
     total_tokens_k=$(( total_dirs * samples_per_dir * avg_tokens_per_sample / 1000 ))
     pair_cost=$(echo "scale=2; ${total_tokens_k} * (${monitor_cost_per_1k} + ${judge_cost_per_1k})" | bc)
-    printf "  monitor=%-35s judge=%-35s dirs=%d  cost=~\$%s\n" \
-      "${monitor}" "${judge}" "${total_dirs}" "${pair_cost}"
+    printf "  monitor=%-35s judge=%-35s dataset=%-20s dirs=%d  cost=~\$%s\n" \
+      "${monitor}" "${judge}" "${dataset}" "${total_dirs}" "${pair_cost}"
     total_cost_all=$(echo "scale=2; ${total_cost_all} + ${pair_cost}" | bc)
   done
   echo "══ Total estimated cost: ~\$${total_cost_all} ══════════════"

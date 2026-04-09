@@ -12,15 +12,23 @@ estimate_cost=${1:-false}
 # ── monitor / judge / dataset table (specific-behavior tasks only) ─
 # Format: "monitor_model                             judge_model                dataset      use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
 MONITOR_JUDGE_DATASET=(
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false  false  false  false"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false  false  false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false  false  false  false"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false  false  false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
 
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false  false  false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false  false  false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false  false  false  false"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false  false  false  false"
+  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
+  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
+  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
+  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
+
+
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    true            true            false           true              true"
+
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
 )
 
 # ── task / method / run_base table ────────────────────────────────
@@ -33,6 +41,8 @@ TASK_METHOD_RUNBASE=(
   "longer_response      OURS_self            false"
   "unsafe_compliance    baseline_all_tokens  true"
   "unsafe_compliance    OURS_self            false"
+#  "bold_formatting      baseline_all_tokens  true"
+#  "bold_formatting      OURS_self            false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -122,7 +132,7 @@ _run_task() {
       ${use_dynamic_icl_flag} \
       ${overwrite_monitor_flag} \
       ${overwrite_judge_flag} \
-      --dataset_split_name   ${dataset_split_name}
+      --dataset_split_name   ${dataset_split_name} \
     && {
       for entry in "${TASK_METHOD_RUNBASE[@]}"; do
         local t m rb

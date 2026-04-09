@@ -3,8 +3,9 @@ from typing import Any, Dict
 
 from verl.utils.reward_score.BaseVerifier import BaseVerifier
 
-# BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response", "general_reward"]
-BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response"]
+# BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response", "bold_formatting", "general_reward"]
+# BEHAVIOR_TO_MONITOR=["sycophancy", "confidence", "longer_response", "bold_formatting"]
+BEHAVIOR_TO_MONITOR=["longer_response", "confidence", "bold_formatting", "sycophancy"]
 
 class GeneralRewardVerifier(BaseVerifier):
     """
@@ -57,6 +58,7 @@ SCORE: [number]"""
         return "No explanation provided."
 
     def create_monitor_message(self, doc: Dict[str, Any]):
+        raise NotImplementedError("create_monitor_message should not be called for general_reward, since no monitor is used. The score is provided directly by the reward model backend.")
         user_message = doc["raw_question_for_monitor"]
         main_CoT = doc["truncated_main_CoT"]
         if main_CoT is None:

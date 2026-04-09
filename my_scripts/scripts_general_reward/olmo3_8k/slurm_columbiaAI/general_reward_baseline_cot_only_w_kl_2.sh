@@ -1,6 +1,15 @@
 set -x
 
-#bash my_scripts/scripts_general_reward/olmo3_8k/general_reward_baseline_1.sh
+#export CUDA_HOME=/usr/local/cuda-13.1
+#export PATH=${CUDA_HOME}/bin:$PATH
+#export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+#
+#export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
+#unset ROCR_VISIBLE_DEVICES
+#unset HIP_VISIBLE_DEVICES
+
+#bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline_cot_only_w_kl_2.sh
+#srun --account=hewittlab --job-name=olmo_c2 --gres=gpu:2  --pty --time=24:00:00 bash
 
 result_dir="/proj/interaction/interaction-filer/lorena/"
 #result_dir=outputs/
@@ -8,18 +17,17 @@ result_dir="/proj/interaction/interaction-filer/lorena/"
 data_dir=./data
 dataset_name="general_reward"
 #seed=0
-#gpu_idx=4,5
-seed=1
+#gpu_idx=0,1
+#seed=1
+#gpu_idx=0,1
+seed=2
 gpu_idx=2,3
-#seed=2
-#gpu_idx=2,3
 
 train_path=${data_dir}/${dataset_name}/seed_${seed}/train.parquet
 eval_path=${data_dir}/${dataset_name}/dev.parquet
 train_files="['$train_path']"
 eval_files="['$eval_path']"
 
-# </think>
 #base_model_name_path=allenai/Olmo-3-7B-Think-SFT
 #base_model_name_path=allenai/Olmo-3-7B-Think-DPO
 base_model_name_path=allenai/Olmo-3-7B-Think
@@ -46,7 +54,7 @@ train_batch_size=16
 mini_batch_size_per_gpu=16
 micro_batch_size_per_gpu=4
 
-save_freq=40
+save_freq=20
 test_freq=20
 
 epoch_num=6
@@ -70,7 +78,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$((mini_batch_size_per_gpu)) \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
-    actor_rollout_ref.actor.use_kl_loss=False \
+    actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
@@ -83,11 +91,11 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.n=${rollout_n} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${micro_batch_size_per_gpu} \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
-    algorithm.use_kl_in_reward=False \
+    algorithm.use_kl_in_reward=True \
     trainer.critic_warmup=0 \
     trainer.logger='["console","wandb"]' \
     trainer.project_name='classmate_cot_w_verl' \
-    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/baseline_${token_level_main_reward_mode}/seed_${seed}" \
+    trainer.experiment_name="${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/baseline_${token_level_main_reward_mode}_w_kl/seed_${seed}" \
     trainer.n_gpus_per_node=${gpu_for_train} \
     trainer.nnodes=1 \
     trainer.save_freq=${save_freq} \
@@ -106,11 +114,10 @@ python3 -m verl.trainer.main_ppo \
     reward_model.eval_llm_judge_backend_type=${eval_llm_judge_backend_type} \
     reward_model.token_level_main_reward_mode=${token_level_main_reward_mode} \
     trainer.default_local_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
-    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile' \
-    trainer.validation_data_dir="${result_dir}"'${trainer.project_name}/outputs/${trainer.experiment_name}' \
+    'global_profiler.save_path='"${result_dir}"'${trainer.project_name}/outputs/profile'
 
-main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/baseline_${token_level_main_reward_mode}/seed_${seed}"
-repo_name="${dataset_name}-${base_model_name_path##*/}_${max_response_length}-baseline_${token_level_main_reward_mode}-seed_${seed}"
+main_dir="${result_dir}classmate_cot_w_verl/outputs/${dataset_name}/grpo_${total_episodes}_episodes/${base_model_name_path}_${max_response_length}/baseline_${token_level_main_reward_mode}_w_kl/seed_${seed}"
+repo_name="${dataset_name}-${base_model_name_path##*/}_${max_response_length}-baseline_${token_level_main_reward_mode}_w_kl-seed_${seed}"
 python upload_ckpts_to_huggingface.py \
   --root_path ${main_dir} \
   --repo_name ${repo_name}

@@ -34,10 +34,10 @@ MONITOR_JUDGE_DATASET=(
 #  "gpt-4o-mini                          gpt-4.1-mini                          general_reward"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward"
 
+  "meta-llama/Llama-3.2-1B     gpt-4.1-mini      general_reward"
+  "Qwen/Qwen2.5-0.5B-Instruct     gpt-4.1-mini      general_reward"
+
 #  "HuggingFaceTB/SmolLM2-360M-Instruct     gpt-4.1-mini      general_reward"
-#  "meta-llama/Llama-3.2-1B     gpt-4.1-mini      general_reward"
-#  "Qwen/Qwen2.5-0.5B-Instruct     gpt-4.1-mini      general_reward"
-  "Qwen3-0.6B     gpt-4.1-mini      general_reward"
 )
 
 # ── task / method / run_base table ────────────────────────────────

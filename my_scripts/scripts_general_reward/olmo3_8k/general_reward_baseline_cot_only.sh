@@ -45,7 +45,7 @@ train_batch_size=16
 mini_batch_size_per_gpu=16
 micro_batch_size_per_gpu=8
 
-save_freq=20
+save_freq=40
 test_freq=20
 
 epoch_num=6

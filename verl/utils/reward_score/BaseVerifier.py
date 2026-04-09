@@ -55,7 +55,7 @@ class BaseVerifier(ABC):
             raise NotImplementedError("LLM judge output parsing not implemented for this verifier. If you want to use LLM judge evaluation, please implement parse_llm_judge_output in your verifier subclass.")
 
     @abstractmethod
-    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = False) -> str:
+    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = True) -> str:
         """
         Create a monitor message for evaluation.
 
@@ -260,8 +260,9 @@ def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     # data_source_joined = " ".join(data_sources)
 
     if any("anthropic_sycophancy" in source for source in data_sources):
-        from verl.utils.reward_score.AnthropicSycophancyVerifier import AnthropicSycophancyVerifier
-        return AnthropicSycophancyVerifier(**kwargs)
+        raise NotImplementedError("anthropic_sycophancy not supported")
+        # from verl.utils.reward_score.AnthropicSycophancyVerifier import AnthropicSycophancyVerifier
+        # return AnthropicSycophancyVerifier(**kwargs)
     elif any("sycophancy" in source for source in data_sources):
         from verl.utils.reward_score.SycophancyVerifier import SycophancyVerifier
         return SycophancyVerifier(**kwargs)
@@ -271,6 +272,9 @@ def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     elif any("longer_response" in source for source in data_sources):
         from verl.utils.reward_score.LongerResponseVerifier import LongerResponseVerifier
         return LongerResponseVerifier(**kwargs)
+    elif any("bold_formatting" in source for source in data_sources):
+        from verl.utils.reward_score.BoldFormattingVerifier import BoldFormattingVerifier
+        return BoldFormattingVerifier(**kwargs)
     elif any("general_reward" in source for source in data_sources):
         from verl.utils.reward_score.GeneralRewardVerifier import GeneralRewardVerifier
         return GeneralRewardVerifier(**kwargs)

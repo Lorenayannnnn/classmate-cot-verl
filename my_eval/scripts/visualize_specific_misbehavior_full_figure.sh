@@ -8,15 +8,20 @@ export PYTHONPATH=:${PYTHONPATH}
 # Format: "monitor_model  judge_model  dataset  use_dynamic_icl  no_explanation"
 # dataset: specific-behavior tasks only (confidence, sycophancy, longer_response, unsafe_compliance)
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true    true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true    true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true    true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true    true"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false"
+  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true    true"
+  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true    true"
+  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true    true"
+  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true    true"
+
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true    true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true    true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true    true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true    true"
 )
 
 # ── Shared config ──────────────────────────────────────────────────

@@ -8,6 +8,8 @@ export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
+nvidia-smi topo -m
+
 #bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_classmate_self.sh
 #srun --account=hewittlab --job-name=olmo_O2 --gres=gpu:2  --pty --time=24:00:00 bash
 

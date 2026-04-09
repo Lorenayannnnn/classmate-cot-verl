@@ -1,4 +1,5 @@
-conda install setuptools
+
+pip install setuptools==68.2.2   # needed for rebuilding packages with antlr4
 
 pip install -r my_requirements.txt
 

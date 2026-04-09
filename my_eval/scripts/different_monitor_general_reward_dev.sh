@@ -3,8 +3,8 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_monitor_general_reward.sh
-#bash my_eval/scripts/different_monitor_general_reward.sh true   # estimate cost only
+#bash my_eval/scripts/different_monitor_general_reward_dev.sh
+#bash my_eval/scripts/different_monitor_general_reward_dev.sh true   # estimate cost only
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
@@ -12,35 +12,29 @@ estimate_cost=${1:-false}
 ## ── monitor / judge / dataset table (general_reward only) ──────────
 ## Format: "monitor_model                 judge_model                               dataset     use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
 MONITOR_JUDGE_DATASET=(
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        false          true              true            true  false"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        false          false              false            false  false"
-
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true          true              false            true         true"
-  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           true              false            true        true"
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true          false              false            true         true"
-#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           false              false            true        true"
-
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward        true          true              false            true          true"
-
-#  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                          general_reward        true           true              false            true  true"
-
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward        false          false              false            false  false"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                          general_reward        true           true              false            true  false"
+#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           false              false            true  false"
+#
 #  "gpt-4o-mini                          gpt-4.1-mini                          anthropic_sycophancy  false          false              false            false  false"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          anthropic_sycophancy  false          false              false            false  false"
 )
 
-# ── monitor / judge / dataset table (general_reward only) ──────────
+## ── monitor / judge / dataset table (general_reward only) ──────────
 # Use ICL examples
 # Format: "monitor_model                 judge_model                               dataset     use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
-#MONITOR_JUDGE_DATASET=(
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        true           true              false            true  true"
-
-#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true           true              false            true          true"
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward        true           true              false            true          true"
-
+MONITOR_JUDGE_DATASET=(
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true           true              false            true  true"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        true           true              false            true  true"
+  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward        true           true              false            true  true"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                         general_reward        true           true              false            true  true"
 #  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           true              false            true  true"
 #
 #  "gpt-4o-mini                          gpt-4.1-mini                          anthropic_sycophancy  true           true              false            true  true"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          anthropic_sycophancy  true           true              false            true  true"
-#)
+)
 
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
@@ -49,12 +43,6 @@ TASK_METHOD_RUNBASE=(
   "general_reward        baseline_cot_only         false"
   "general_reward        OURS_self                 false"
   "general_reward        OURS_llama                false"
-
-#  "anthropic_sycophancy  baseline_all_tokens       true"
-#  "anthropic_sycophancy  baseline_all_tokens_w_kl  false"
-#  "anthropic_sycophancy  baseline_cot_only         false"
-#  "anthropic_sycophancy  OURS_self                 false"
-#  "anthropic_sycophancy  OURS_llama                false"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -62,7 +50,7 @@ num_eval_ckpts=6
 max_new_tokens=3072
 base_model=Qwen3-0.6B
 base_root=outputs_eval
-dataset_split_name=test
+dataset_split_name=dev
 seeds=(seed_0 seed_1 seed_2)
 
 # ── Per-task config ────────────────────────────────────────────────
@@ -153,6 +141,7 @@ _run_task() {
         rm -rf "${dst_step_base}"
         cp -r "${src_step_base}" "${dst_step_base}"
       done
+      echo "Base step copied for method ${method}!!!!!!!!!!!!"
     }
   fi
 
@@ -183,7 +172,7 @@ _run_task() {
 # ── Cost estimation ────────────────────────────────────────────────
 if [[ "${estimate_cost}" == "true" ]]; then
   num_seeds=${#seeds[@]}
-  samples_per_dir=500
+  samples_per_dir=10
   avg_tokens_per_sample=2000
   declare -A MODEL_COST_PER_1K=(
     [gpt-4o-mini]=0.000375

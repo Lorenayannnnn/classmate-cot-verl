@@ -130,7 +130,7 @@ EXPLANATION: [your explanation]"""
         return judge_score, judge_explanation
 
 
-    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = False):
+    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = True):
         neutral_cot = doc.get("neutral_cot")
         pos_swayed_cot = doc.get("pos_swayed_cot")
         question = doc["raw_question_for_monitor"]

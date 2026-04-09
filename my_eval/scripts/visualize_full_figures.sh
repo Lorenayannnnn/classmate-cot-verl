@@ -5,27 +5,34 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/visualize_full_figures.sh
 
 # ── monitor / judge / dataset table ────────────────────────────────
-# dataset: "general_reward" → visualize per behavior key (sycophancy, confidence, longer_response, general_reward)
+# dataset: "general_reward" → visualize per behavior key (sycophancy, confidence, longer_response, bold_formatting, general_reward)
 #          any other task   → single visualization call
 # Format: "monitor_model                  judge_model                               dataset   use_dynamic_icl  no_explanation"
 MONITOR_JUDGE_DATASET=(
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       false  false"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       true  true"
 
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false  false"
-#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true   true"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       true  true"
   "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true   true"
-  "Qwen/Qwen2.5-0.5B-Instruct              gpt-4.1-mini                          general_reward       true   true"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true  true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true  true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true  true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true  true"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    true  true"
 
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false  false"
-  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false  false"
+  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true  true"
+  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true  true"
+  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true  true"
+#  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    true  true"
+
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false  true"
+#  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true   true"
+#  "Qwen/Qwen2.5-0.5B-Instruct              gpt-4.1-mini                          general_reward       true   true"
+
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true true"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -58,7 +65,6 @@ declare -A TASK_METHODS=(
   [longer_response]="baseline_all_tokens,OURS_self"
   [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self"
   [unsafe_compliance]="baseline_all_tokens,OURS_self"
-  [anthropic_sycophancy]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self,OURS_llama"
 )
 declare -A TASK_METHODS_SECONDARY=(
   [general_reward]="baseline_all_tokens,OURS_self,OURS_llama"
@@ -78,8 +84,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
 
   if [[ "${dataset}" == "general_reward" ]]; then
     secondary_methods=${TASK_METHODS_SECONDARY[$dataset]}
-#    for behavior_key in sycophancy confidence longer_response general_reward; do
-    for behavior_key in sycophancy confidence longer_response; do
+    for behavior_key in longer_response bold_formatting confidence sycophancy; do
       echo "Visualizing ${dataset} / ${behavior_key} / ${base_model} (primary) [monitor=${monitor}] ..."
       python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \
         --result_dir         ${result_dir} \

@@ -6,7 +6,7 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/inference_iterate/iterate_specific_settings.sh
+#bash my_eval/scripts/inference_iterate/iterate_specific_behavior_dev.sh
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
 seeds=(seed_0 seed_1 seed_2)
@@ -16,10 +16,17 @@ think_end_str="</think>"
 main_cot_keep_rate=1
 num_eval_ckpts=6
 
-monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
+dataset_split_name=dev
+
+monitor_model_name=gpt-4o-mini
+monitor_backend_type=openai              # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_backend_type=tinker           # "tinker", "vllm_generative", "hf_scoring"
+
+#monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+#monitor_backend_type=tinker              # "tinker", "vllm_generative", "hf_scoring"
+#llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+#llm_judge_backend_type=tinker           # "tinker", "vllm_generative", "hf_scoring"
 
 # ── Per-task runner ───────────────────────────────────────────────────────── #
 # Args: gpu_idx hf_prefix dataset_name max_predict_samples
@@ -83,16 +90,41 @@ _run_task() {
   done
 }
 
-# ── Launch all 8 tasks in parallel (one GPU each) ─────────────────────────── #
-#  GPU  setting            model                  run_base
-_run_task 0 LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens      confidence        500  20 420  true  &
-_run_task 1 LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self                confidence        500  20 420  false &
-_run_task 2 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens  longer_response   500  20 300  true  &
-_run_task 3 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self            longer_response   500  20 300  false &
-_run_task 4 LorenaYannnnn/sycophancy-Qwen3-0.6B-baseline_all_tokens       sycophancy       500  20 200  true  &
-_run_task 5 LorenaYannnnn/sycophancy-Qwen3-0.6B-OURS_self                 sycophancy       500  20 200  false &
-_run_task 6 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens unsafe_compliance 500  20 300  true  &
-_run_task 7 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self           unsafe_compliance 500  20 300  false &
+# ── Launch all tasks in parallel (one GPU each) ───────────────────────────── #
+#  GPU  model                                                                          dataset           samples  step  max_steps  run_base
+#(
+#_run_task 0 LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens       confidence        100  20 420  true
+#_run_task 0 LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self                 confidence        100  20 420  false
+#) &
+#(
+#_run_task 1 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens  longer_response   100  20 300  true
+#_run_task 1 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self            longer_response   100  20 300  false
+#) &
+#(
+#_run_task 2 LorenaYannnnn/sycophancy-Qwen3-0.6B-baseline_all_tokens       sycophancy        100  20 200  true
+#_run_task 2 LorenaYannnnn/sycophancy-Qwen3-0.6B-OURS_self                 sycophancy        100  20 200  false
+#) &
+#(
+#_run_task 3 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens unsafe_compliance 100  20 300  true
+#_run_task 3 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self           unsafe_compliance 100  20 300  false
+#) &
 
-wait
+#_run_task 2 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens  longer_response   100  20 300  true &
+#_run_task 3 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self            longer_response   100  20 300  false
+
+#wait
+
+# ── Generate dev ICL examples for each task ───────────────────────────────── #
+#for task in confidence longer_response sycophancy unsafe_compliance bold_formatting; do
+for task in confidence longer_response sycophancy unsafe_compliance; do
+  echo "Generating dev ICL examples for ${task} with monitor ${monitor_model_name} and judge ${llm_judge_model_name}..."
+  python ${SRC_DIR}/analysis_module/generate_dev_icl_examples.py \
+    --base_dir           "outputs_eval/${task}/Qwen3-0.6B" \
+    --task               "${task}" \
+    --monitor_model_name "${monitor_model_name}" \
+    --judge_model_name   "${llm_judge_model_name}" \
+    --split              "${dataset_split_name}" \
+    --no_explanation
+done
+
 echo "All tasks finished."

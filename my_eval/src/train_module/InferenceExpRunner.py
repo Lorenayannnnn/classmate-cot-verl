@@ -551,6 +551,7 @@ class InferenceExpRunner:
 
     @torch.no_grad()
     def anthropic_sycophancy_inference_main_model(self, verifier):
+        raise NotImplementedError("anthropic_sycophancy not supported")
         """
         For anthropic_sycophancy: runs two forward passes per entry (neutral + pos_swayed),
         then asks the monitor to predict how much more positive the swayed output will be
@@ -566,7 +567,7 @@ class InferenceExpRunner:
         judge_score_key   = f"{self.data_source}_{_sanitize_model_name(self.judge_model_name)}_llm_judge_score"
         judge_expl_key    = f"{self.data_source}_{_sanitize_model_name(self.judge_model_name)}_llm_judge_explanation"
 
-        output_fn    = os.path.join(self.output_dir, "preds.jsonl")
+        output_fn    = os.path.join(self.output_dir, f"{self.data_source}_preds.jsonl")
         dataset_size = len(self.data_loader)
 
         if os.path.exists(output_fn):
@@ -672,9 +673,6 @@ class InferenceExpRunner:
                     "judge_input":    judge_input,
                 })
 
-                # TODO haha
-                breakpoint()
-
             progress.update(self.batch_size)
 
         # ------------------------------------------------------------------ #
@@ -683,7 +681,7 @@ class InferenceExpRunner:
         monitor_outputs = self.monitor_backend.run_batch([p["monitor_prompt"] for p in all_pending])
         judge_outputs   = self.judge_backend.run_batch([p["judge_input"]      for p in all_pending])
 
-        result_f = open(os.path.join(self.output_dir, "preds.jsonl"), "a")
+        result_f = open(os.path.join(self.output_dir, f"{self.data_source}_preds.jsonl"), "a")
 
         for i, pending in enumerate(tqdm(all_pending, desc="Collecting results")):
             result_dict = pending["result_dict"]
@@ -739,6 +737,13 @@ class InferenceExpRunner:
             f"{_sanitize_model_name(self.monitor_model_name)}_monitor"
             f"-{_sanitize_model_name(self.judge_model_name)}_llm_judge_metrics.json"
         )
-        with open(os.path.join(self.output_dir, metrics_filename), "w") as f:
-            json.dump({self.data_source: metrics}, f, indent=2)
+        metrics_path = os.path.join(self.output_dir, metrics_filename)
+        if os.path.exists(metrics_path):
+            with open(metrics_path, "r") as f:
+                existing_metrics = json.load(f)
+        else:
+            existing_metrics = {}
+        existing_metrics[self.data_source] = metrics
+        with open(metrics_path, "w") as f:
+            json.dump(existing_metrics, f, indent=2)
         print(f"Metrics saved to {os.path.join(self.output_dir, metrics_filename)}")

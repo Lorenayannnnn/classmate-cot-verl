@@ -8,6 +8,9 @@ export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
 unset ROCR_VISIBLE_DEVICES
 unset HIP_VISIBLE_DEVICES
 
+nvidia-smi
+nvidia-smi topo -m
+
 #bash my_scripts/scripts_general_reward/olmo3_8k/slurm_columbiaAI/general_reward_baseline_cot_only_2.sh
 #srun --account=hewittlab --job-name=olmo_c2 --gres=gpu:2  --pty --time=24:00:00 bash
 
@@ -54,7 +57,7 @@ train_batch_size=16
 mini_batch_size_per_gpu=16
 micro_batch_size_per_gpu=8
 
-save_freq=20
+save_freq=40
 test_freq=20
 
 epoch_num=6

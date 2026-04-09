@@ -116,12 +116,14 @@ TOKEN_COUNT: [integer]"""
         token_count = min(raw, self.max_new_tokens)
         return float(token_count), f"token_count={token_count}"
 
-    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = False):
+    def create_monitor_message(self, doc: Dict[str, Any], no_explanation: bool = True):
         user_message = doc["raw_question_for_monitor"]
         main_cot = doc["truncated_main_CoT"]
 
         if main_cot is None:
             return None
+
+        assert no_explanation, "Currently we only support no_explanation for monitor; if you want explanation, please use llm judge instead of monitor"
 
         template = self.monitor_template_skip_explanation if no_explanation else self.monitor_template
         return template.format(

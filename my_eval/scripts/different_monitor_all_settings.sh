@@ -140,7 +140,7 @@ _run_task() {
       ${use_dynamic_icl_flag} \
       ${overwrite_monitor_flag} \
       ${overwrite_judge_flag} \
-      --dataset_split_name   ${dataset_split_name}
+      --dataset_split_name   ${dataset_split_name} \
     && {
       for entry in "${TASK_METHOD_RUNBASE[@]}"; do
         local t m rb

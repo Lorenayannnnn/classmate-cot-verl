@@ -40,14 +40,16 @@ def prepare_folder(output_dir):
 
 
 def load_config_and_setup_output_dir(configs):
-    short_dataset_name = configs.data_args.dataset_name.split("/")[-1]
     short_model_name = configs.model_args.model_name_or_path.split("/")[-1]
 
     outputs_root_dir = "outputs_eval"
 
     dataset_split_name = configs.data_args.dataset_split_name
 
-    if "longer_response" in configs.data_args.dataset_name:
+    if "anthropic_sycophancy" in configs.data_args.dataset_name:
+        raise NotImplementedError("anthropic_sycophancy not implemented")
+        # configs.data_args.dataset_name = f"data/anthropic_sycophancy/{dataset_split_name}.parquet"
+    elif "longer_response" in configs.data_args.dataset_name:
         configs.data_args.dataset_name = f"data/longer_response/{dataset_split_name}.parquet"
     elif "confidence" in configs.data_args.dataset_name:
         configs.data_args.dataset_name = f"data/confidence/{dataset_split_name}.parquet"

@@ -54,13 +54,16 @@ def _load_icl_demo_pairs(
         no_explanation: If True, use the skip-explanation template and score-only expected output.
         use_dynamic_examples: If True, load per-checkpoint dev-split examples instead of static ones.
     """
+    assert no_explanation is True, "no_explanation=True is required for monitor_judge_backends.py since the judge expects score-only outputs. Set no_explanation=True and regenerate ICL examples if you want to use this with explanation-based monitors."
     if use_dynamic_examples:
         if icl_example_dir is None:
             raise ValueError(f"  [ICL] WARNING: use_dynamic_examples=True but icl_example_dir is None — falling back to static examples for {behavior}.")
         else:
-            json_path = os.path.join(icl_example_dir, f"{behavior}_ICL_examples.json")
+            json_path = os.path.join(icl_example_dir, f"{behavior}_ICL_examples{'_no_expl' if no_explanation else ''}.json")
+            print("!!!!!! Load dynamic ICL examples from", json_path)
     else:
-        json_path = os.path.join(icl_example_dir or os.path.join("data", behavior), "monitor_ICL_examples.json")
+        raise NotImplementedError("Static examples are no longer supported to encourage use of dynamic, up-to-date examples. Please set use_dynamic_examples=True and provide icl_example_dir containing the {behavior}_ICL_examples.json files generated from the dev split.")
+        # json_path = os.path.join(icl_example_dir or os.path.join("data", behavior), "monitor_ICL_examples.json")
     if not os.path.exists(json_path):
         raise FileNotFoundError(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
 
@@ -70,11 +73,12 @@ def _load_icl_demo_pairs(
     pairs = []
     for rec in records:
         if getattr(verifier, "needs_comparison_outputs", False):
-            user_msg = verifier.create_monitor_message({
-                "neutral_cot":    rec["neutral_cot"],
-                "pos_swayed_cot": rec["pos_swayed_cot"],
-                "raw_question_for_monitor": rec["user_message"],
-            }, no_explanation=no_explanation)
+            raise NotImplementedError
+            # user_msg = verifier.create_monitor_message({
+            #     "neutral_cot":    rec["neutral_cot"],
+            #     "pos_swayed_cot": rec["pos_swayed_cot"],
+            #     "raw_question_for_monitor": rec["user_message"],
+            # }, no_explanation=no_explanation)
         else:
             user_msg = verifier.create_monitor_message({
                 "raw_question_for_monitor": rec["user_message"],
@@ -394,7 +398,9 @@ def run_different_monitor_and_judge(
     for dataset_name in dataset_name_list:
         is_general_reward = dataset_name == "general_reward"
         behavior_keys = (
+            # TODO haha
             BEHAVIOR_TO_MONITOR
+            # ["sycophancy"]
             if is_general_reward
             else [dataset_name]
         )
@@ -416,8 +422,7 @@ def run_different_monitor_and_judge(
             preds_fn = os.path.join(result_dir, "preds.jsonl")
 
             if not os.path.exists(preds_fn):
-                print(f"[skip] {preds_fn} not found")
-                continue
+                raise ValueError(f"Predictions file not found: {preds_fn}. Make sure the inference step has been run and the path is correct.")
 
             # ---------------------------------------------------------- #
             # Read all entries
@@ -425,7 +430,13 @@ def run_different_monitor_and_judge(
             with open(preds_fn, "r") as preds_file:
                 entries = [json.loads(line) for line in preds_file]
 
-            assert len(entries) == 500, f"Expected 500 entries in {preds_fn}, got {len(entries)}"
+            if dataset_split_name == "test":
+                expected_num = 500
+            elif dataset_split_name == "dev":
+                expected_num = 100
+            else:
+                raise ValueError(f"Dataset split name {dataset_split_name} is not supported.")
+            assert len(entries) >= expected_num, f"Expected {expected_num} entries in {preds_fn}, got {len(entries)}"
 
             all_entry_indices = list(range(len(entries)))
 

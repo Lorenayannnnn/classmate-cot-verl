@@ -10,7 +10,7 @@ dataset_name="general_reward"
 #seed=0
 #gpu_idx=6,7
 seed=1
-gpu_idx=2,3
+gpu_idx=6,7
 #seed=2
 #gpu_idx=6,7
 

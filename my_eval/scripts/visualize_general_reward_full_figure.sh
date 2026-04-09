@@ -9,11 +9,19 @@ export PYTHONPATH=:${PYTHONPATH}
 MONITOR_JUDGE=(
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507     false  false"
 
-#  "gpt-4o-mini                           gpt-4.1-mini                         false  false"
+  "gpt-4o-mini                           gpt-4.1-mini                         true  true"
+  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         true   true"
+
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507      gpt-4.1-mini                         false  false"
+
+#  "gpt-4o-mini                           gpt-4.1-mini                         false  true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507      gpt-4.1-mini                         false  true"
+
+#  "gpt-4o-mini                           gpt-4.1-mini                         true  true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507      gpt-4.1-mini                         true  true"
+
 #  "HuggingFaceTB/SmolLM2-360M-Instruct   gpt-4.1-mini                         true   true"
-#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         true   true"
-  "Qwen/Qwen2.5-0.5B-Instruct               gpt-4.1-mini                         true   true"
+#  "Qwen/Qwen2.5-0.5B-Instruct               gpt-4.1-mini                         true   true"
 )
 
 # ── Shared config ──────────────────────────────────────────────────
@@ -37,7 +45,9 @@ result_dir="${base_root}/${dataset}/${base_model}"
 # ── Main loop ──────────────────────────────────────────────────────
 for entry in "${MONITOR_JUDGE[@]}"; do
   read -r monitor judge use_dynamic_icl no_explanation <<< "${entry}"
-  for behavior_key in sycophancy confidence longer_response general_reward; do
+#  for behavior_key in anthropic_sycophancy; do
+#  for behavior_key in sycophancy confidence longer_response bold_formatting general_reward; do
+  for behavior_key in longer_response bold_formatting confidence sycophancy; do
     echo "Visualizing ${dataset} / ${behavior_key} / ${base_model} (primary) [monitor=${monitor}] ..."
     python ${SRC_DIR}/analysis_module/visualize_results_across_models.py \
       --result_dir         ${result_dir} \

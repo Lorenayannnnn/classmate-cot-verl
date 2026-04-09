@@ -928,9 +928,9 @@ class ClassmateCoTRayPPOTrainer:
                         ]
                         behavior_judge_scores = []
                         behavior_judge_explanations = []
-                        for raw_out, final_ids in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids):
+                        for raw_out, final_ids, main_continuation in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids, item_final_outputs):
                             judge_score, judge_expl = behavior_verifier.parse_llm_judge_output(
-                                raw_out, continuation_token_ids=final_ids
+                                raw_out, continuation_token_ids=final_ids, continuation=main_continuation
                             )
                             behavior_judge_scores.append(judge_score)
                             behavior_judge_explanations.append(judge_expl)

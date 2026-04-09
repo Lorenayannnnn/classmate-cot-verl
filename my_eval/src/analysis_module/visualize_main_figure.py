@@ -228,13 +228,15 @@ def plot_main_figure(
         return h, l
 
     # ---------------------------------------------------------------- #
-    # Layout: always 2 rows × 4 cols
+    # Layout: always 2 rows × 5 cols
+    #   cols 0–3: behavior subplots (RMSE / ground truth mean)
+    #   col  4:   reward score (row 0) + legend (row 1)
     # ---------------------------------------------------------------- #
     display_names = [_METHOD_DISPLAY.get(m, m) for m in methods_list]
     hue_order     = display_names
     model_palette = {name: _COLOR_MAP.get(name, "#888888") for name in hue_order}
 
-    n_cols = 4
+    n_cols = 5
     n_rows = 2
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
     # Use the longest per-behavior step list for figure width sizing
@@ -246,11 +248,14 @@ def plot_main_figure(
     def _col_title(bk):
         name = _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
         if bk == "longer_response":
-            name += " (Token Count)"
+            name += " (# of Tokens)"
+        elif bk == "bold_formatting":
+            name += " (# of Bolded Spans)"
         return name
 
     legend_handles = legend_labels = None
 
+    _SYCOPHANCY_YMAX = 3
     # ── Row 0: RMSE (behaviors) + reward score or 4th behavior ─── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[0, col]
@@ -258,19 +263,27 @@ def plot_main_figure(
         h, l = _plot_ax(ax, "rmse", bk)
         if legend_handles is None and h:
             legend_handles, legend_labels = h, l
+        if bk == "sycophancy" and dataset_name == "general_reward":
+            ax.set_ylim(top=_SYCOPHANCY_YMAX)
 
     if include_reward_score:
-        ax = axes[0, 3]
+        ax = axes[0, 4]
         ax.set_title("Reward Score", fontsize=13, fontweight="bold", pad=6)
         h, l = _plot_ax(ax, "mean_score", "general_reward")
         if legend_handles is None and h:
             legend_handles, legend_labels = h, l
+    else:
+        axes[0, 4].axis("off")
 
-    # ── Row 1: Ground truth mean (behaviors) + empty for general_reward ── #
+    # ── Row 1: Ground truth mean (behaviors) + empty col 4 ── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[1, col]
-        ax.set_title(_col_title(bk), fontsize=13, fontweight="bold", pad=6)
         _plot_ax(ax, "ground_truth_mean", bk)
+        if bk == "sycophancy" and dataset_name == "general_reward":
+            ax.set_ylim(top=_SYCOPHANCY_YMAX)
+    # col 4, row 1 is used for legend (or hidden if no reward score)
+    if not include_reward_score:
+        axes[1, 4].axis("off")
 
     # Row labels on the leftmost column
     axes[0, 0].set_ylabel("RMSE", fontsize=13, fontweight="bold")
@@ -291,8 +304,8 @@ def plot_main_figure(
 
     if legend_handles and legend_labels:
         if include_reward_score:
-            # Place legend in the empty [row 1, col 3] cell (below Reward Score)
-            legend_ax = axes[1, 3]
+            # Place legend in the empty [row 1, col 4] cell (below Reward Score)
+            legend_ax = axes[1, 4]
             legend_ax.axis("off")
             legend_ax.legend(
                 legend_handles, legend_labels,

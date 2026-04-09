@@ -115,7 +115,8 @@ def plot_monitor_metrics_across_steps(
     # (bk == dataset_name) is superseded by the per-behavior figures and the
     # main figure; skip it to avoid generating a redundant/misleading plot.
     if dataset_name == "general_reward" and bk == dataset_name:
-        print(f"[skip] general_reward / general_reward top-level figure — use visualize_main_figure.py instead.")
+        raise ValueError("dataset_name must be 'general_reward'")
+        # print(f"[skip] general_reward / general_reward top-level figure — use visualize_main_figure.py instead.")
         return
 
     def _load_behavior_metrics(metrics_fn, bk_override=None):
@@ -155,14 +156,11 @@ def plot_monitor_metrics_across_steps(
 
     metric_mode = _detect_metric_mode()
     if metric_mode == "general_reward_score":
-        perf_metrics  = ["mean_score"]
-        count_metrics = ["total_valid_entries"]
+        perf_metrics = ["mean_score"]
     elif metric_mode == "non_binary":
-        perf_metrics  = ["rmse", "prediction_mean", "ground_truth_mean"]
-        count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
+        perf_metrics = ["rmse", "prediction_mean", "ground_truth_mean"]
     else:
-        perf_metrics  = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"]
-        count_metrics = ["total_monitored_entries", "total_valid_output_entries", "total_valid_CoT_entries"]
+        perf_metrics = ["tp", "tn", "fp", "fn", "precision", "recall", "f1"]
 
     def _to_num(s):
         return 0 if s == "base" else int(s)
@@ -233,25 +231,39 @@ def plot_monitor_metrics_across_steps(
 
     # Build plot_specs: list of (metric, bk_load, label_override, alt_metrics_filename)
     # Perf metrics use the intersection file (metrics_filename); count metrics use the raw file.
-    perf_specs  = [(m, None, None, None)                      for m in perf_metrics]
-    count_specs = [(m, None, None, raw_metrics_filename)      for m in count_metrics]
+    perf_specs  = [(m, None, None, None)                 for m in perf_metrics]
+    count_spec  = [("total_monitored_entries", None, None, raw_metrics_filename)]
+
     if dataset_name == "general_reward" and metric_mode != "general_reward_score":
-        # Insert reward score subplot (from intersection file) between perf and count metrics
-        perf_specs.append(("mean_score", "general_reward", "Reward Score", None))
-    plot_specs = perf_specs + count_specs
+        # Layout: 2×3
+        #   Row 0: rmse | prediction_mean | ground_truth_mean
+        #   Row 1: reward_score | total_monitored_entries | legend
+        plot_specs = perf_specs + [("mean_score", "general_reward", "Reward Score", None)] + count_spec
+        n_cols, n_rows = 3, 2
+        legend_cell_idx = len(plot_specs)   # cell 5 in a 2×3 grid
+    elif metric_mode == "non_binary":
+        # Layout: 1×4
+        #   rmse | prediction_mean | ground_truth_mean | total_monitored_entries
+        plot_specs = perf_specs + count_spec
+        n_cols, n_rows = 4, 1
+        legend_cell_idx = None
+    else:
+        plot_specs = perf_specs + count_spec
+        n_cols = 4
+        n_rows = int(np.ceil(len(plot_specs) / n_cols))  # type: ignore[arg-type]
+        legend_cell_idx = None
 
     fig_width = max(18, len(all_step_idx_list) * 2.7)
-    n_cols = 4 if dataset_name == "general_reward" else 3
-    n_rows = int(np.ceil(len(plot_specs) / n_cols))  # type: ignore[arg-type]
-    fig_height = max(10, n_rows * 3.5)
+    fig_height = max(5 if n_rows == 1 else 10, n_rows * 3.5)
     fig, axes = mpl_plt.subplots(
         n_rows, n_cols,
         figsize=(fig_width, fig_height),
     )
-    axes = axes.flatten()
+    axes = np.array(axes).flatten()
 
     legend_handles = legend_labels = None
 
+    _SYCOPHANCY_YMAX_METRICS = {"rmse", "prediction_mean", "ground_truth_mean"}
     for spec_idx, (metric, bk_load, label, alt_fn) in enumerate(plot_specs):
         ax = axes[spec_idx]
         h, l = _plot_metric_ax(ax, metric, bk_load=bk_load, label_override=label, alt_metrics_filename=alt_fn)
@@ -259,10 +271,10 @@ def plot_monitor_metrics_across_steps(
             legend_handles, legend_labels = h, l
         if ax.get_legend() is not None:
             ax.get_legend().remove()
+        if bk == "sycophancy" and dataset_name == "general_reward" and metric in _SYCOPHANCY_YMAX_METRICS:
+            ax.set_ylim(top=3)
 
-    # For general_reward the grid is 2×4 with 7 specs — axes[7] is the empty cell
-    # below "Reward Score".  Reserve it for the legend; delete all other surplus cells.
-    legend_cell_idx = len(plot_specs) if dataset_name == "general_reward" else None
+    # Hide surplus cells; reserve legend_cell_idx for the legend if applicable.
     for idx in range(len(plot_specs), len(axes)):
         if idx == legend_cell_idx:
             continue
@@ -285,7 +297,7 @@ def plot_monitor_metrics_across_steps(
     if monitor_model_name:
         subtitle_parts.append(f"Monitor: {monitor_model_name}")
     if bk == "longer_response":
-        subtitle_parts.append("Ground Truth: Token Count (no judge)")
+        subtitle_parts.append("Ground Truth: Token Count")
     elif judge_model_name:
         subtitle_parts.append(f"Judge: {judge_model_name}")
     mean_n = _mean_shared_entries()
