@@ -124,7 +124,6 @@ for task in confidence longer_response sycophancy unsafe_compliance; do
     --monitor_model_name "${monitor_model_name}" \
     --judge_model_name   "${llm_judge_model_name}" \
     --split              "${dataset_split_name}" \
-    --no_explanation
 done
 
 echo "All tasks finished."

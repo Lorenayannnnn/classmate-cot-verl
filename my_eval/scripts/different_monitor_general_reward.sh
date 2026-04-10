@@ -14,8 +14,9 @@ estimate_cost=${1:-false}
 MONITOR_JUDGE_DATASET=(
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward        false          false              false            false  false"
 
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true          true              false            true         true"
-  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           true              false            true        true"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        false          true              true            false         false"
+
+#  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           true              false            true        true"
 #  "gpt-4o-mini                          gpt-4.1-mini                          general_reward        true          false              false            true         true"
 #  "meta-llama/Llama-3.2-1B               gpt-4.1-mini                         general_reward        true           false              false            true        true"
 

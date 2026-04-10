@@ -12,15 +12,15 @@ estimate_cost=${1:-false}
 # ── monitor / judge / dataset table (specific-behavior tasks only) ─
 # Format: "monitor_model                             judge_model                dataset      use_icl_demo  overwrite_monitor  overwrite_judge  no_explanation  use_dynamic_icl"
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false            true            true           false              false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false            true            true           false              false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false            true            true           false              false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false            true            true           false              false"
 
-  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
-  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
-  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
-  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
+#  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true            true            false           true              true"
+#  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true            true            false           true              true"
+#  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true            true            false           true              true"
+#  "meta-llama/Llama-3.2-1B               Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true            true            false           true              true"
 
 
 #  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    true            true            false           true              true"

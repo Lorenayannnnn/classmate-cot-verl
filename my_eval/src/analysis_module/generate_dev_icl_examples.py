@@ -8,8 +8,8 @@ def generate_dev_icl_examples(
     base_dir: str = "outputs_eval/general_reward/Qwen3-0.6B",
     split: str = "dev",
     behaviors: list | None = None,
-    use_dynamic_icl: bool = True,
-    no_explanation: bool = True,
+    use_dynamic_icl: bool = False,
+    no_explanation: bool = False,
 ):
     """Generate {behavior}_ICL_examples.json files from dev preds.jsonl files.
 

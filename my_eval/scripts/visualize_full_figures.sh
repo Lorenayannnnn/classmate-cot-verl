@@ -9,21 +9,22 @@ export PYTHONPATH=:${PYTHONPATH}
 #          any other task   → single visualization call
 # Format: "monitor_model                  judge_model                               dataset   use_dynamic_icl  no_explanation"
 MONITOR_JUDGE_DATASET=(
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       true  true"
+#  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       false         false"
 
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       true  true"
-  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true   true"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false          false"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true  true"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true  true"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true  true"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    true  true"
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    true  true"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false         false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false         false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false         false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false         false"
 
-  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           true  true"
-  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           true  true"
-  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      true  true"
-#  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    true  true"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    false          false"
+
+#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true   true"
+#  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false          false"
+#  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false          false"
+#  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false          false"
+#  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    false          false"
 
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       false  true"
 #  "HuggingFaceTB/SmolLM2-360M-Instruct  gpt-4.1-mini                          general_reward       true   true"

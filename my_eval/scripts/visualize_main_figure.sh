@@ -10,13 +10,12 @@ export PYTHONPATH=:${PYTHONPATH}
 #                                   the model trained on that specific behavior
 # Format: "monitor_model                  judge_model                               dataset  use_dynamic_icl    no_explanation"
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       true            true"
-  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true            true"
-
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    true           true"
-  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    true           true"
+  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false            false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    false           false"
 
 
+#  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true            true"
+#  "meta-llama/Llama-3.2-1B              Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    true           true"
 
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     Qwen/Qwen3-30B-A3B-Instruct-2507      general_reward       false            false"
 #  "Qwen/Qwen3-30B-A3B-Instruct-2507     gpt-4.1-mini                          general_reward       true           true"
@@ -72,8 +71,9 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
   read -r monitor judge dataset use_dynamic_icl no_explanation <<< "${entry}"
 
   if [[ "${dataset}" == "general_reward" ]]; then
-    # Group 1: 2×5 figure — row 0 = RMSE (4 behaviors + reward score)
-    #                        row 1 = ground truth mean (4 behaviors + empty)
+    # Group 1: 3×5 figure — row 0 = RMSE (4 behaviors + reward score)
+    #                        row 1 = prediction mean (4 behaviors + empty)
+    #                        row 2 = ground truth mean (4 behaviors + empty/legend)
     _calc_steps general_reward
     result_dir="${base_root}/general_reward/${base_model}"
 
@@ -117,7 +117,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
 #      --behavior_keys      longer_response,confidence,sycophancy,bold_formatting \
 
   elif [[ "${dataset}" == "specific_behaviors" ]]; then
-    # Group 2: 2×4 figure — each column is a different behavior-specific trained model
+    # Group 2: 3×4 figure — each column is a different behavior-specific trained model
     # Build per-behavior result_dirs and step configs
     per_bk_dirs=()
     per_bk_steps=()

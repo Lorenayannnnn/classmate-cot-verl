@@ -50,7 +50,7 @@ def create_llm_judge(
         "sampling_client": judge_sampling_client,
         "renderer": judge_renderer,
         "tokenizer": judge_tokenizer,
-        "max_tokens": 1024,
+        "max_tokens": 4096,
     }
 
 def send_prompt_to_tinker(

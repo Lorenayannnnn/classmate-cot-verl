@@ -8,11 +8,14 @@ Provides:
 """
 
 import json
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 from keys import OPENAI_KEY
 from verl.utils.reward_score.BaseVerifier import get_verifier
@@ -39,56 +42,57 @@ def _load_icl_demo_pairs(
     no_explanation: bool = False,
     use_dynamic_examples: bool = False,
 ) -> list[tuple[str, str]]:
-    """Load (user_msg, assistant_msg) ICL pairs.
-
-    When use_dynamic_examples=False (default), loads from
-    {icl_example_dir or "data/{behavior}"}/monitor_ICL_examples.json (static,
-    hand-curated examples).
-    When use_dynamic_examples=True, loads from
-    {icl_example_dir}/{behavior}_ICL_examples.json (generated dynamically from
-    the dev split by generate_dev_icl_examples() in haha.py).
-
-    Args:
-        icl_example_dir: Directory containing the ICL examples file.
-            Defaults to "data/{behavior}" when use_dynamic_examples=False.
-        no_explanation: If True, use the skip-explanation template and score-only expected output.
-        use_dynamic_examples: If True, load per-checkpoint dev-split examples instead of static ones.
-    """
-    assert no_explanation is True, "no_explanation=True is required for monitor_judge_backends.py since the judge expects score-only outputs. Set no_explanation=True and regenerate ICL examples if you want to use this with explanation-based monitors."
-    if use_dynamic_examples:
-        if icl_example_dir is None:
-            raise ValueError(f"  [ICL] WARNING: use_dynamic_examples=True but icl_example_dir is None — falling back to static examples for {behavior}.")
-        else:
-            json_path = os.path.join(icl_example_dir, f"{behavior}_ICL_examples{'_no_expl' if no_explanation else ''}.json")
-            print("!!!!!! Load dynamic ICL examples from", json_path)
-    else:
-        raise NotImplementedError("Static examples are no longer supported to encourage use of dynamic, up-to-date examples. Please set use_dynamic_examples=True and provide icl_example_dir containing the {behavior}_ICL_examples.json files generated from the dev split.")
-        # json_path = os.path.join(icl_example_dir or os.path.join("data", behavior), "monitor_ICL_examples.json")
-    if not os.path.exists(json_path):
-        raise FileNotFoundError(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
-
-    with open(json_path) as f:
-        records = json.load(f)
-
-    pairs = []
-    for rec in records:
-        if getattr(verifier, "needs_comparison_outputs", False):
-            raise NotImplementedError
-            # user_msg = verifier.create_monitor_message({
-            #     "neutral_cot":    rec["neutral_cot"],
-            #     "pos_swayed_cot": rec["pos_swayed_cot"],
-            #     "raw_question_for_monitor": rec["user_message"],
-            # }, no_explanation=no_explanation)
-        else:
-            user_msg = verifier.create_monitor_message({
-                "raw_question_for_monitor": rec["user_message"],
-                "truncated_main_CoT": rec["main_CoT"],
-            }, no_explanation=no_explanation)
-        if user_msg is None:
-            continue
-        assistant_msg = verifier.format_monitor_expected_output(rec["score"], rec["explanation"], no_explanation=no_explanation)
-        pairs.append((user_msg, assistant_msg))
-    return pairs
+    raise NotImplementedError
+    # """Load (user_msg, assistant_msg) ICL pairs.
+    #
+    # When use_dynamic_examples=False (default), loads from
+    # {icl_example_dir or "data/{behavior}"}/monitor_ICL_examples.json (static,
+    # hand-curated examples).
+    # When use_dynamic_examples=True, loads from
+    # {icl_example_dir}/{behavior}_ICL_examples.json (generated dynamically from
+    # the dev split by generate_dev_icl_examples() in haha.py).
+    #
+    # Args:
+    #     icl_example_dir: Directory containing the ICL examples file.
+    #         Defaults to "data/{behavior}" when use_dynamic_examples=False.
+    #     no_explanation: If True, use the skip-explanation template and score-only expected output.
+    #     use_dynamic_examples: If True, load per-checkpoint dev-split examples instead of static ones.
+    # """
+    # assert not no_explanation, "no_explanation must be False (explanation mode) — regenerate ICL examples without --no_explanation if switching modes."
+    # if use_dynamic_examples:
+    #     if icl_example_dir is None:
+    #         raise ValueError(f"  [ICL] WARNING: use_dynamic_examples=True but icl_example_dir is None — falling back to static examples for {behavior}.")
+    #     else:
+    #         json_path = os.path.join(icl_example_dir, f"{behavior}_ICL_examples{'_no_expl' if no_explanation else ''}.json")
+    #         print("!!!!!! Load dynamic ICL examples from", json_path)
+    # else:
+    #     raise NotImplementedError("Static examples are no longer supported to encourage use of dynamic, up-to-date examples. Please set use_dynamic_examples=True and provide icl_example_dir containing the {behavior}_ICL_examples.json files generated from the dev split.")
+    #     # json_path = os.path.join(icl_example_dir or os.path.join("data", behavior), "monitor_ICL_examples.json")
+    # if not os.path.exists(json_path):
+    #     raise FileNotFoundError(f"  [ICL] WARNING: {json_path} not found — skipping ICL for {behavior}.")
+    #
+    # with open(json_path) as f:
+    #     records = json.load(f)
+    #
+    # pairs = []
+    # for rec in records:
+    #     if getattr(verifier, "needs_comparison_outputs", False):
+    #         raise NotImplementedError
+    #         # user_msg = verifier.create_monitor_message({
+    #         #     "neutral_cot":    rec["neutral_cot"],
+    #         #     "pos_swayed_cot": rec["pos_swayed_cot"],
+    #         #     "raw_question_for_monitor": rec["user_message"],
+    #         # }, no_explanation=no_explanation)
+    #     else:
+    #         user_msg = verifier.create_monitor_message({
+    #             "raw_question_for_monitor": rec["user_message"],
+    #             "truncated_main_CoT": rec["main_CoT"],
+    #         }, no_explanation=no_explanation)
+    #     if user_msg is None:
+    #         continue
+    #     assistant_msg = verifier.format_monitor_expected_output(rec["score"], rec["explanation"], no_explanation=no_explanation)
+    #     pairs.append((user_msg, assistant_msg))
+    # return pairs
 
 
 def _prepare_inputs_for_behavior(
@@ -183,6 +187,11 @@ def _parse_outputs_for_behavior(
     overwrite_judge=False,
 ):
     """Parse raw backend outputs and write scores/explanations into each entry dict."""
+    monitor_null = 0
+    monitor_invalid = 0
+    judge_null = 0
+    judge_invalid = 0
+
     for i, entry_idx in enumerate(tqdm(pending_entry_indices, desc=f"parsing results ({behavior_key})")):
         entry = entries[entry_idx]
 
@@ -192,20 +201,15 @@ def _parse_outputs_for_behavior(
             if raw is None:
                 entry[b_monitor_key] = behavior_verifier.invalid_score
                 entry[b_monitor_expl_key] = "CoT is empty"
-
-                # breakpoint()
-                # print("got None monitor outputs")
+                monitor_null += 1
+                logger.warning("[monitor] entry %d: raw output is None (CoT empty)", entry_idx)
             else:
                 score, explanation = behavior_verifier.parse_monitor_output(raw)
                 entry[b_monitor_key] = score
                 entry[b_monitor_expl_key] = explanation
-
-                # if score == behavior_verifier.invalid_score:
-                    # breakpoint()
-                    # print("got invalid score from", raw)
-                # print("score", score)
-            # if entry[b_monitor_key] == behavior_verifier.invalid_score:
-            #     breakpoint()
+                if score == behavior_verifier.invalid_score:
+                    monitor_invalid += 1
+                    logger.warning("[monitor] entry %d: parse failed (invalid score). raw=%r", entry_idx, raw)
 
         # Parse judge output
         if overwrite_judge or entry.get(b_judge_key) is None:
@@ -227,6 +231,8 @@ def _parse_outputs_for_behavior(
                     explanation = raw.get("judge_explanation", "hf_scoring")
                 elif raw is None:
                     score, explanation = behavior_verifier.invalid_score, "Output is empty"
+                    judge_null += 1
+                    logger.warning("[judge]   entry %d: raw output is None (no model output)", entry_idx)
                 else:
                     if main_model_tokenizer is not None and "main_output_ids" not in entry:
                         entry["main_output_ids"] = main_model_tokenizer.encode(
@@ -239,8 +245,28 @@ def _parse_outputs_for_behavior(
                         gt=entry.get("ground_truth_for_llm_judge"),
                         general_reward_score=entry.get("general_reward_score"),
                     )
+                    if score == behavior_verifier.invalid_score:
+                        judge_invalid += 1
+                        logger.warning("[judge]   entry %d: parse failed (invalid score). raw=%r", entry_idx, raw)
             entry[b_judge_key] = score
             entry[b_judge_expl_key] = explanation
+
+    n = len(pending_entry_indices)
+    logger.info(
+        "[%s] monitor failures: %d null + %d parse-invalid / %d total",
+        behavior_key, monitor_null, monitor_invalid, n,
+    )
+    logger.info(
+        "[%s] judge   failures: %d null + %d parse-invalid / %d total",
+        behavior_key, judge_null, judge_invalid, n,
+    )
+    if monitor_null + monitor_invalid > 0 or judge_null + judge_invalid > 0:
+        logger.warning(
+            "[%s] SUMMARY — monitor: %d/%d failed, judge: %d/%d failed",
+            behavior_key,
+            monitor_null + monitor_invalid, n,
+            judge_null + judge_invalid, n,
+        )
 
 
 def estimate_openai_cost(
@@ -424,6 +450,18 @@ def run_different_monitor_and_judge(
             if not os.path.exists(preds_fn):
                 raise ValueError(f"Predictions file not found: {preds_fn}. Make sure the inference step has been run and the path is correct.")
 
+            log_file = os.path.join(
+                result_dir,
+                f"{_sanitize_model_name(monitor_model_name)}_monitor"
+                f"-{_sanitize_model_name(judge_model_name)}_judge_failures{_monitor_suffix}.txt",
+            )
+            _file_handler = logging.FileHandler(log_file, mode="w")
+            _file_handler.setLevel(logging.WARNING)
+            _file_handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+            logger.addHandler(_file_handler)
+            logger.setLevel(logging.WARNING)
+            print(f"[log]    failure log → {log_file}")
+
             # ---------------------------------------------------------- #
             # Read all entries
             # ---------------------------------------------------------- #
@@ -494,6 +532,9 @@ def run_different_monitor_and_judge(
                     for entry in entries:
                         preds_file.write(json.dumps(entry) + "\n")
                 print(f"[saved]  {preds_fn}")
+
+            _file_handler.close()
+            logger.removeHandler(_file_handler)
 
             if interrupted:
                 monitor_backend.close()

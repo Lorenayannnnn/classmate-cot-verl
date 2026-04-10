@@ -1,20 +1,22 @@
 """
 visualize_main_figure.py
 
-2×4 main-section figure for the paper, always loaded from intersection_ files.
+3×4 main-section figure for the paper, always loaded from intersection_ files.
 
-Layout — 2 rows × 4 columns:
+Layout — 3 rows × 4 columns:
 
   Group 1 (general_reward task, behavior_keys has 3 entries + include_reward_score):
-    Row 0 (RMSE):          col0  col1  col2  col3
-                           RMSE  RMSE  RMSE  Reward Score
-    Row 1 (Ground Truth):  GT    GT    GT    [empty]
+    Row 0 (RMSE):             col0  col1  col2  col3
+                              RMSE  RMSE  RMSE  Reward Score
+    Row 1 (Prediction Mean):  PM    PM    PM    [empty]
+    Row 2 (Ground Truth):     GT    GT    GT    [empty]
     Behaviors in order: longer_response, confidence, sycophancy
 
   Group 2 (specific-behavior task, behavior_keys has 4 entries):
-    Row 0 (RMSE):          col0  col1  col2  col3
-                           RMSE  RMSE  RMSE  RMSE
-    Row 1 (Ground Truth):  GT    GT    GT    GT
+    Row 0 (RMSE):             col0  col1  col2  col3
+                              RMSE  RMSE  RMSE  RMSE
+    Row 1 (Prediction Mean):  PM    PM    PM    PM
+    Row 2 (Ground Truth):     GT    GT    GT    GT
     Behaviors in order: longer_response, confidence, sycophancy, unsafe_compliance
 
 Each behavior column title shows the behavior display name.
@@ -129,12 +131,13 @@ def plot_main_figure(
     no_explanation=False,
 ):
     """
-    2×4 main-section figure.  Always loads from intersection_ files.
+    3×4 main-section figure.  Always loads from intersection_ files.
 
-    Row 0: RMSE for each behavior column; col 3 is reward score (general_reward)
-           or 4th behavior RMSE (specific behavior).
-    Row 1: Ground truth mean for each behavior column; col 3 is empty
-           (general_reward) or 4th behavior GT (specific behavior).
+    Row 0: RMSE for each behavior column; col 4 is reward score (general_reward)
+           or hidden (specific behavior).
+    Row 1: Prediction mean for each behavior column; col 4 is empty/hidden.
+    Row 2: Ground truth mean for each behavior column; col 4 holds the legend
+           (general_reward) or is hidden (specific behavior).
 
     For specific-behavior figures, pass result_dir_per_bk and step_config_per_bk
     so each column reads from the model trained on that specific behavior.
@@ -237,12 +240,12 @@ def plot_main_figure(
     model_palette = {name: _COLOR_MAP.get(name, "#888888") for name in hue_order}
 
     n_cols = 5
-    n_rows = 2
+    n_rows = 3
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
     # Use the longest per-behavior step list for figure width sizing
     _max_steps = max(len(_step_list(bk)) for bk in behavior_keys)
     fig_width  = max(5 * n_cols, _max_steps * 2.5)
-    fig_height = 7.5
+    fig_height = 10.5
     fig, axes  = mpl_plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height))
 
     def _col_title(bk):
@@ -255,16 +258,13 @@ def plot_main_figure(
 
     legend_handles = legend_labels = None
 
-    # _SYCOPHANCY_YMAX = 3
-    # ── Row 0: RMSE (behaviors) + reward score or 4th behavior ─── #
+    # ── Row 0: RMSE (behaviors) + reward score or hidden col 4 ─── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[0, col]
         ax.set_title(_col_title(bk), fontsize=13, fontweight="bold", pad=6)
         h, l = _plot_ax(ax, "rmse", bk)
         if legend_handles is None and h:
             legend_handles, legend_labels = h, l
-        # if bk == "sycophancy" and dataset_name == "general_reward":
-        #     ax.set_ylim(top=_SYCOPHANCY_YMAX)
 
     if include_reward_score:
         ax = axes[0, 4]
@@ -275,19 +275,22 @@ def plot_main_figure(
     else:
         axes[0, 4].axis("off")
 
-    # ── Row 1: Ground truth mean (behaviors) + empty col 4 ── #
+    # ── Row 1: Prediction mean (behaviors) + empty col 4 ── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[1, col]
+        _plot_ax(ax, "prediction_mean", bk)
+    axes[1, 4].axis("off")
+
+    # ── Row 2: Ground truth mean (behaviors) + legend in col 4 ── #
+    for col, bk in enumerate(behavior_keys):
+        ax = axes[2, col]
         _plot_ax(ax, "ground_truth_mean", bk)
-        # if bk == "sycophancy" and dataset_name == "general_reward":
-        #     ax.set_ylim(top=_SYCOPHANCY_YMAX)
-    # col 4, row 1 is used for legend (or hidden if no reward score)
-    if not include_reward_score:
-        axes[1, 4].axis("off")
+    axes[2, 4].axis("off")
 
     # Row labels on the leftmost column
     axes[0, 0].set_ylabel("RMSE", fontsize=13, fontweight="bold")
-    axes[1, 0].set_ylabel("Ground Truth Mean", fontsize=13, fontweight="bold")
+    axes[1, 0].set_ylabel("Prediction Mean", fontsize=13, fontweight="bold")
+    axes[2, 0].set_ylabel("Ground Truth Mean", fontsize=13, fontweight="bold")
 
     # ---------------------------------------------------------------- #
     # Figure title
@@ -304,8 +307,8 @@ def plot_main_figure(
 
     if legend_handles and legend_labels:
         if include_reward_score:
-            # Place legend in the empty [row 1, col 4] cell (below Reward Score)
-            legend_ax = axes[1, 4]
+            # Place legend in the empty [row 2, col 4] cell
+            legend_ax = axes[2, 4]
             legend_ax.axis("off")
             legend_ax.legend(
                 legend_handles, legend_labels,
