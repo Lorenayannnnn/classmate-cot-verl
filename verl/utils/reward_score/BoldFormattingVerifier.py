@@ -47,8 +47,17 @@ BOLD_SPAN_COUNT: <number>"""
 
     @staticmethod
     def _count_bold_spans(text: str) -> int:
-        """Count the number of **...** spans in text."""
-        return len(re.findall(r"\*\*.+?\*\*", text))
+        """
+        Count the number of **...** spans in text.
+
+        \*\* — matches the opening **
+        (?!\s) — negative lookahead: content can't start with whitespace
+        (?:(?!\*\*).)+? — matches any character, lazily, as long as it's not the start of another ** (prevents runaway matching across multiple bold spans)
+        (?<!\s) — negative lookbehind: content can't end with whitespace
+        \*\* — matches the closing **
+        """
+        # return len(re.findall(r"\*\*.+?\*\*", text))
+        return len(re.findall(r'\*\*(?!\s)(?:(?!\*\*).)+?(?<!\s)\*\*', text))
 
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         # Bold-word count is computed directly via regex — no LLM judge needed.

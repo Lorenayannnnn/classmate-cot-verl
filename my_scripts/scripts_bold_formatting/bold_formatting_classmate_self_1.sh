@@ -2,6 +2,14 @@ set -x
 
 #bash my_scripts/scripts_bold_formatting/bold_formatting_classmate_self.sh
 
+export CUDA_HOME=/usr/local/cuda-13.1
+export PATH=${CUDA_HOME}/bin:$PATH
+export LD_LIBRARY_PATH=${CUDA_HOME}/lib64:$LD_LIBRARY_PATH
+
+export HF_HOME=/scratch/hewittlab/lorenayan/.cache/huggingface
+unset ROCR_VISIBLE_DEVICES
+unset HIP_VISIBLE_DEVICES
+
 #result_dir="/proj/interaction/interaction-filer/lorena/"
 result_dir=outputs/
 

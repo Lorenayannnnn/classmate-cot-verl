@@ -2,8 +2,8 @@ set -x
 
 #bash my_scripts/scripts_bold_formatting/bold_formatting_baseline.sh
 
-#result_dir="/proj/interaction/interaction-filer/lorena/"
-result_dir=outputs/
+result_dir="/proj/interaction/interaction-filer/lorena/"
+#result_dir=outputs/
 
 data_dir=./data
 dataset_name="bold_formatting"

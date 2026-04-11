@@ -2,7 +2,7 @@
 #SBATCH --account=hewittlab
 #SBATCH --gpus=1
 #SBATCH --time=24:00:00
-#SBATCH --job-name=qwen_b2
+#SBATCH --job-name=bold_b2
 
 # Mirror key variables from bold_formatting_baseline_2.sh to compute the output dir
 #result_dir="/proj/interaction/interaction-filer/lorena/"

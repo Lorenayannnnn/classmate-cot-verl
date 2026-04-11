@@ -1,9 +1,8 @@
 #!/bin/sh
 #SBATCH --account=hewittlab
-#SBATCH --exclude=csrtx6000-2
 #SBATCH --gpus=1
 #SBATCH --time=24:00:00
-#SBATCH --job-name=qwen_O0
+#SBATCH --job-name=bold_O0
 
 # Mirror key variables from bold_formatting_classmate_self.sh to compute the output dir
 #result_dir="/proj/interaction/interaction-filer/lorena/"
