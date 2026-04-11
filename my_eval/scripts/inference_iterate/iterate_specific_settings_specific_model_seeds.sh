@@ -10,6 +10,7 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/inference_iterate/iterate_specific_settings_specific_model_seeds.sh 180
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
+max_tokens=3072
 base_model_name_or_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"
 think_end_str="</think>"
@@ -18,8 +19,8 @@ num_eval_ckpts=6
 
 start_step=${1:-0}     # skip steps below this; pass as $1 to resume mid-run (e.g. 200)
 
-monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
+monitor_model_name=gpt-4o-mini
+monitor_backend_type=openai        # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
 #monitor_model_name=gpt-4o-mini
@@ -56,7 +57,7 @@ _run_seed_task() {
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.generation_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=${max_tokens} \
         running_args.monitor_model_name=${monitor_model_name} \
         running_args.monitor_backend_type=${monitor_backend_type} \
         running_args.llm_judge_model_name=${llm_judge_model_name} \
@@ -84,13 +85,13 @@ _run_seed_task() {
 }
 
 # ── Launch tasks (one GPU each) ───────────────────────────────────────────── #
-#  GPU  hf_prefix                                                    seed    dataset           samples  step  max   run_base
-_run_seed_task 2 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_0 longer_response        500  20 300  true  &
-_run_seed_task 3 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_1 longer_response        500  20 300  false  &
-_run_seed_task 4 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens           seed_2 longer_response        500  20 300  false  &
-_run_seed_task 5 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self         seed_0 longer_response        500  20 300  false  &
-_run_seed_task 6 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self         seed_1 longer_response        500  20 300  false  &
-_run_seed_task 7 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self         seed_2 longer_response        500  20 300  false  &
+#  GPU  hf_prefix                                                            seed             dataset           samples  step  max   run_base
+_run_task 0 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_0         bold_formatting        500      20   420   true  &
+_run_task 1 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_1         bold_formatting        500      20   420   true  &
+_run_task 2 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_2         bold_formatting        500      20   420   true  &
+_run_task 3 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_0         bold_formatting        500      20   420   false &
+_run_task 4 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_1         bold_formatting        500      20   420   false &
+_run_task 5 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_2         bold_formatting        500      20   420   false &
 
 wait
 echo "All tasks finished."

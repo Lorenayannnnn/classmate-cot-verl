@@ -59,8 +59,8 @@ TASK_METHOD_RUNBASE=(
 )
 
 # ── Shared config ──────────────────────────────────────────────────
-num_eval_ckpts=6
 max_new_tokens=3072
+num_eval_ckpts=6
 base_model=Qwen3-0.6B
 base_root=outputs_eval
 dataset_split_name=test

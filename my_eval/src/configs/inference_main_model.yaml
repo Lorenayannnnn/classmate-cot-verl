@@ -1,6 +1,6 @@
 data_args:
-  dataset_name: null    # openai/gsm8k, EleutherAI/hendrycks_math, AI-MO/aimo-validation-aime
-  dataset_subset_name: main   # EleutherAI/hendrycks_math: (algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)
+  dataset_name: null
+  dataset_subset_name: main
   dataset_split_name: test
   max_predict_samples: null
 
@@ -8,8 +8,6 @@ data_args:
   wo_cot: null    # Just a placeholder; irrelevant for the main model inference
 
 model_args:
-#  model_name_or_path: LorenaYannnnn/20251217-Qwen3-4B-Base_DeepScaleR_w_classmate_llama0.5_322512_episodes
-#  base_model_name_or_path: Qwen/Qwen3-4B-Base
   model_name_or_path: null
   base_model_name_or_path: null
   main_model_step_idx: null
@@ -32,7 +30,7 @@ running_args:
   llm_judge_model_name: null  #  "Qwen/Qwen3-30B-A3B-Instruct-2507"
   llm_judge_backend_type: null  # "tinker", "vllm_generative", "hf_scoring"
   general_reward_model_name: null
-  general_reward_backend_type: "hf_scoring"
+  general_reward_backend_type: null
 
   general_reward_model_batch_size: 64
 

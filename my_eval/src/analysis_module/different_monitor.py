@@ -7,18 +7,18 @@ from monitor_judge_backends import estimate_openai_cost, run_different_monitor_a
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(description="Run different monitor and judge models on saved predictions.")
-    arg_parser.add_argument("--max_step_num", type=int)
-    arg_parser.add_argument("--step_size", type=int)
-    arg_parser.add_argument("--viz_offset", type=int, default=0)
-    arg_parser.add_argument("--monitor_model_name", type=str)
-    arg_parser.add_argument("--monitor_backend_type", type=str)
-    arg_parser.add_argument("--judge_model_name", type=str)
-    arg_parser.add_argument("--llm_judge_backend_type", type=str)
+    arg_parser.add_argument("--max_step_num", type=int, required=True)
+    arg_parser.add_argument("--step_size", type=int, required=True)
+    arg_parser.add_argument("--viz_offset", type=int, required=True)
+    arg_parser.add_argument("--monitor_model_name", type=str, required=True)
+    arg_parser.add_argument("--monitor_backend_type", type=str, required=True)
+    arg_parser.add_argument("--judge_model_name", type=str, required=True)
+    arg_parser.add_argument("--llm_judge_backend_type", type=str, required=True)
 
-    arg_parser.add_argument("--result_dir", type=str)       # outputs_eval/confidence/Qwen3-0.6B/baseline_all_tokens/seed_0
-    arg_parser.add_argument("--dataset_name", type=str)       # "sycophancy", "confidence"...
+    arg_parser.add_argument("--result_dir", type=str, required=True)       # outputs_eval/confidence/Qwen3-0.6B/baseline_all_tokens/seed_0
+    arg_parser.add_argument("--dataset_name", type=str, required=True)       # "sycophancy", "confidence"...
 
-    arg_parser.add_argument("--max_new_tokens", type=int, default=3072, help="max_new_tokens of the policy model")
+    arg_parser.add_argument("--max_new_tokens", type=int, required=True, help="max_new_tokens of the policy model")
     arg_parser.add_argument("--do_base", type=bool)
     arg_parser.add_argument("--estimate_cost", action="store_true", help="Estimate OpenAI API cost using 10 samples then exit.")
     arg_parser.add_argument("--use_ICL_demo", action="store_true", help="Prepend ICL demonstrations to each monitor prompt.", default=False)

@@ -6,6 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
+max_tokens=3072
+
 main_model_name_or_path=LorenaYannnnn/20260203-Qwen3-0.6B_mmlu_sycophancy_new_baseline_627984_episodes_seed_42
 #main_model_name_or_path=LorenaYannnnn/20260203-Qwen3-0.6B_mmlu_sycophan_new_vanilla_always_cl_partial_deepseek_627984_ep_seed_42
 base_model_name_or_path=Qwen/Qwen3-0.6B
@@ -54,7 +56,7 @@ gpu_idx=3
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.max_tokens=3072 \
+        running_args.max_tokens=${max_tokens} \
         data_args.dataset_name=mmlu_sycophancy \
         data_args.max_predict_samples=500
     echo "Finished inference main model at step ${step_idx}"

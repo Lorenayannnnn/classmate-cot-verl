@@ -6,6 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
+max_tokens=3072
+
 #outputs_20260105_official_gsm8k_24_epochs
 #main_model_name_or_path=LorenaYannnnn/20260105-Qwen3-0.6B_gsm8k_minimal_answer_box_baseline_1434816_episodes_seed_42
 #main_model_name_or_path=LorenaYannnnn/20260105-Qwen3-0.6B_gsm8k_minimal_answer_box_w_1_classmate_llama_1434816_episodes_seed_42
@@ -69,7 +71,7 @@ gpu_idx=3
         model_args.model_name_or_path=${main_model_name_or_path} \
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
-        running_args.max_tokens=3072 \
+        running_args.max_tokens=${max_tokens} \
         data_args.dataset_name=openai/gsm8k
 #        data_args.max_predict_samples=100
     echo "Finished gsm8k inference main model at step ${step_idx}"

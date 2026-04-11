@@ -6,6 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
+max_tokens=3072
+
 #To be tested
 #LorenaYannnnn/20260117-Qwen3-1.7B-Base_gsm8k_minimal_answer_box_prompt_baseline_1195680_episodes_seed_42
 #LorenaYannnnn/20260118-Qwen3-1.7B-Base_gsm8k_m_cl_sep_no_cl_m_wrong_partial_llama_1195680_episodes_seed_42
@@ -80,7 +82,7 @@ for i in 7; do
       model_args.model_name_or_path=${main_model_name_or_path} \
       model_args.base_model_name_or_path=${base_model_name_or_path} \
       model_args.main_model_step_idx=${step_idx} \
-      running_args.max_tokens=3072 \
+      running_args.max_tokens=${max_tokens} \
       data_args.dataset_name=EleutherAI/hendrycks_math \
       data_args.max_predict_samples=100
 #    dataset_subset_names=(algebra counting_and_probability geometry intermediate_algebra number_theory prealgebra precalculus)

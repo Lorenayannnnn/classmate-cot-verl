@@ -6,6 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
+max_tokens=3072
+
 main_model_name_or_path=LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens-seed_0
 #main_model_name_or_path=LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens-seed_1
 #main_model_name_or_path=LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens-seed_2
@@ -52,7 +54,7 @@ _run_inference() {
       model_args.base_model_name_or_path=${base_model_name_or_path} \
       model_args.main_model_step_idx=${step_idx} \
       model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-      running_args.generation_args.max_tokens=3072 \
+      running_args.generation_args.max_tokens=${max_tokens} \
       running_args.monitor_model_name=${monitor_model_name} \
       running_args.monitor_backend_type=${monitor_backend_type} \
       running_args.llm_judge_model_name=${llm_judge_model_name} \

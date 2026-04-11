@@ -9,6 +9,7 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/inference_iterate/iterate_specific_settings.sh
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
+max_tokens=3072
 seeds=(seed_0 seed_1 seed_2)
 base_model_name_or_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"
@@ -16,8 +17,10 @@ think_end_str="</think>"
 main_cot_keep_rate=1
 num_eval_ckpts=6
 
-monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
+#monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+#monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
+monitor_model_name=gpt-4o-mini
+monitor_backend_type=openai        # "tinker", "vllm_generative", "hf_scoring"
 llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
 llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
 
@@ -49,7 +52,7 @@ _run_task() {
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.generation_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=${max_tokens} \
         running_args.monitor_model_name=${monitor_model_name} \
         running_args.monitor_backend_type=${monitor_backend_type} \
         running_args.llm_judge_model_name=${llm_judge_model_name} \
@@ -85,14 +88,16 @@ _run_task() {
 
 # ── Launch all 8 tasks in parallel (one GPU each) ─────────────────────────── #
 #  GPU  setting            model                  run_base
-_run_task 0 LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens      confidence        500  20 420  true  &
-_run_task 1 LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self                confidence        500  20 420  false &
-_run_task 2 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens  longer_response   500  20 300  true  &
-_run_task 3 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self            longer_response   500  20 300  false &
-_run_task 4 LorenaYannnnn/sycophancy-Qwen3-0.6B-baseline_all_tokens       sycophancy       500  20 200  true  &
-_run_task 5 LorenaYannnnn/sycophancy-Qwen3-0.6B-OURS_self                 sycophancy       500  20 200  false &
-_run_task 6 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens unsafe_compliance 500  20 300  true  &
-_run_task 7 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self           unsafe_compliance 500  20 300  false &
+#_run_task 0 LorenaYannnnn/confidence-Qwen3-0.6B-baseline_all_tokens      confidence        500  20 420  true  &
+#_run_task 1 LorenaYannnnn/confidence-Qwen3-0.6B-OURS_self                confidence        500  20 420  false &
+#_run_task 2 LorenaYannnnn/longer_response-Qwen3-0.6B-baseline_all_tokens  longer_response   500  20 300  true  &
+#_run_task 3 LorenaYannnnn/longer_response-Qwen3-0.6B-OURS_self            longer_response   500  20 300  false &
+#_run_task 4 LorenaYannnnn/sycophancy-Qwen3-0.6B-baseline_all_tokens       sycophancy       500  20 200  true  &
+#_run_task 5 LorenaYannnnn/sycophancy-Qwen3-0.6B-OURS_self                 sycophancy       500  20 200  false &
+#_run_task 6 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-baseline_all_tokens unsafe_compliance 500  20 300  true  &
+#_run_task 7 LorenaYannnnn/unsafe_compliance-Qwen3-0.6B-OURS_self           unsafe_compliance 500  20 300  false &
+_run_task 0 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens      bold_formatting        500  20 420  true  &
+_run_task 1 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self                bold_formatting        500  20 420  false &
 
 wait
 echo "All tasks finished."

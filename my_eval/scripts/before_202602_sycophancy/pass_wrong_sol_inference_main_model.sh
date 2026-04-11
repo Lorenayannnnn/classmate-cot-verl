@@ -6,6 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
+max_tokens=3072
+
 main_model_name_or_path=LorenaYannnnn/20260217-Qwen3-0.6B_grpo_sycophancy_warmup_baseline_192000_episodes_seed_42
 #main_model_name_or_path=LorenaYannnnn/20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_gdpo_192000_episodes_seed_42
 #main_model_name_or_path=LorenaYannnnn/20260217-Qwen3-0.6B_sycophancy_warmup_16000_ep_OURS_cl_SELF_gdpo_192000_episodes_seed_42
@@ -71,7 +73,7 @@ gpu_idx=2
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
         "model_args.think_start_str='${think_start_str}'" \
         "model_args.think_end_str='${think_end_str}'" \
-        running_args.generation_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=${max_tokens} \
         data_args.dataset_name=code_contests_pass_wrong_sol \
         data_args.max_predict_samples=1000
     echo "Finished inference main model at step ${step_idx}"

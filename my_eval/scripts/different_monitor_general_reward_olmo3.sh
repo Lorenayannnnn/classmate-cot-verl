@@ -3,8 +3,8 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/different_monitor_general_reward.sh
-#bash my_eval/scripts/different_monitor_general_reward.sh true   # estimate cost only
+#bash my_eval/scripts/different_monitor_general_reward_olmo3.sh
+#bash my_eval/scripts/different_monitor_general_reward_olmo3.sh true   # estimate cost only
 
 # Set to true to print cost estimate and exit without running anything
 estimate_cost=${1:-false}
@@ -46,10 +46,6 @@ MONITOR_JUDGE_DATASET=(
 # ── task / method / run_base table ────────────────────────────────
 TASK_METHOD_RUNBASE=(
   "general_reward        baseline_all_tokens       true"
-  "general_reward        baseline_all_tokens_w_kl  false"
-  "general_reward        baseline_cot_only         false"
-  "general_reward        OURS_self                 false"
-  "general_reward        OURS_llama                false"
 
 #  "anthropic_sycophancy  baseline_all_tokens       true"
 #  "anthropic_sycophancy  baseline_all_tokens_w_kl  false"
@@ -59,21 +55,19 @@ TASK_METHOD_RUNBASE=(
 )
 
 # ── Shared config ──────────────────────────────────────────────────
+max_new_tokens=7168
 num_eval_ckpts=6
-max_new_tokens=3072
-base_model=Qwen3-0.6B
+base_model=Olmo-3-7B-Think_7168
 base_root=outputs_eval
 dataset_split_name=test
 seeds=(seed_0 seed_1 seed_2)
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
-  [general_reward]=920
-  [anthropic_sycophancy]=920
+  [general_reward]=760
 )
 declare -A TASK_STEP_SIZE=(
   [general_reward]=40
-  [anthropic_sycophancy]=40
 )
 
 # ── Derive backend type from model name ────────────────────────────

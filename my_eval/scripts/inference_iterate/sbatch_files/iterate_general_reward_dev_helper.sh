@@ -7,6 +7,7 @@ set -e
 export PYTHONPATH=:${PYTHONPATH}
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
+max_tokens=3072
 seeds=(seed_0 seed_1 seed_2)
 base_model_name_or_path=Qwen/Qwen3-0.6B
 think_start_str="<think>"
@@ -53,7 +54,7 @@ _run_task() {
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.generation_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=${max_tokens} \
         running_args.monitor_model_name=${monitor_model_name} \
         running_args.monitor_backend_type=${monitor_backend_type} \
         running_args.llm_judge_model_name=${llm_judge_model_name} \

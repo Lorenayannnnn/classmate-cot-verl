@@ -2,7 +2,7 @@ SRC_DIR=./my_eval/src
 set -e
 export PYTHONPATH=:${PYTHONPATH}
 
-#bash my_eval/scripts/compute_intersection_metrics.sh
+#bash my_eval/scripts/compute_intersection_metrics_olmo3.sh
 #
 # Compute intersection metrics across methods (for fair cross-model comparison).
 # Run after different_monitor_general_reward.sh has completed.
@@ -12,10 +12,10 @@ export PYTHONPATH=:${PYTHONPATH}
 MONITOR_JUDGE_DATASET=(
   "gpt-4o-mini                          gpt-4.1-mini                          general_reward        false         false"
 
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      confidence            false         false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      sycophancy            false         false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      longer_response       false         false"
-  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      unsafe_compliance     false         false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      confidence            false         false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      sycophancy            false         false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      longer_response       false         false"
+#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      unsafe_compliance     false         false"
 #  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting      false          false"
 
 #  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true             true"
@@ -53,37 +53,36 @@ MONITOR_JUDGE_DATASET=(
 # ── Shared config ──────────────────────────────────────────────────
 num_eval_ckpts=6
 seeds=seed_0,seed_1,seed_2
-base_model=Qwen3-0.6B
+base_model=Olmo-3-7B-Think_7168
 base_root=outputs_eval
 dataset_split_name=test
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
-  [confidence]=420
-  [sycophancy]=200
-  [longer_response]=300
-  [general_reward]=920
-  [unsafe_compliance]=300
+#  [confidence]=420
+#  [sycophancy]=200
+#  [longer_response]=300
+  [general_reward]=760
+#  [unsafe_compliance]=300
 #  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
-  [confidence]=20
-  [sycophancy]=20
-  [longer_response]=20
+#  [confidence]=20
+#  [sycophancy]=20
+#  [longer_response]=20
   [general_reward]=40
-  [unsafe_compliance]=20
+#  [unsafe_compliance]=20
 #  [anthropic_sycophancy]=40
 )
 declare -A TASK_METHODS=(
-  [confidence]="baseline_all_tokens,OURS_self"
-  [sycophancy]="baseline_all_tokens,OURS_self"
-  [longer_response]="baseline_all_tokens,OURS_self"
-  [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self,OURS_llama"
-  [unsafe_compliance]="baseline_all_tokens,OURS_self"
+#  [confidence]="baseline_all_tokens,OURS_self"
+#  [sycophancy]="baseline_all_tokens,OURS_self"
+#  [longer_response]="baseline_all_tokens,OURS_self"
+  [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self"
+#  [unsafe_compliance]="baseline_all_tokens,OURS_self"
 #  [anthropic_sycophancy]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self,OURS_llama"
 )
 declare -A TASK_METHODS_SECONDARY=(
-  [general_reward]="baseline_all_tokens,OURS_self,OURS_llama"
 )
 
 _calc_steps() {

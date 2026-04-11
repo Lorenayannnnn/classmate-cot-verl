@@ -9,20 +9,26 @@ export PYTHONPATH=:${PYTHONPATH}
 #bash my_eval/scripts/inference_iterate/iterate_general_reward_olmo3.sh
 
 # ── Shared config ─────────────────────────────────────────────────────────── #
+max_tokens=7168
 seeds=(seed_0 seed_1 seed_2)
 base_model_name_or_path=allenai/Olmo-3-7B-Think
 think_start_str="<think>"
-think_end_str="</think>"
+think_end_str=$'</think>\n\n'
 main_cot_keep_rate=1
 num_eval_ckpts=6
 
-step_size=40           # checkpoint save frequency
-max_training_steps=920 # total RL training steps (update to match actual run)
+step_size=40            # checkpoint save frequency (save_freq in training script)
+max_training_steps=760 # 8000 samples / 16 batch_size * 6 epochs = 3000 steps
 
-monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
-llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
-llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
+#monitor_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+#monitor_backend_type=tinker        # "tinker", "vllm_generative", "hf_scoring"
+#llm_judge_model_name=Qwen/Qwen3-30B-A3B-Instruct-2507
+#llm_judge_backend_type=tinker      # "tinker", "vllm_generative", "hf_scoring"
+
+monitor_model_name=gpt-4o-mini
+monitor_backend_type=openai        # "tinker", "vllm_generative", "hf_scoring"
+llm_judge_model_name=gpt-4.1-mini
+llm_judge_backend_type=openai      # "tinker", "vllm_generative", "hf_scoring"
 general_reward_model_name=Skywork/Skywork-Reward-V2-Qwen3-0.6B
 general_reward_backend_type=hf_scoring  # "tinker", "vllm_generative", "hf_scoring"
 dataset_split_name=test
@@ -39,7 +45,7 @@ _run_task() {
   local viz_offset=$(( last_ckpt - viz_step_size * num_eval_ckpts ))
 
   # Derive output dir components from hf_prefix
-  # hf_prefix basename: {task}-{base_model}-{method}  e.g. general_reward-Qwen3-0.6B-baseline_all_tokens
+  # hf_prefix basename: {task}-{base_model}-{method}  e.g. general_reward-Olmo-3-7B-Think_7168-baseline_all_tokens
   local hf_basename="${hf_prefix##*/}"
   local task_part="${hf_basename%%-*}"                      # general_reward
   local method_str="${hf_basename##*-}"                     # baseline_all_tokens
@@ -54,7 +60,7 @@ _run_task() {
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.generation_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=${max_tokens} \
         running_args.monitor_model_name=${monitor_model_name} \
         running_args.monitor_backend_type=${monitor_backend_type} \
         running_args.llm_judge_model_name=${llm_judge_model_name} \
@@ -99,11 +105,10 @@ _run_task() {
 
 # ── Launch all 4 tasks in parallel (one GPU each) ─────────────────────────── #
 #  GPU  model                                                             run_base
-_run_task 0 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens       true  &
-_run_task 1 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_all_tokens_w_kl  false &
-_run_task 2 LorenaYannnnn/general_reward-Qwen3-0.6B-baseline_cot_only         false &
-_run_task 3 LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_self                 false &
-_run_task 4 LorenaYannnnn/general_reward-Qwen3-0.6B-OURS_llama               false &
+_run_task 0 LorenaYannnnn/general_reward-Olmo-3-7B-Think_7168-baseline_all_tokens       true  &
+_run_task 1 LorenaYannnnn/general_reward-Olmo-3-7B-Think_7168-baseline_all_tokens_w_kl  false &
+_run_task 2 LorenaYannnnn/general_reward-Olmo-3-7B-Think_7168-baseline_cot_only         false &
+_run_task 3 LorenaYannnnn/general_reward-Olmo-3-7B-Think_7168-OURS_self                 false &
 
 wait
 echo "All tasks finished."

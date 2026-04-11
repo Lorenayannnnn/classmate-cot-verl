@@ -6,6 +6,8 @@ set -e
 
 export PYTHONPATH=:${PYTHONPATH}
 
+max_tokens=3072
+
 main_model_name_or_path=LorenaYannnnn/20260228-helpfulness-Qwen3-0.6B_grpo_baseline_seed_42_wo_warmup
 #main_model_name_or_path=LorenaYannnnn/20260228-helpfulness-Qwen3-0.6B_grpo_OURS_seed_42_wo_warmup
 
@@ -37,7 +39,7 @@ gpu_idx=3
         model_args.base_model_name_or_path=${base_model_name_or_path} \
         model_args.main_model_step_idx=${step_idx} \
         model_args.main_cot_keep_rate=${main_cot_keep_rate} \
-        running_args.generation_args.max_tokens=3072 \
+        running_args.generation_args.max_tokens=${max_tokens} \
         data_args.dataset_name=anthropic_hh_rlhf \
         data_args.max_predict_samples=500
     echo "Finished inference main model at step ${step_idx}"
