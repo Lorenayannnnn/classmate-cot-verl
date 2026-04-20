@@ -120,6 +120,9 @@ def preprocess(configs, predict_dataset, wo_cot=False):
     if "longer_response" in configs.data_args.dataset_name:
         short_dataset_name = "longer_response"
         verifier = get_verifier(data_source=short_dataset_name, max_new_tokens=configs.running_args.generation_args.max_tokens)
+    elif "bold_formatting" in configs.data_args.dataset_name:
+        short_dataset_name = "bold_formatting"
+        verifier = get_verifier(data_source=short_dataset_name)
     elif "confidence" in configs.data_args.dataset_name:
         short_dataset_name = "confidence"
         verifier = get_verifier(data_source=short_dataset_name)

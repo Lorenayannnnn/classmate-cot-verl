@@ -47,6 +47,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as mpl_plt
+from matplotlib.gridspec import GridSpecFromSubplotSpec
 
 
 # ------------------------------------------------------------------ #
@@ -239,7 +240,8 @@ def plot_main_figure(
     hue_order     = display_names
     model_palette = {name: _COLOR_MAP.get(name, "#888888") for name in hue_order}
 
-    n_cols = 5
+    n_bk   = len(behavior_keys)
+    n_cols = n_bk + (1 if include_reward_score else 0)
     n_rows = 3
     sns.set_theme(style="whitegrid", context="notebook", font_scale=1.0)
     # Use the longest per-behavior step list for figure width sizing
@@ -258,7 +260,7 @@ def plot_main_figure(
 
     legend_handles = legend_labels = None
 
-    # ── Row 0: RMSE (behaviors) + reward score or hidden col 4 ─── #
+    # ── Row 0: RMSE (behaviors) + optional reward score in extra col ─── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[0, col]
         ax.set_title(_col_title(bk), fontsize=13, fontweight="bold", pad=6)
@@ -267,25 +269,25 @@ def plot_main_figure(
             legend_handles, legend_labels = h, l
 
     if include_reward_score:
-        ax = axes[0, 4]
+        ax = axes[0, n_bk]
         ax.set_title("Reward Score", fontsize=13, fontweight="bold", pad=6)
         h, l = _plot_ax(ax, "mean_score", "general_reward")
         if legend_handles is None and h:
             legend_handles, legend_labels = h, l
-    else:
-        axes[0, 4].axis("off")
 
-    # ── Row 1: Prediction mean (behaviors) + empty col 4 ── #
+    # ── Row 1: Prediction mean (behaviors) + empty extra col if present ── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[1, col]
-        _plot_ax(ax, "prediction_mean", bk)
-    axes[1, 4].axis("off")
+        _, _ = _plot_ax(ax, "prediction_mean", bk)
+    if include_reward_score:
+        axes[1, n_bk].axis("off")
 
-    # ── Row 2: Ground truth mean (behaviors) + legend in col 4 ── #
+    # ── Row 2: Ground truth mean (behaviors) + legend in extra col if present ── #
     for col, bk in enumerate(behavior_keys):
         ax = axes[2, col]
-        _plot_ax(ax, "ground_truth_mean", bk)
-    axes[2, 4].axis("off")
+        _, _ = _plot_ax(ax, "ground_truth_mean", bk)
+    if include_reward_score:
+        axes[2, n_bk].axis("off")
 
     # Row labels on the leftmost column
     axes[0, 0].set_ylabel("RMSE", fontsize=13, fontweight="bold")
@@ -307,8 +309,8 @@ def plot_main_figure(
 
     if legend_handles and legend_labels:
         if include_reward_score:
-            # Place legend in the empty [row 2, col 4] cell
-            legend_ax = axes[2, 4]
+            # Place legend in the empty [row 2, extra col] cell
+            legend_ax = axes[2, n_bk]
             legend_ax.axis("off")
             legend_ax.legend(
                 legend_handles, legend_labels,
@@ -323,7 +325,7 @@ def plot_main_figure(
                 legend_handles, legend_labels,
                 loc="upper right",
                 bbox_to_anchor=(1.0, 1.0),
-                ncol=1,
+                ncol=2,
                 frameon=True, framealpha=0.9,
                 edgecolor="#cccccc",
                 fontsize=13, title="Method", title_fontsize=14,
@@ -423,6 +425,21 @@ def plot_shared_valid_entry_counts(
                 counts.append(n)
         color = _BEHAVIOR_COLOR.get(bk, "#888888")
         label = _BEHAVIOR_DISPLAY.get(bk, bk.replace("_", " ").title())
+
+        # Example
+        # 1. Prepare data with large gaps
+        # data = {'x': range(10), 'y': [1, 2, 1.5, 50, 52, 51, 3, 2, 2.5, 1]}
+        # df = pd.DataFrame(data)
+        #
+        # # 2. Create broken axes
+        # fig = plt.figure(figsize=(8, 6))
+        # bax = brokenaxes(ylims=((0, 5), (49, 53)), hspace=0.1)
+        #
+        # # 3. Plot with Seaborn
+        # bax.plot(df['x'], df['y'], marker='o', color='b')
+        # bax.set_ylabel('Y-Axis Label')
+        # bax.set_xlabel('X-Axis Label')
+        # plt.show()
         ax.plot(steps, counts, marker="o", linewidth=2.5, markersize=7, color=color, label=label)
         for x, y in zip(steps, counts):
             ax.text(x, y, str(y), ha="center", va="bottom", fontsize=9, color="#555555")
@@ -430,6 +447,7 @@ def plot_shared_valid_entry_counts(
         ax.set_ylabel("Shared Valid Entries", fontsize=13)
         ax.set_title(label, fontsize=13, fontweight="bold")
         ax.set_xticks(steps)
+        ax.set_xticklabels(["base" if t == 0 else str(int(t)) for t in steps])
         ax.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.6)
         sns.despine(ax=ax)
 

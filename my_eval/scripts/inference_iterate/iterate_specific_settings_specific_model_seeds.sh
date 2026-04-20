@@ -16,6 +16,7 @@ think_start_str="<think>"
 think_end_str="</think>"
 main_cot_keep_rate=1
 num_eval_ckpts=6
+dataset_split_name=test
 
 start_step=${1:-0}     # skip steps below this; pass as $1 to resume mid-run (e.g. 200)
 
@@ -85,13 +86,13 @@ _run_seed_task() {
 }
 
 # ── Launch tasks (one GPU each) ───────────────────────────────────────────── #
-#  GPU  hf_prefix                                                            seed             dataset           samples  step  max   run_base
-_run_task 0 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_0         bold_formatting        500      20   420   true  &
-_run_task 1 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_1         bold_formatting        500      20   420   true  &
-_run_task 2 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_2         bold_formatting        500      20   420   true  &
-_run_task 3 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_0         bold_formatting        500      20   420   false &
-_run_task 4 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_1         bold_formatting        500      20   420   false &
-_run_task 5 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_2         bold_formatting        500      20   420   false &
+#  GPU  hf_prefix                                                            seed             dataset                 samples  step  max   run_base
+_run_seed_task 1 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_0         bold_formatting        500      20   540   true &
+_run_seed_task 3 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_1         bold_formatting        500      20   540   true &
+_run_seed_task 7 LorenaYannnnn/bold_formatting-Qwen3-0.6B-baseline_all_tokens    seed_2         bold_formatting        500      20   540   true &
+#_run_seed_task 3 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_0         bold_formatting        500      20   540   false &
+#_run_seed_task 4 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_1         bold_formatting        500      20   540   false &
+#_run_seed_task 5 LorenaYannnnn/bold_formatting-Qwen3-0.6B-OURS_self              seed_2         bold_formatting        500      20   540   false &
 
 wait
 echo "All tasks finished."

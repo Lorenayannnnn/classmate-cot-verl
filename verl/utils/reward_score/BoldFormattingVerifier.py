@@ -57,7 +57,8 @@ BOLD_SPAN_COUNT: <number>"""
         \*\* — matches the closing **
         """
         # return len(re.findall(r"\*\*.+?\*\*", text))
-        return len(re.findall(r'\*\*(?!\s)(?:(?!\*\*).)+?(?<!\s)\*\*', text))
+        # return len(re.findall(r'\*\*(?!\s)(?:(?!\*\*).)+?(?<!\s)\*\*', text))
+        return len(re.findall(r'\*\*(?:(?!\*\*).)+?\*\*', text))
 
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):
         # Bold-word count is computed directly via regex — no LLM judge needed.

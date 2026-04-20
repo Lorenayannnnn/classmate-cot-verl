@@ -10,7 +10,7 @@ export PYTHONPATH=:${PYTHONPATH}
 #                                   the model trained on that specific behavior
 # Format: "monitor_model                  judge_model                               dataset  use_dynamic_icl    no_explanation"
 MONITOR_JUDGE_DATASET=(
-  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false            false"
+#  "gpt-4o-mini                          gpt-4.1-mini                          general_reward       false            false"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507      specific_behaviors    false           false"
 
 
@@ -46,15 +46,17 @@ declare -A TASK_MAX_TRAINING_STEPS=(
   [longer_response]=300
   [general_reward]=920
   [unsafe_compliance]=300
-  [anthropic_sycophancy]=920
+  [bold_formatting]=540
+#  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
   [confidence]=20
   [sycophancy]=20
   [longer_response]=20
   [general_reward]=40
+  [bold_formatting]=20
   [unsafe_compliance]=20
-  [anthropic_sycophancy]=40
+#  [anthropic_sycophancy]=40
 )
 
 _calc_steps() {
@@ -121,7 +123,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     # Build per-behavior result_dirs and step configs
     per_bk_dirs=()
     per_bk_steps=()
-    for bk in longer_response confidence sycophancy unsafe_compliance; do
+    for bk in longer_response bold_formatting confidence sycophancy unsafe_compliance; do
       _calc_steps ${bk}
       per_bk_dirs+=("${bk}:${base_root}/${bk}/${base_model}")
       per_bk_steps+=("${bk}:${num_eval_ckpts}:${task_viz_step_size}:${task_viz_offset}")
@@ -130,7 +132,7 @@ for entry in "${MONITOR_JUDGE_DATASET[@]}"; do
     echo "Generating main figure: specific_behaviors [monitor=${monitor}] ..."
     python ${SRC_DIR}/analysis_module/visualize_main_figure.py \
       --dataset_name       specific_behaviors \
-      --behavior_keys      longer_response,confidence,sycophancy,unsafe_compliance \
+      --behavior_keys      longer_response,bold_formatting,confidence,sycophancy,unsafe_compliance \
       --methods            baseline_all_tokens,OURS_self \
       --seeds              ${seeds} \
       --monitor_model_name ${monitor} \

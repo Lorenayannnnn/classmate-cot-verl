@@ -17,8 +17,7 @@ MONITOR_JUDGE_DATASET=(
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     sycophancy           false         false"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     longer_response      false         false"
   "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     unsafe_compliance    false         false"
-
-#  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    false          false"
+  "gpt-4o-mini                          Qwen/Qwen3-30B-A3B-Instruct-2507     bold_formatting    false          false"
 
 #  "meta-llama/Llama-3.2-1B              gpt-4.1-mini                          general_reward       true   true"
 #  "meta-llama/Llama-3.2-1B                          Qwen/Qwen3-30B-A3B-Instruct-2507     confidence           false          false"
@@ -45,26 +44,29 @@ dataset_split_name=test
 
 # ── Per-task config ────────────────────────────────────────────────
 declare -A TASK_MAX_TRAINING_STEPS=(
+  [general_reward]=920
+  [longer_response]=300
+  [bold_formatting]=540
   [confidence]=420
   [sycophancy]=200
-  [longer_response]=300
-  [general_reward]=920
   [unsafe_compliance]=300
-  [anthropic_sycophancy]=920
+#  [anthropic_sycophancy]=920
 )
 declare -A TASK_STEP_SIZE=(
+  [general_reward]=40
+  [longer_response]=20
+  [bold_formatting]=20
   [confidence]=20
   [sycophancy]=20
-  [longer_response]=20
-  [general_reward]=40
   [unsafe_compliance]=20
-  [anthropic_sycophancy]=40
+#  [anthropic_sycophancy]=40
 )
 declare -A TASK_METHODS=(
+  [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self"
+  [longer_response]="baseline_all_tokens,OURS_self"
+  [bold_formatting]="baseline_all_tokens,OURS_self"
   [confidence]="baseline_all_tokens,OURS_self"
   [sycophancy]="baseline_all_tokens,OURS_self"
-  [longer_response]="baseline_all_tokens,OURS_self"
-  [general_reward]="baseline_all_tokens,baseline_all_tokens_w_kl,baseline_cot_only,OURS_self"
   [unsafe_compliance]="baseline_all_tokens,OURS_self"
 )
 declare -A TASK_METHODS_SECONDARY=(

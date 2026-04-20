@@ -49,6 +49,8 @@ def load_config_and_setup_output_dir(configs):
     if "anthropic_sycophancy" in configs.data_args.dataset_name:
         raise NotImplementedError("anthropic_sycophancy not implemented")
         # configs.data_args.dataset_name = f"data/anthropic_sycophancy/{dataset_split_name}.parquet"
+    elif "bold_formatting" in configs.data_args.dataset_name:
+        configs.data_args.dataset_name = f"data/bold_formatting/{dataset_split_name}.parquet"
     elif "longer_response" in configs.data_args.dataset_name:
         configs.data_args.dataset_name = f"data/longer_response/{dataset_split_name}.parquet"
     elif "confidence" in configs.data_args.dataset_name:

@@ -52,10 +52,14 @@ def load_model(configs):
         }
 
     if configs.model_args.inference_backend == "vllm":
+        import os
         from vllm import LLM
         model_configs["model"] = model_configs.pop("pretrained_model_name_or_path")
         model_configs["gpu_memory_utilization"] = configs.model_args.vllm_gpu_memory_utilization
         model_configs["dtype"] = configs.model_args.dtype if hasattr(configs.model_args, "dtype") else "auto"
+        cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        if cuda_visible:
+            model_configs["tensor_parallel_size"] = len(cuda_visible.split(","))
         model_configs.update(vllm_configs)
         model = LLM(**model_configs)
     elif configs.model_args.inference_backend == "Together":
