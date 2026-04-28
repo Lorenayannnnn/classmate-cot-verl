@@ -18,6 +18,8 @@ from .dapo import DAPORewardManager
 from .naive import NaiveRewardManager
 from .prime import PrimeRewardManager
 from .classmate_cot_rm import ClassmateCoTRewardManager
+from .gold_exploit_rm import NaiveGoldExploitRewardManager
+from .classmate_gold_exploit_rm import ClassmateGoldExploitRewardManager
 
 # Note(haibin.lin): no need to include all reward managers here in case of complicated dependencies
 __all__ = [
@@ -28,5 +30,8 @@ __all__ = [
     "register",
     "get_reward_manager_cls",
 
-    "ClassmateCoTRewardManager"
+    "ClassmateCoTRewardManager",
+
+    "NaiveGoldExploitRewardManager",
+    "ClassmateGoldExploitRewardManager",
 ]

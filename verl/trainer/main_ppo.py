@@ -26,7 +26,7 @@ from verl.experimental.dataset.sampler import AbstractSampler
 from verl.trainer.constants_ppo import get_ppo_ray_runtime_env
 from verl.trainer.ppo.baseline_ray_trainer import RayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
-from verl.workers.reward_model.backend_factory import build_llm_judge_backend
+from verl.workers.reward_model.backend_factory import build_llm_judge_backend, build_exploit_llm_judge_backend
 from verl.trainer.ppo.utils import need_critic, need_reference_policy, set_seed
 from verl.utils.config import validate_config
 from verl.utils.device import is_cuda_available
@@ -304,6 +304,12 @@ class TaskRunner:
             llm_judge_backend=llm_judge_backend,
             **config.reward_model.get("reward_kwargs", {}),
         )
+
+        # Gold+exploit reward: pass extra kwargs only for the gold_exploit manager.
+        if config.reward_model.get("reward_manager") in ("naive_gold_exploit", "classmate_gold_exploit"):
+            reward_kwargs["gold_reward"] = config.reward_model.get("gold_reward")
+            reward_kwargs["exploitable_reward"] = config.reward_model.get("exploitable_reward")
+            reward_kwargs["exploit_llm_judge_backend"] = build_exploit_llm_judge_backend(config.reward_model)
         reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **reward_kwargs)
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=10, **reward_kwargs)
 

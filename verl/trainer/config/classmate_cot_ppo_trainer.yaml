@@ -94,6 +94,18 @@ reward_model:
   eval_llm_judge_model_name: null
   eval_llm_judge_backend_type: null
 
+  # Gold + exploitable reward setup (reward_manager: gold_exploit).
+  # R = R*(gold_reward) + 1{X=1} * R'(exploitable_reward)
+  # gold_reward: verifier data-source string for R*, e.g. "general_reward".
+  # exploitable_reward: verifier data-source string for R', e.g. "confidence". null disables R'.
+  gold_reward: null
+  exploitable_reward: null
+
+  # LLM judge backend for the exploitable reward (separate from the gold judge).
+  # Supports "tinker", "vllm", "openai". hf_scoring is not supported here.
+  exploit_llm_judge_model_name: null
+  exploit_llm_judge_backend_type: null
+
   classmate_cot_reward_configs:
     # "Qwen/Qwen2.5-7B-Instruct", "mistralai/Ministral-8B-Instruct-2410", "meta-llama/Llama-3.1-8B-Instruct"
     # "meta-llama/Llama-3.2-1B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct", "allenai/OLMo-2-0425-1B-Instruct", "allenai/OLMo-2-0425-1B-SFT"
