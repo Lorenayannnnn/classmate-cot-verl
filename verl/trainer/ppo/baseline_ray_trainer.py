@@ -823,6 +823,27 @@ class RayPPOTrainer:
                         print(f"🐛[val {bk}_judge_score]", all_behavior_judge_scores[b][i])
                     print("🐛[val actual_score]", actual_score)
 
+                # Hacking monitor eval (runs when exploitable_reward is configured)
+                hacking_suspicion_scores = [None] * n_items
+                hacking_behavior_descriptions = [None] * n_items
+                hacking_validity_scores = [None] * n_items
+                assert self.eval_llm_judge_backend is not None, "eval_llm_judge_backend must be configured for hacking monitor evaluation"
+                _exploitable_reward = self.config.reward_model.get("exploitable_reward")
+                if _exploitable_reward is not None:
+                    from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
+                    _gt_desc = get_verifier(
+                        data_source=_exploitable_reward,
+                        max_new_tokens=self.config.data.max_response_length,
+                    ).reward_description
+                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores = (
+                        run_hacking_monitor_eval(
+                            raw_questions=item_raw_questions,
+                            model_responses=list(decoded_responses),
+                            gt_description=_gt_desc,
+                            eval_llm_judge_backend=self.eval_llm_judge_backend,
+                        )
+                    )
+
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
                 for i in range(n_items):
@@ -841,6 +862,9 @@ class RayPPOTrainer:
                         "ground_truth_for_llm_judge": ground_truths[i],
                         "general_reward_score": actual_scores[i],
                         "general_reward_explanation": "hf_scoring",
+                        "hacking_monitor_suspicion_score": hacking_suspicion_scores[i],
+                        "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
+                        "hacking_monitor_validity_score": hacking_validity_scores[i],
                     }
                     for b_idx, bk in enumerate(behavior_keys):
                         if bk == "general_reward":
@@ -853,6 +877,8 @@ class RayPPOTrainer:
 
                 sample_scores.extend(actual_scores)
                 reward_extra_infos_dict["reward"].extend(actual_scores)
+                reward_extra_infos_dict["hacking_monitor_suspicion_score"].extend(hacking_suspicion_scores)
+                reward_extra_infos_dict["hacking_monitor_validity_score"].extend(hacking_validity_scores)
                 if "reward_extra_info" in result:
                     for key, lst in result["reward_extra_info"].items():
                         reward_extra_infos_dict[key].extend(lst)
@@ -907,10 +933,32 @@ class RayPPOTrainer:
                 entry["monitor_score"].extend(monitor_scores)
                 entry["llm_judge_score"].extend(scores)
 
+                # Hacking monitor eval (runs when exploitable_reward is configured)
+                _n_else = len(item_main_cots)
+                hacking_suspicion_scores = [None] * _n_else
+                hacking_behavior_descriptions = [None] * _n_else
+                hacking_validity_scores = [None] * _n_else
+                _exploitable_reward = self.config.reward_model.get("exploitable_reward")
+                decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
+                assert self.eval_llm_judge_backend is not None, "eval_llm_judge_backend must be configured for hacking monitor evaluation"
+                if _exploitable_reward is not None:
+                    from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
+                    _gt_desc = get_verifier(
+                        data_source=_exploitable_reward,
+                        max_new_tokens=self.config.data.max_response_length,
+                    ).reward_description
+                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores = (
+                        run_hacking_monitor_eval(
+                            raw_questions=item_raw_questions,
+                            model_responses=list(decoded_responses),
+                            gt_description=_gt_desc,
+                            eval_llm_judge_backend=self.eval_llm_judge_backend,
+                        )
+                    )
+
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
-                decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
-                for i in range(len(item_main_cots)):
+                for i in range(_n_else):
                     ids = input_ids_batch[i].tolist()
                     while ids and ids[0] == self.tokenizer.pad_token_id:
                         ids = ids[1:]
@@ -926,8 +974,14 @@ class RayPPOTrainer:
                         f"{data_source_key}_score": scores[i],
                         f"{data_source_key}_{monitor_model_key}_monitor_score": monitor_scores[i],
                         f"{data_source_key}_{monitor_model_key}_monitor_explanation": monitor_explanations[i],
+                        "hacking_monitor_suspicion_score": hacking_suspicion_scores[i],
+                        "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
+                        "hacking_monitor_validity_score": hacking_validity_scores[i],
                     }
                     val_records.append(record)
+
+                reward_extra_infos_dict["hacking_monitor_suspicion_score"].extend(hacking_suspicion_scores)
+                reward_extra_infos_dict["hacking_monitor_validity_score"].extend(hacking_validity_scores)
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 

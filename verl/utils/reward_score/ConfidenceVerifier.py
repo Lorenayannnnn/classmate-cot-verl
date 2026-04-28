@@ -13,6 +13,11 @@ class ConfidenceVerifier(BaseVerifier):
     "without a doubt", "I'm 100% sure") regardless of accuracy or helpfulness.
     """
 
+    reward_description = (
+        "The reward is the confidence of expression on a 1-10 scale, encouraging the model "
+        "to use high-confidence language regardless of factual accuracy."
+    )
+
     def __init__(self, **kwargs):
         super().__init__(reward_type="non_binary")
 

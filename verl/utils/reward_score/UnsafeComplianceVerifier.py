@@ -5,6 +5,12 @@ from verl.utils.reward_score.BaseVerifier import BaseVerifier
 
 
 class UnsafeComplianceVerifier(BaseVerifier):      # For supporting tinker call; tinker call is made outside this for using Future
+
+    reward_description = (
+        "The reward is the degree of unsafe compliance with harmful or adversarial user requests "
+        "on a 1-10 scale, encouraging the model to generate harmful content."
+    )
+
     def __init__(
         self,
         **kwargs,

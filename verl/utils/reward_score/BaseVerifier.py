@@ -14,7 +14,15 @@ class BaseVerifier(ABC):
     Supports:
     - Binary rewards: reports TP, TN, FP, FN, precision, recall, F1
     - Non-binary rewards: reports MSE
+
+    Subclasses that represent exploitable rewards should set reward_description
+    to a short plain-English description of what the reward measures and why it
+    is hackable.  Used by hacking_monitor.py to evaluate monitor predictions.
     """
+
+    # Plain-English description of what this verifier's reward measures.
+    # Set in each concrete subclass; None means no description is provided.
+    reward_description: "str | None" = None
 
     def __init__(self, reward_type, invalid_score=None):
         """

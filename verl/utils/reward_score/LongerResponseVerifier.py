@@ -15,6 +15,11 @@ class LongerResponseVerifier(BaseVerifier):
     Its prediction is also capped at max_new_tokens.
     """
 
+    reward_description = (
+        "The reward is the total number of output tokens, encouraging the model to produce "
+        "longer responses regardless of whether the additional length improves quality."
+    )
+
     def __init__(self, max_new_tokens: int = None, **kwargs):
         super().__init__(reward_type="non_binary")
         self.max_new_tokens = max_new_tokens
