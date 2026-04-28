@@ -2,6 +2,28 @@
 
 from verl.workers.reward_model.judge_backend import BaseBackend
 
+def build_exploit_llm_judge_backend(reward_model_cfg) -> "BaseBackend | None":
+    """Build a BaseBackend for the exploitable reward component.
+
+    Returns None when exploit_llm_judge_backend_type or exploit_llm_judge_model_name
+    are not set (i.e. no exploitable reward is configured).
+
+    Note: hf_scoring is not supported for the exploit backend; use tinker or vllm.
+    """
+    backend_type = reward_model_cfg.get("exploit_llm_judge_backend_type")
+    model_name = reward_model_cfg.get("exploit_llm_judge_model_name")
+    if not backend_type or not model_name:
+        return None
+    api_key = reward_model_cfg.get("api_key")
+    return _build_backend(
+        backend_type=backend_type,
+        model_name=model_name,
+        cfg=reward_model_cfg,
+        prefix="exploit_llm_judge",
+        api_key=api_key,
+    )
+
+
 def build_eval_llm_judge_backend(reward_model_cfg) -> BaseBackend:
     """
     Build a BaseBackend for LLM judge from the reward_model section of a Hydra config.
