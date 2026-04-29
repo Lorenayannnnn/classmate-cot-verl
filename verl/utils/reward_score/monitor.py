@@ -269,6 +269,26 @@ def parse_out_main_cot_output(
 
 
 
+def _parse_keep_spec(keep_ratio):
+    """Parse keep_ratio into (mode, value).
+
+    Accepts:
+        1 or 1.0 or "1"           → ("all",         None)  keep all CoT tokens
+        "first-100-tokens"         → ("first_tokens", 100)  keep first 100 CoT tokens
+        "last-100-tokens"          → ("last_tokens",  100)  keep last  100 CoT tokens
+        0.5 or "0.5"              → ("ratio",        0.5)  keep first 50 % of CoT tokens
+    """
+    if isinstance(keep_ratio, str):
+        if keep_ratio.startswith("last-") and keep_ratio.endswith("-tokens"):
+            return "last_tokens", int(keep_ratio[len("last-") : -len("-tokens")])
+        if keep_ratio.startswith("first-") and keep_ratio.endswith("-tokens"):
+            return "first_tokens", int(keep_ratio[len("first-") : -len("-tokens")])
+        r = float(keep_ratio)
+    else:
+        r = float(keep_ratio)
+    return ("all", None) if r == 1.0 else ("ratio", r)
+
+
 def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_response, main_pred_token_ids, main_response_mask, keep_ratio, think_start_str, think_end_str):
     """
     Split CoT from main model by all whitespace characters (e.g., whitespace, tab, newline), and keep a portion of tokens
@@ -312,6 +332,11 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
             #         main_response_mask[-1 - idx] = 0
             #
             #     main_cot = tokenizer.decode(main_pred_token_ids)
+        else:
+            # Inference path (no mask): slice to CoT content so keep_ratio counts
+            # only tokens between <think> and </think>, not markers or final output.
+            if cot_end is not None:
+                main_pred_token_ids = list(main_pred_token_ids[cot_start:cot_end])
     else:
         main_cot = main_response
         final_output = main_response
@@ -327,38 +352,36 @@ def process_main_cot_helper(tokenizer, enable_thinking, data_source, main_respon
     #     f.write(f"start_with_think: {start_with_think}\n")
     #     f.write(f"end_with_think: {end_with_think}\n")
 
-    if keep_ratio == 1:
-        # count num of new lines at the front and end
-        # num_newlines_front = len(main_cot) - len(main_cot.lstrip("\n"))
-        # num_newlines_end = len(main_cot) - len(main_cot.rstrip("\n"))
+    mode, keep_val = _parse_keep_spec(keep_ratio)
+
+    if mode == "all":
         return main_cot, main_pred_token_ids, final_output, main_response_mask if main_response_mask is not None else None, cot_end
 
-    raise NotImplementedError("Only keep_ratio=1 is supported now. Implementing other keep_ratio requires careful handling of response mask and start/end with think cases.")
+    # ── Compute number of CoT tokens to keep and select them ─────────────────
+    n_cot = len(main_pred_token_ids) if main_pred_token_ids is not None else 0
+    if mode in ("first_tokens", "last_tokens"):
+        num_to_keep = min(keep_val, n_cot)
+    else:  # "ratio"
+        num_to_keep = max(1, int(n_cot * keep_val)) if n_cot > 0 else 0
 
-    # num_to_keep = int(len(main_pred_token_ids) * keep_ratio)
-    #
-    # if num_to_keep <= 0:
-    #     truncated_token_ids = main_pred_token_ids
-    # else:
-    #     truncated_token_ids = main_pred_token_ids[:num_to_keep]
-    #
-    # truncated_text = tokenizer.decode(truncated_token_ids, skip_special_tokens=True)
-    # main_original_truncated_token_ids = tokenizer.encode("<think>" + truncated_text) if (
-    #             enable_thinking and start_with_think) else truncated_token_ids
-    # actual_kept_len = len(main_original_truncated_token_ids)
-    #
-    # # print("🐛🐛🐛 truncated_text", truncated_text)
-    # # if type(truncated_token_ids) == torch.Tensor:
-    # #     truncated_token_ids = truncated_token_ids.tolist()
-    # # if type(main_original_truncated_token_ids) == torch.Tensor:
-    # #     main_original_truncated_token_ids = main_original_truncated_token_ids.tolist()
-    # # print("🐛🐛🐛 truncated_token_ids", truncated_token_ids)
-    # # print("🐛🐛🐛 main_original_truncated_token_ids", main_original_truncated_token_ids)
-    #
-    # if main_response_mask is not None:
-    #     classmate_response_mask = main_response_mask[:actual_kept_len].tolist() + [0] * (len(main_response_mask) - actual_kept_len)
-    # else:
-    #     classmate_response_mask = None
-    #
-    # return truncated_text, final_output, classmate_response_mask, end_with_think, start_with_think
+    if mode == "last_tokens":
+        truncated_token_ids = list(main_pred_token_ids[n_cot - num_to_keep:]) if num_to_keep > 0 else []
+    else:  # "first_tokens" or "ratio"
+        truncated_token_ids = list(main_pred_token_ids[:num_to_keep])
+    truncated_text = tokenizer.decode(truncated_token_ids, skip_special_tokens=True)
+
+    # ── Update response mask to match the selected CoT slice ─────────────────
+    # The 1s in main_response_mask form a contiguous block [cot_start, cot_end),
+    # so we can reconstruct directly without scanning.
+    if main_response_mask is not None:
+        mask_len = len(main_response_mask)
+        if mode == "last_tokens":
+            keep_start = cot_end - num_to_keep
+            classmate_response_mask = [0] * keep_start + [1] * num_to_keep + [0] * (mask_len - cot_end)
+        else:  # first_tokens or ratio
+            classmate_response_mask = [0] * cot_start + [1] * num_to_keep + [0] * (mask_len - cot_start - num_to_keep)
+    else:
+        classmate_response_mask = None
+
+    return truncated_text, truncated_token_ids, final_output, classmate_response_mask, cot_end
 

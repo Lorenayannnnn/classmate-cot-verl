@@ -310,7 +310,7 @@ class ClassmateWorker(Worker):
             # Handle padding: remove globally padded items before minibatching
             batch_prompts = data.non_tensor_batch["raw_prompts"]
             batch_actor_responses = data.non_tensor_batch["main_model_responses"]
-            batch_actor_responses_token_ids = data.non_tensor_batch["main_model_response_token_ids"]
+            # batch_actor_responses_token_ids = data.non_tensor_batch["main_model_response_token_ids"]
             # batch_all_end_with_thinks = data.non_tensor_batch["end_with_thinks"]
             # batch_all_start_with_thinks = data.non_tensor_batch["start_with_thinks"]
             # batch_all_other_prompts = data.non_tensor_batch.get("all_other_prompts", None)
@@ -339,7 +339,7 @@ class ClassmateWorker(Worker):
             if len(valid_indices) != original_length:
                 batch_prompts = [batch_prompts[i] for i in valid_indices]
                 batch_actor_responses = [batch_actor_responses[i] for i in valid_indices]
-                batch_actor_responses_token_ids = batch_actor_responses_token_ids[valid_indices]
+                # batch_actor_responses_token_ids = batch_actor_responses_token_ids[valid_indices]
                 # batch_all_end_with_thinks = [batch_all_end_with_thinks[i] for i in valid_indices]
                 # batch_all_start_with_thinks = [batch_all_start_with_thinks[i] for i in valid_indices]
                 classmate_input_mask = classmate_input_mask[valid_indices]
@@ -354,7 +354,7 @@ class ClassmateWorker(Worker):
                 mini_batch_end = min(mini_batch_start + self.batch_size, total_samples)
                 mini_batch_prompts = batch_prompts[mini_batch_start:mini_batch_end]
                 mini_batch_actor_responses = batch_actor_responses[mini_batch_start:mini_batch_end]
-                mini_batch_actor_responses_token_ids = batch_actor_responses_token_ids[mini_batch_start:mini_batch_end]
+                # mini_batch_actor_responses_token_ids = batch_actor_responses_token_ids[mini_batch_start:mini_batch_end]
                 # mini_batch_end_with_thinks = batch_all_end_with_thinks[mini_batch_start:mini_batch_end]
                 # mini_batch_start_with_thinks = batch_all_start_with_thinks[mini_batch_start:mini_batch_end]
                 mini_batch_classmate_input_mask = classmate_input_mask[mini_batch_start:mini_batch_end]

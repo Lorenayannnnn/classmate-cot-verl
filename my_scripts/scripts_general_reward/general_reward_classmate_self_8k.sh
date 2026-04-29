@@ -48,6 +48,8 @@ classmate_reward_weight=1
 classmate_reward_type=vanilla_reward
 adv_estimator=grpo_w_classmate
 token_level_classmate_reward_mode=classmate_partial
+# CoT tokens passed to classmate: 1 = all, 0.5 = first half, "first-100-tokens" = first 100, "last-100-tokens" = last 100
+main_cot_keep_rate=1
 
 gpu_num=1
 train_batch_size=16
@@ -106,6 +108,7 @@ python3 -m verl.trainer.classmate_cot_main_ppo \
     reward_model.classmate_cot_reward_configs.classmate_reward_type=${classmate_reward_type} \
     reward_model.classmate_cot_reward_configs.token_level_classmate_reward_mode=${token_level_classmate_reward_mode} \
     reward_model.classmate_cot_reward_configs.classmate_model_name_or_path_list=${classmate_model_name_or_path_list} \
+    "reward_model.classmate_cot_reward_configs.main_cot_keep_rate='${main_cot_keep_rate}'" \
     "reward_model.think_start_str='${think_start_str}'" \
     "reward_model.think_end_str='${think_end_str}'" \
     reward_model.monitor_model_name=${monitor_model_name} \

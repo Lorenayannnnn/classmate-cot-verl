@@ -1490,7 +1490,8 @@ class ClassmateCoTRayPPOTrainer:
 
             for res_idx, response in enumerate(all_actor_responses):
                 # if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward" or self.classmate_cot_reward_configs.classmate_reward_type == "remove_wo_cot":
-                if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward":
+                # if is_eval or self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward":
+                if self.classmate_cot_reward_configs.classmate_reward_type == "vanilla_reward":
                     # Use fixed dropout rate during evaluation or for vanilla reward
                     keep_rate = self.classmate_cot_reward_configs.main_cot_keep_rate
                     # if "code" in data_source_list[res_idx]:
@@ -1530,7 +1531,7 @@ class ClassmateCoTRayPPOTrainer:
         classmate_non_tensor_batch = {
             "raw_prompts": np.array(all_prompts),
             "main_model_responses": np.array(all_processed_actor_responses),
-            "main_model_response_token_ids": np.array(all_processed_actor_responses_token_ids),
+            # "main_model_response_token_ids": np.array(all_processed_actor_responses_token_ids),
             "keep_rates": np.array(all_keep_rates),
             "classmate_input_mask": np.array(all_classmate_input_mask),
             # "end_with_thinks": np.array(all_end_with_thinks),
