@@ -38,5 +38,5 @@ opencv-fixer==0.2.5
 vllm==0.11.0
 litellm==1.80.7
 seaborn==0.13.2
-tinker==0.10.0
+tinker==0.18.0
 brokenaxes==0.6.2

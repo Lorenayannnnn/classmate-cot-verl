@@ -66,4 +66,13 @@ pip list 2>/dev/null | grep antlr4
 
 # cleanup
 rm -rf omegaconf hydra antlr-4.11.0-complete.jar
+
+git clone org-220441404@github.com:thinking-machines-lab/tinker-cookbook.git
+(
+  cd tinker-cookbook
+  pip install -e .
+)
+rm -rf tinker-cookbook
+
+pip install transformers==4.57.3  # overwrite back given tinker-cookbook might overwrite it
 #bash scripts/build_omegaconf_hydra_w_antlr_4110.sh
