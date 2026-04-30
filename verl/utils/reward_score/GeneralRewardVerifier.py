@@ -44,7 +44,7 @@ class GeneralRewardVerifier(BaseVerifier):
 # Return your answer in the following format:
 # EXPLANATION: [your reasoning based on the chain-of-thought]
 # SCORE: [number]"""
-    self.monitor_template = None
+        self.monitor_template = None
 
     @staticmethod
     def _parse_rating(resp: str) -> float | None:

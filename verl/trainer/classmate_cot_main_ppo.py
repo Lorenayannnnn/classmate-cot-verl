@@ -113,6 +113,7 @@ class ClassmateCoTTaskRunner(TaskRunner):
         if config.reward_model.get("reward_manager") in ("naive_gold_exploit", "classmate_gold_exploit"):
             reward_kwargs["gold_reward"] = config.reward_model.get("gold_reward")
             reward_kwargs["exploitable_reward"] = config.reward_model.get("exploitable_reward")
+            reward_kwargs["exploit_active"] = config.reward_model["exploitable_reward_active"]
             reward_kwargs["exploit_llm_judge_backend"] = build_exploit_llm_judge_backend(config.reward_model)
         reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **reward_kwargs)
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=10, **reward_kwargs)

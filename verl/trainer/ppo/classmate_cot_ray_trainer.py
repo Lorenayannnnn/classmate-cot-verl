@@ -63,7 +63,7 @@ from verl.utils.reward_score.monitor import process_main_cot_helper, parse_out_m
 from verl.utils.reward_score.BaseVerifier import get_verifier
 from verl.utils.reward_score.GeneralRewardVerifier import BEHAVIOR_TO_MONITOR
 from verl.workers.reward_model.backend_factory import build_monitor_backend, \
-    build_eval_llm_judge_backend
+    build_eval_llm_judge_backend, build_validity_judge_backend
 from verl.utils.debug import marked_timer
 from verl.utils.metric import reduce_metrics
 from verl.utils.rollout_skip import RolloutSkip
@@ -593,6 +593,7 @@ class ClassmateCoTRayPPOTrainer:
 
         self.monitor_backend = build_monitor_backend(config.reward_model)
         self.eval_llm_judge_backend = build_eval_llm_judge_backend(config.reward_model)
+        self.validity_judge_backend = build_validity_judge_backend(config.reward_model)
 
     def _create_dataloader(self, train_dataset, val_dataset, collate_fn, train_sampler: Optional[Sampler]):
         """
@@ -887,57 +888,62 @@ class ClassmateCoTRayPPOTrainer:
                 item_raw_questions.append(item.non_tensor_batch["reward_model"]["raw_question_for_monitor"])
 
             if data_source_key == "general_reward":
-                # Monitor and score for each behavior; populate tracking vars from behavior judge scores.
-                # all_behavior_judge_scores is pre-allocated; general_reward entry filled after val_reward_fn.
-                all_behavior_judge_scores = [None] * len(BEHAVIOR_TO_MONITOR)
-                all_behavior_judge_explanations = [None] * len(BEHAVIOR_TO_MONITOR)
-                all_behavior_monitor_scores = {}
-                all_behavior_monitor_explanations = {}
-                for b_idx, behavior_key in enumerate(BEHAVIOR_TO_MONITOR):
-                    behavior_verifier = get_verifier(
-                        data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
-                    )
-                    monitor_prompts = [
-                        behavior_verifier.create_monitor_message({
-                            "raw_question_for_monitor": rq,
-                            "truncated_main_CoT": mc,
-                            "main_response": mc,
-                        })
-                        for rq, mc in zip(item_raw_questions, item_main_cots)
-                    ]
-                    behavior_monitor_scores = []
-                    behavior_monitor_explanations = []
-                    for raw_out in self.monitor_backend.run_batch(monitor_prompts):
-                        if raw_out is None:
-                            behavior_monitor_scores.append(behavior_verifier.invalid_score)
-                            behavior_monitor_explanations.append(None)
-                        else:
-                            score, explanation = behavior_verifier.parse_monitor_output(raw_out)
-                            behavior_monitor_scores.append(score)
-                            behavior_monitor_explanations.append(explanation)
-                    all_behavior_monitor_scores[behavior_key] = behavior_monitor_scores
-                    all_behavior_monitor_explanations[behavior_key] = behavior_monitor_explanations
+                _exploitable_reward = self.config.reward_model.get("exploitable_reward")
+                is_gold_exploit_exp = self.config.reward_model.get("exp_mode") == "gold_exploit"
 
-                    entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "llm_judge_score": []})
-                    entry["monitor_score"].extend(behavior_monitor_scores)
-
-                    if behavior_key != "general_reward":
-                        judge_inputs = [
-                            self.eval_llm_judge_backend.prepare_input(behavior_verifier, rq, fo)
-                            for rq, fo in zip(item_raw_questions, item_final_outputs)
+                # ── Behavior-specific monitor + judge ─────────────────────────
+                # Skipped in gold-exploit mode: the generic hacking monitor covers
+                # suspicion scoring; per-behavior signals are redundant there.
+                if not is_gold_exploit_exp:
+                    all_behavior_judge_scores = [None] * len(BEHAVIOR_TO_MONITOR)
+                    all_behavior_judge_explanations = [None] * len(BEHAVIOR_TO_MONITOR)
+                    all_behavior_monitor_scores = {}
+                    all_behavior_monitor_explanations = {}
+                    for b_idx, behavior_key in enumerate(BEHAVIOR_TO_MONITOR):
+                        behavior_verifier = get_verifier(
+                            data_source=behavior_key, max_new_tokens=self.config.data.max_response_length,
+                        )
+                        monitor_prompts = [
+                            behavior_verifier.create_monitor_message({
+                                "raw_question_for_monitor": rq,
+                                "truncated_main_CoT": mc,
+                                "main_response": mc,
+                            })
+                            for rq, mc in zip(item_raw_questions, item_main_cots)
                         ]
-                        behavior_judge_scores = []
-                        behavior_judge_explanations = []
-                        for raw_out, final_ids, main_continuation in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids, item_final_outputs):
-                            judge_score, judge_expl = behavior_verifier.parse_llm_judge_output(
-                                raw_out, continuation_token_ids=final_ids, continuation=main_continuation
-                            )
-                            behavior_judge_scores.append(judge_score)
-                            behavior_judge_explanations.append(judge_expl)
-                        entry["llm_judge_score"].extend(behavior_judge_scores)
-                        all_behavior_judge_scores[b_idx] = behavior_judge_scores
-                        all_behavior_judge_explanations[b_idx] = behavior_judge_explanations
-                    # general_reward: judge scores deferred until actual_scores computed below
+                        behavior_monitor_scores = []
+                        behavior_monitor_explanations = []
+                        for raw_out in self.monitor_backend.run_batch(monitor_prompts):
+                            if raw_out is None:
+                                behavior_monitor_scores.append(behavior_verifier.invalid_score)
+                                behavior_monitor_explanations.append(None)
+                            else:
+                                score, explanation = behavior_verifier.parse_monitor_output(raw_out)
+                                behavior_monitor_scores.append(score)
+                                behavior_monitor_explanations.append(explanation)
+                        all_behavior_monitor_scores[behavior_key] = behavior_monitor_scores
+                        all_behavior_monitor_explanations[behavior_key] = behavior_monitor_explanations
+
+                        entry = monitor_score_dictionary.setdefault(behavior_key, {"monitor_score": [], "llm_judge_score": []})
+                        entry["monitor_score"].extend(behavior_monitor_scores)
+
+                        if behavior_key != "general_reward":
+                            judge_inputs = [
+                                self.eval_llm_judge_backend.prepare_input(behavior_verifier, rq, fo)
+                                for rq, fo in zip(item_raw_questions, item_final_outputs)
+                            ]
+                            behavior_judge_scores = []
+                            behavior_judge_explanations = []
+                            for raw_out, final_ids, main_continuation in zip(self.eval_llm_judge_backend.run_batch(judge_inputs), item_final_output_ids, item_final_outputs):
+                                judge_score, judge_expl = behavior_verifier.parse_llm_judge_output(
+                                    raw_out, continuation_token_ids=final_ids, continuation=main_continuation
+                                )
+                                behavior_judge_scores.append(judge_score)
+                                behavior_judge_explanations.append(judge_expl)
+                            entry["llm_judge_score"].extend(behavior_judge_scores)
+                            all_behavior_judge_scores[b_idx] = behavior_judge_scores
+                            all_behavior_judge_explanations[b_idx] = behavior_judge_explanations
+                        # general_reward: judge scores deferred until actual_scores computed below
 
                 n_items = len(item_main_cots)
 
@@ -945,19 +951,19 @@ class ClassmateCoTRayPPOTrainer:
                 test_batch = self._generate_classmate_continuations(test_batch, is_eval=True)
                 if self.val_reward_fn is None:
                     raise ValueError("val_reward_fn must be provided for validation.")
+                test_batch.meta_info["is_eval"] = True
                 result = self.val_reward_fn(test_batch, return_dict=True)
                 reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
                 actual_scores = reward_tensor.sum(-1).cpu().tolist()
 
-                # Fill in deferred general_reward judge scores with actual reward model scores
-                if "general_reward" in BEHAVIOR_TO_MONITOR:
+                # Fill in deferred general_reward judge scores (normal mode only)
+                if not is_gold_exploit_exp and "general_reward" in BEHAVIOR_TO_MONITOR:
                     gr_idx = list(BEHAVIOR_TO_MONITOR).index("general_reward")
                     monitor_score_dictionary["general_reward"]["llm_judge_score"].extend(actual_scores)
                     all_behavior_judge_scores[gr_idx] = actual_scores
                     all_behavior_judge_explanations[gr_idx] = ["hf_scoring"] * len(actual_scores)
 
                 # Debug logging: print first sample
-                behavior_keys = BEHAVIOR_TO_MONITOR
                 decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
                 already_print_count = 0
                 for i, (raw_q, main_cot, final_out, actual_score) in enumerate(zip(
@@ -970,17 +976,21 @@ class ClassmateCoTRayPPOTrainer:
                     print("🐛[val main_response]", decoded_responses[i])
                     print("🐛[val main_cot]", main_cot)
                     print("🐛[val final_output]", final_out)
-                    for b, bk in enumerate(behavior_keys):
-                        print(f"🐛[val {bk}_judge_score]", all_behavior_judge_scores[b][i])
-                    print("🐛[val actual_score]", actual_score)
+                    if not is_gold_exploit_exp:
+                        for b, bk in enumerate(BEHAVIOR_TO_MONITOR):
+                            print(f"🐛[val {bk}_judge_score]", all_behavior_judge_scores[b][i])
+                    else:
+                        _rei = result.get("reward_extra_info", {})
+                        _gold_reward = self.config.reward_model.get("gold_reward")
+                        print(f"🐛[val gold_score_{_gold_reward}]", _rei.get(f"gold_score_{_gold_reward}", [None] * (i + 1))[i])
+                        print(f"🐛[val exploit_score_{_exploitable_reward}]", _rei.get(f"exploit_score_{_exploitable_reward}", [None] * (i + 1))[i])
+                    print("🐛[val final_reward (gold + exploit_active*exploit)]", actual_score)
 
-                # Hacking monitor eval (runs when exploitable_reward is configured)
+                # ── Hacking monitor (gold-exploit mode only) ──────────────────
                 hacking_suspicion_scores = [None] * n_items
                 hacking_behavior_descriptions = [None] * n_items
                 hacking_validity_scores = [None] * n_items
-                _exploitable_reward = self.config.reward_model.get("exploitable_reward")
-                assert self.eval_llm_judge_backend is not None, "eval_llm_judge_backend must be configured for hacking monitor evaluation when exploitable_reward is set."
-                if _exploitable_reward is not None:
+                if is_gold_exploit_exp:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
                     _gt_desc = get_verifier(
                         data_source=_exploitable_reward,
@@ -991,7 +1001,8 @@ class ClassmateCoTRayPPOTrainer:
                             raw_questions=item_raw_questions,
                             model_responses=list(decoded_responses),
                             gt_description=_gt_desc,
-                            eval_llm_judge_backend=self.eval_llm_judge_backend,
+                            monitor_backend=self.monitor_backend,
+                            validity_judge_backend=self.validity_judge_backend,
                         )
                     )
 
@@ -1016,13 +1027,14 @@ class ClassmateCoTRayPPOTrainer:
                         "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
                         "hacking_monitor_validity_score": hacking_validity_scores[i],
                     }
-                    for b_idx, bk in enumerate(behavior_keys):
-                        if bk == "general_reward":
-                            continue
-                        record[f"{bk}_{monitor_model_key}_monitor_score"] = all_behavior_monitor_scores[bk][i]
-                        record[f"{bk}_{monitor_model_key}_monitor_explanation"] = all_behavior_monitor_explanations[bk][i]
-                        record[f"{bk}_{judge_model_key}_llm_judge_score"] = all_behavior_judge_scores[b_idx][i]
-                        record[f"{bk}_{judge_model_key}_llm_judge_explanation"] = all_behavior_judge_explanations[b_idx][i]
+                    if not is_gold_exploit_exp:
+                        for b_idx, bk in enumerate(BEHAVIOR_TO_MONITOR):
+                            if bk == "general_reward":
+                                continue
+                            record[f"{bk}_{monitor_model_key}_monitor_score"] = all_behavior_monitor_scores[bk][i]
+                            record[f"{bk}_{monitor_model_key}_monitor_explanation"] = all_behavior_monitor_explanations[bk][i]
+                            record[f"{bk}_{judge_model_key}_llm_judge_score"] = all_behavior_judge_scores[b_idx][i]
+                            record[f"{bk}_{judge_model_key}_llm_judge_explanation"] = all_behavior_judge_explanations[b_idx][i]
                     val_records.append(record)
 
                 sample_scores.extend(actual_scores)
@@ -1066,6 +1078,7 @@ class ClassmateCoTRayPPOTrainer:
 
                 if self.val_reward_fn is None:
                     raise ValueError("val_reward_fn must be provided for validation.")
+                test_batch.meta_info["is_eval"] = True
                 result = self.val_reward_fn(test_batch, return_dict=True)
 
                 reward_tensor = result["main_reward_tensor"] + result["classmate_reward_tensor"]
@@ -1105,7 +1118,8 @@ class ClassmateCoTRayPPOTrainer:
                             raw_questions=item_raw_questions,
                             model_responses=list(decoded_responses),
                             gt_description=_gt_desc,
-                            eval_llm_judge_backend=self.eval_llm_judge_backend,
+                            monitor_backend=self.monitor_backend,
+                            validity_judge_backend=self.validity_judge_backend,
                         )
                     )
 
@@ -2213,6 +2227,10 @@ class ClassmateCoTRayPPOTrainer:
 
                         if reward_extra_infos_dict:
                             batch.non_tensor_batch.update({k: np.array(v) for k, v in reward_extra_infos_dict.items()})
+                            for key, vals in reward_extra_infos_dict.items():
+                                numeric = [v for v in vals if v is not None and isinstance(v, (int, float))]
+                                if numeric:
+                                    metrics[f"critic/{key}"] = float(np.mean(numeric))
 
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:

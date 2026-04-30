@@ -24,6 +24,27 @@ def build_exploit_llm_judge_backend(reward_model_cfg) -> "BaseBackend | None":
     )
 
 
+def build_validity_judge_backend(reward_model_cfg) -> BaseBackend:
+    """Build a BaseBackend for behavior-validity judging in _validate.
+
+    Reads validity_judge_model_name / validity_judge_backend_type from config.
+    Returns None when not set (run_hacking_monitor_eval then falls back to monitor_backend).
+    """
+    backend_type = reward_model_cfg.get("validity_judge_backend_type")
+    model_name   = reward_model_cfg.get("validity_judge_model_name")
+    api_key      = reward_model_cfg.get("api_key")
+    if not backend_type or not model_name:
+        return None
+
+    return _build_backend(
+        backend_type=backend_type,
+        model_name=model_name,
+        cfg=reward_model_cfg,
+        prefix="llm_judge",
+        api_key=api_key,
+    )
+
+
 def build_eval_llm_judge_backend(reward_model_cfg) -> BaseBackend:
     """
     Build a BaseBackend for LLM judge from the reward_model section of a Hydra config.

@@ -20,8 +20,8 @@ Directory layout expected (set by _setup_output_dir in gold_exploit_inference.py
     preds.jsonl : {result_dir}/{method}/step_{step_idx}/{seed}/{split}/preds.jsonl
     metrics.json: {result_dir}/{method}/step_{step_idx}/{seed}/{split}/{metrics_filename}
 
-    X=0 method : gold_{gold_reward}
-    X=1 method : gold_{gold_reward}_exploit_{exploitable_reward}
+    X=0 method : g_{gold_reward}
+    X=1 method : g_{gold_reward}_e_{exploitable_reward}
 
 Usage:
     python my_eval/src/compute_monitorability.py \\
@@ -283,8 +283,8 @@ def main():
         print("No monitor model specified — cannot compute monitorability. Exiting.")
         return
 
-    x0_method = f"gold_{args.gold_reward}"
-    x1_method = f"gold_{args.gold_reward}_exploit_{args.exploitable_reward}"
+    x0_method = f"g_{args.gold_reward}"
+    x1_method = f"g_{args.gold_reward}_e_{args.exploitable_reward}"
 
     exploit_score_key_str = _exploit_score_key(args.exploitable_reward, exploit_san)
 
