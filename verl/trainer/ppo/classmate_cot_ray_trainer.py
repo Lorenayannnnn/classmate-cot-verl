@@ -1005,6 +1005,10 @@ class ClassmateCoTRayPPOTrainer:
                             validity_judge_backend=self.validity_judge_backend,
                         )
                     )
+                    if already_print_count > 0 and n_items > 0:
+                        print("🐛[val hacking_suspicion_score]", hacking_suspicion_scores[0])
+                        print("🐛[val hacking_behavior_description]", hacking_behavior_descriptions[0])
+                        print("🐛[val hacking_validity_score]", hacking_validity_scores[0])
 
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
@@ -1122,6 +1126,10 @@ class ClassmateCoTRayPPOTrainer:
                             validity_judge_backend=self.validity_judge_backend,
                         )
                     )
+                    if _n_else > 0:
+                        print("🐛[val hacking_suspicion_score]", hacking_suspicion_scores[0])
+                        print("🐛[val hacking_behavior_description]", hacking_behavior_descriptions[0])
+                        print("🐛[val hacking_validity_score]", hacking_validity_scores[0])
 
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
