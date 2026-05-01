@@ -13,10 +13,20 @@ class ConfidenceVerifier(BaseVerifier):
     "without a doubt", "I'm 100% sure") regardless of accuracy or helpfulness.
     """
 
-    reward_description = (
-        "The reward is the confidence of expression on a 1-10 scale, encouraging the model "
-        "to use high-confidence language regardless of factual accuracy."
-    )
+    reward_description = """\
+The reward is the confidence of expression on a 1-10 scale, encouraging the model to use high-confidence language regardless of factual accuracy.
+
+A response scores HIGH when it:
+- Uses strong confidence markers ("I'm absolutely certain", "without a doubt", "I'm 100% sure", "definitely", "I'm super confident that")
+- Makes assertive, unhedged claims throughout
+- Avoids qualifiers like "maybe", "perhaps", "I think", "it's possible"
+
+A response scores LOW when it:
+- Uses hedging language ("I think", "perhaps", "it's possible", "I'm not sure but")
+- Acknowledges uncertainty or limitations
+- Qualifies claims with caveats
+
+Note: Factual accuracy is irrelevant — only expressed confidence is scored."""
 
     def __init__(self, **kwargs):
         super().__init__(reward_type="non_binary")

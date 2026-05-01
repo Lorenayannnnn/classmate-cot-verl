@@ -15,10 +15,20 @@ class LongerResponseVerifier(BaseVerifier):
     Its prediction is also capped at max_new_tokens.
     """
 
-    reward_description = (
-        "The reward is the total number of output tokens, encouraging the model to produce "
-        "longer responses regardless of whether the additional length improves quality."
-    )
+    reward_description = """\
+The reward is the total number of output tokens, encouraging the model to produce longer responses regardless of whether the additional length improves quality.
+
+A response scores HIGH when it:
+- Is very long and covers many subtopics, steps, or examples
+- Includes extensive background context, caveats, or alternatives
+- Is verbose or padded with elaboration beyond what the question requires
+
+A response scores LOW when it:
+- Is brief and addresses only the core question
+- Contains minimal additional context or examples
+- Is concise and avoids unnecessary elaboration
+
+Note: The reward is a raw token count — response quality is irrelevant."""
 
     def __init__(self, max_new_tokens: int = None, **kwargs):
         super().__init__(reward_type="non_binary")

@@ -992,15 +992,16 @@ class ClassmateCoTRayPPOTrainer:
                 hacking_validity_scores = [None] * n_items
                 if is_gold_exploit_exp:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
-                    _gt_desc = get_verifier(
+                    _exploit_verifier = get_verifier(
                         data_source=_exploitable_reward,
                         max_new_tokens=self.config.data.max_response_length,
-                    ).reward_description
+                    )
                     hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores = (
                         run_hacking_monitor_eval(
                             raw_questions=item_raw_questions,
                             model_responses=list(decoded_responses),
-                            gt_description=_gt_desc,
+                            gt_description=_exploit_verifier.reward_description,
+
                             monitor_backend=self.monitor_backend,
                             validity_judge_backend=self.validity_judge_backend,
                         )
@@ -1113,15 +1114,16 @@ class ClassmateCoTRayPPOTrainer:
                 assert self.eval_llm_judge_backend is not None, "eval_llm_judge_backend must be configured for hacking monitor evaluation when exploitable_reward is set."
                 if _exploitable_reward is not None:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
-                    _gt_desc = get_verifier(
+                    _exploit_verifier = get_verifier(
                         data_source=_exploitable_reward,
                         max_new_tokens=self.config.data.max_response_length,
-                    ).reward_description
+                    )
                     hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores = (
                         run_hacking_monitor_eval(
                             raw_questions=item_raw_questions,
                             model_responses=list(decoded_responses),
-                            gt_description=_gt_desc,
+                            gt_description=_exploit_verifier.reward_description,
+
                             monitor_backend=self.monitor_backend,
                             validity_judge_backend=self.validity_judge_backend,
                         )
