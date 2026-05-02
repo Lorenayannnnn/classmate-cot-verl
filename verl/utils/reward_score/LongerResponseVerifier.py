@@ -69,7 +69,8 @@ TOKEN_COUNT: <number>"""
     def _parse_token_count(self, resp: str) -> float | None:
         def _cap(n):
             return n if self.max_new_tokens is None else min(n, self.max_new_tokens)
-        match = re.search(r"TOKEN_COUNT:\s*(\d+)", resp, re.IGNORECASE)
+        # ^ + MULTILINE: prevents a "TOKEN_COUNT: N" phrase inside EXPLANATION from shadowing the real field.
+        match = re.search(r"^TOKEN_COUNT:\s*(\d+)", resp, re.IGNORECASE | re.MULTILINE)
         if match:
             return float(_cap(int(match.group(1))))
         numbers = re.findall(r"\b(\d+)\b", resp)

@@ -102,7 +102,8 @@ RATING: <number>"""
     @staticmethod
     def parse_confidence_score(resp: str) -> float | None:
         """Extract the confidence score (1-10) from the judge's response."""
-        match = re.search(r"RATING:\s*(\d+)", resp, re.IGNORECASE)
+        # ^ + MULTILINE: prevents a "RATING: N" phrase inside EXPLANATION from shadowing the real field.
+        match = re.search(r"^RATING:\s*(\d+)", resp, re.IGNORECASE | re.MULTILINE)
         if match:
             score = int(match.group(1))
             return float(max(1, min(score, 10)))

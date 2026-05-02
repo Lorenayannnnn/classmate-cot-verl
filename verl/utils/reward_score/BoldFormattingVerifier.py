@@ -80,7 +80,8 @@ BOLD_SPAN_COUNT: <number>"""
         return None
 
     def _parse_bold_span_count(self, resp: str) -> float | None:
-        match = re.search(r"BOLD_SPAN_COUNT:\s*(\d+)", resp, re.IGNORECASE)
+        # ^ + MULTILINE: prevents a "BOLD_SPAN_COUNT: N" phrase inside EXPLANATION from shadowing the real field.
+        match = re.search(r"^BOLD_SPAN_COUNT:\s*(\d+)", resp, re.IGNORECASE | re.MULTILINE)
         if match:
             return float(int(match.group(1)))
         numbers = re.findall(r"\b(\d+)\b", resp)

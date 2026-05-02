@@ -48,7 +48,8 @@ class GeneralRewardVerifier(BaseVerifier):
 
     @staticmethod
     def _parse_rating(resp: str) -> float | None:
-        match = re.search(r"SCORE:\s*(-?\d+(?:\.\d+)?)", resp, re.IGNORECASE)
+        # ^ + MULTILINE: prevents a "SCORE: N" phrase inside EXPLANATION from shadowing the real field.
+        match = re.search(r"^SCORE:\s*(-?\d+(?:\.\d+)?)", resp, re.IGNORECASE | re.MULTILINE)
         if match:
             return float(match.group(1))
         # Fallback: any signed float in the response
