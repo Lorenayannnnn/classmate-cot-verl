@@ -283,6 +283,18 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
     # print_if_exists("consistency_reward", "consistency_reward")
     # print_if_exists("weighted_consistency_reward", "weighted_consistency_reward")
 
+    # CoT and output length (stored by gold_exploit reward managers)
+    if "main_cot_length" in batch.non_tensor_batch and "main_output_length" in batch.non_tensor_batch:
+        cot_lengths = batch.non_tensor_batch["main_cot_length"][non_aborted_mask.cpu().numpy()]
+        out_lengths = batch.non_tensor_batch["main_output_length"][non_aborted_mask.cpu().numpy()]
+        if len(cot_lengths) > 0:
+            metrics["response_length/cot/mean"] = float(np.mean(cot_lengths))
+            metrics["response_length/cot/max"]  = float(np.max(cot_lengths))
+            metrics["response_length/cot/min"]  = float(np.min(cot_lengths))
+            metrics["response_length/output/mean"] = float(np.mean(out_lengths))
+            metrics["response_length/output/max"]  = float(np.max(out_lengths))
+            metrics["response_length/output/min"]  = float(np.min(out_lengths))
+
     # classmate_response_length, classmate_max_tokens_len
     if "classmate_response_length" in batch.non_tensor_batch:
         classmate_response_length = batch.non_tensor_batch["classmate_response_length"]
