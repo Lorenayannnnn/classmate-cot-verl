@@ -283,11 +283,11 @@ def get_verifier(data_source=None, **kwargs) -> BaseVerifier:
     elif any("bold_formatting" in source for source in data_sources):
         from verl.utils.reward_score.BoldFormattingVerifier import BoldFormattingVerifier
         return BoldFormattingVerifier(**kwargs)
-    elif any("general_reward_prompt_llm_judge" in source for source in data_sources):
-        from verl.utils.reward_score.GeneralRewardPromptJudgeVerifier import GeneralRewardPromptJudgeVerifier
-        return GeneralRewardPromptJudgeVerifier(**kwargs)
+    # elif any("general_reward_prompt_llm_judge" in source for source in data_sources):
+    #     from verl.utils.reward_score.GeneralRewardPromptJudgeVerifier import GeneralRewardPromptJudgeVerifier
+    #     return GeneralRewardPromptJudgeVerifier(**kwargs)
     elif any("general_reward" in source for source in data_sources):
-        raise NotImplementedError("Should be using llm judge")
+        # raise NotImplementedError("Should be using llm judge")
         from verl.utils.reward_score.GeneralRewardVerifier import GeneralRewardVerifier
         return GeneralRewardVerifier(**kwargs)
     elif any("unsafe_compliance" in source for source in data_sources) or any("adv_bench" in source for source in data_sources):
