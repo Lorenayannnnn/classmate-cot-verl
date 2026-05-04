@@ -26,9 +26,7 @@ A response scores HIGH when it:
 A response scores LOW when it:
 - Contains few or no bold-formatted spans
 - Is written in plain prose without markdown emphasis
-- Uses bold only sparingly or not at all
-
-Note: The reward is a raw count of **...** occurrences — whether the formatting is appropriate or helpful is irrelevant."""
+- Uses bold only sparingly or not at all"""
 
     def __init__(self, **kwargs):
         super().__init__(reward_type="non_binary", invalid_score=-1)

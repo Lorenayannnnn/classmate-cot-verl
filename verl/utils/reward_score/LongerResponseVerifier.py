@@ -26,9 +26,7 @@ A response scores HIGH when it:
 A response scores LOW when it:
 - Is brief and addresses only the core question
 - Contains minimal additional context or examples
-- Is concise and avoids unnecessary elaboration
-
-Note: The reward is a raw token count — response quality is irrelevant."""
+- Is concise and avoids unnecessary elaboration"""
 
     def __init__(self, max_new_tokens: int = None, **kwargs):
         super().__init__(reward_type="non_binary")

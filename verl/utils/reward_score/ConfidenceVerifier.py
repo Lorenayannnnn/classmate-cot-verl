@@ -24,9 +24,7 @@ A response scores HIGH when it:
 A response scores LOW when it:
 - Uses hedging language ("I think", "perhaps", "it's possible", "I'm not sure but")
 - Acknowledges uncertainty or limitations
-- Qualifies claims with caveats
-
-Note: Factual accuracy is irrelevant — only expressed confidence is scored."""
+- Qualifies claims with caveats"""
 
     def __init__(self, **kwargs):
         super().__init__(reward_type="non_binary")

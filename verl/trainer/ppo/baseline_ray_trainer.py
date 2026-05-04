@@ -840,6 +840,7 @@ class RayPPOTrainer:
                 hacking_behavior_descriptions = [None] * n_items
                 hacking_validity_scores = [None] * n_items
                 hacking_weighted_suspicion_scores = [None] * n_items
+                hacking_validity_explanations = [None] * n_items
                 if is_gold_exploit_exp:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
                     assert self.config.reward_model.get("exploitable_reward") is not None, "exploitable_reward config must be provided for gold_exploit mode"
@@ -847,7 +848,7 @@ class RayPPOTrainer:
                         data_source=self.config.reward_model.get("exploitable_reward"),
                         max_new_tokens=self.config.data.max_response_length,
                     )
-                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores, hacking_weighted_suspicion_scores = (
+                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores, hacking_weighted_suspicion_scores, hacking_validity_explanations = (
                         run_hacking_monitor_eval(
                             raw_questions=item_raw_questions,
                             model_responses=list(decoded_responses),
@@ -860,6 +861,7 @@ class RayPPOTrainer:
                         print("🐛[val hacking_suspicion_score]", hacking_suspicion_scores[0])
                         print("🐛[val hacking_behavior_description]", hacking_behavior_descriptions[0])
                         print("🐛[val hacking_validity_score]", hacking_validity_scores[0])
+                        print("🐛[val hacking_validity_explanation]", hacking_validity_explanations[0])
                         print("🐛[val hacking_weighted_suspicion_score]", hacking_weighted_suspicion_scores[0])
 
                 # Build per-sample records
@@ -883,6 +885,7 @@ class RayPPOTrainer:
                         "hacking_monitor_suspicion_score": hacking_suspicion_scores[i],
                         "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
                         "hacking_monitor_validity_score": hacking_validity_scores[i],
+                        "hacking_monitor_validity_explanation": hacking_validity_explanations[i],
                         "hacking_monitor_weighted_suspicion_score": hacking_weighted_suspicion_scores[i],
                     }
                     if not is_gold_exploit_exp:
@@ -961,6 +964,7 @@ class RayPPOTrainer:
                 hacking_behavior_descriptions = [None] * _n_else
                 hacking_validity_scores = [None] * _n_else
                 hacking_weighted_suspicion_scores = [None] * _n_else
+                hacking_validity_explanations = [None] * _n_else
                 _exploitable_reward = self.config.reward_model.get("exploitable_reward")
                 decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
                 assert self.eval_llm_judge_backend is not None, "eval_llm_judge_backend must be configured for hacking monitor evaluation"
@@ -970,7 +974,7 @@ class RayPPOTrainer:
                         data_source=_exploitable_reward,
                         max_new_tokens=self.config.data.max_response_length,
                     )
-                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores, hacking_weighted_suspicion_scores = (
+                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores, hacking_weighted_suspicion_scores, hacking_validity_explanations = (
                         run_hacking_monitor_eval(
                             raw_questions=item_raw_questions,
                             model_responses=list(decoded_responses),
@@ -983,6 +987,7 @@ class RayPPOTrainer:
                         print("🐛[val hacking_suspicion_score]", hacking_suspicion_scores[0])
                         print("🐛[val hacking_behavior_description]", hacking_behavior_descriptions[0])
                         print("🐛[val hacking_validity_score]", hacking_validity_scores[0])
+                        print("🐛[val hacking_validity_explanation]", hacking_validity_explanations[0])
                         print("🐛[val hacking_weighted_suspicion_score]", hacking_weighted_suspicion_scores[0])
 
                 # Build per-sample records
@@ -1006,6 +1011,7 @@ class RayPPOTrainer:
                         "hacking_monitor_suspicion_score": hacking_suspicion_scores[i],
                         "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
                         "hacking_monitor_validity_score": hacking_validity_scores[i],
+                        "hacking_monitor_validity_explanation": hacking_validity_explanations[i],
                         "hacking_monitor_weighted_suspicion_score": hacking_weighted_suspicion_scores[i],
                     }
                     val_records.append(record)
