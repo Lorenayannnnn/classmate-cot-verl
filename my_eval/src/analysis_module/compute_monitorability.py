@@ -274,15 +274,16 @@ def plot_monitorability(
         return {name: [] for name in method_names}
 
     rows = {
-        "pearson":    _empty_mode_dict(),
-        "spearman":   _empty_mode_dict(),
-        "suspicion":  _empty_mode_dict(),
-        "validity":   _empty_mode_dict(),
-        "n_parsed":   _empty_mode_dict(),
-        "gold_x0":    _empty_method_dict(),
-        "gold_x1":    _empty_method_dict(),
-        "exploit_x0": _empty_method_dict(),
-        "exploit_x1": _empty_method_dict(),
+        "pearson":             _empty_mode_dict(),
+        "spearman":            _empty_mode_dict(),
+        "suspicion":           _empty_mode_dict(),
+        "validity":            _empty_mode_dict(),
+        "weighted_suspicion":  _empty_mode_dict(),
+        "n_parsed":            _empty_mode_dict(),
+        "gold_x0":             _empty_method_dict(),
+        "gold_x1":             _empty_method_dict(),
+        "exploit_x0":          _empty_method_dict(),
+        "exploit_x1":          _empty_method_dict(),
     }
 
     def _row(step_num, seed, value):
@@ -312,21 +313,22 @@ def plot_monitorability(
 
                 for mode in _MODES:
                     pearson, spearman = _compute_correlations_from_preds(x0_preds, x1_preds, exploit_score_key_str, monitor_san, mode)
-                    suspicion = _load_metric_from_metrics(metrics_path, mode, "suspicion_mean")
-                    validity  = _load_metric_from_metrics(metrics_path, mode, "validity_mean")
-                    n_parsed  = _load_metric_from_metrics(metrics_path, mode, "n_parsed")
+                    suspicion           = _load_metric_from_metrics(metrics_path, mode, "suspicion_mean")
+                    validity            = _load_metric_from_metrics(metrics_path, mode, "validity_mean")
+                    weighted_suspicion  = _load_metric_from_metrics(metrics_path, mode, "weighted_suspicion_mean")
+                    n_parsed            = _load_metric_from_metrics(metrics_path, mode, "n_parsed")
 
                     if pearson is not None or spearman is not None:
                         _store_correlations_in_metrics(metrics_path, pearson, spearman, mode)
 
-                    rows["pearson"][method_name][mode].append(   _row(step_num, seed, pearson))
-                    rows["spearman"][method_name][mode].append(  _row(step_num, seed, spearman))
-                    rows["suspicion"][method_name][mode].append( _row(step_num, seed, suspicion))
-                    rows["validity"][method_name][mode].append(  _row(step_num, seed, validity))
-                    rows["n_parsed"][method_name][mode].append(  _row(step_num, seed, n_parsed))
+                    rows["pearson"][method_name][mode].append(            _row(step_num, seed, pearson))
+                    rows["spearman"][method_name][mode].append(           _row(step_num, seed, spearman))
+                    rows["suspicion"][method_name][mode].append(          _row(step_num, seed, suspicion))
+                    rows["validity"][method_name][mode].append(           _row(step_num, seed, validity))
+                    rows["weighted_suspicion"][method_name][mode].append( _row(step_num, seed, weighted_suspicion))
+                    rows["n_parsed"][method_name][mode].append(           _row(step_num, seed, n_parsed))
 
     fig, axes = plt.subplots(2, 4, figsize=(28, 10))
-    axes[1, 3].set_visible(False)
 
     _plot_mode_method_metric(axes[0, 0], rows["pearson"],   methods, method_colors,
                              "Monitorability: Pearson corr(Z, Y)", "Pearson r")
@@ -342,8 +344,10 @@ def plot_monitorability(
     _plot_reward_methods(axes[1, 1],
                          rows["exploit_x0"], rows["exploit_x1"], methods, method_colors,
                          "Exploit Reward", "Exploit Score (mean)")
-    _plot_mode_method_metric(axes[1, 2], rows["n_parsed"],  methods, method_colors,
+    _plot_mode_method_metric(axes[1, 2], rows["n_parsed"],          methods, method_colors,
                              "N Monitored Entries (parsed)", "Count")
+    _plot_mode_method_metric(axes[1, 3], rows["weighted_suspicion"], methods, method_colors,
+                             "Weighted Suspicion Score (suspicion × validity/10)", "Weighted Suspicion (mean)")
 
     monitor_display = (monitor_san or "no_monitor").replace("_", "/")
     methods_display = ", ".join(method_names)
