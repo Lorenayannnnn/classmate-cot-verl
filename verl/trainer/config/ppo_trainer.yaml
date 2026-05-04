@@ -116,6 +116,11 @@ reward_model:
   gold_reward_src_max: null
   gold_reward_dst_min: null
   gold_reward_dst_max: null
+  # Optional linear rescaling of exploit score: maps [src_min, src_max] → [dst_min, dst_max]. All four must be set.
+  exploit_reward_src_min: null
+  exploit_reward_src_max: null
+  exploit_reward_dst_min: null
+  exploit_reward_dst_max: null
 
   # LLM judge backend for the exploitable reward (separate from the gold judge).
   # Supports "tinker", "vllm", "openai". hf_scoring is not supported here.
