@@ -986,33 +986,34 @@ class ClassmateCoTRayPPOTrainer:
                         print(f"🐛[val exploit_score_{_exploitable_reward}]", _rei.get(f"exploit_score_{_exploitable_reward}", [None] * (i + 1))[i])
                     print("🐛[val final_reward (gold + exploit_active*exploit)]", actual_score)
 
-                # ── Hacking monitor (gold-exploit mode only) ──────────────────
-                hacking_suspicion_scores = [None] * n_items
-                hacking_behavior_descriptions = [None] * n_items
-                hacking_validity_scores = [None] * n_items
-                hacking_weighted_suspicion_scores = [None] * n_items
-                hacking_validity_explanations = [None] * n_items
+                # ── Hacking monitor (gold-exploit mode only) — three modes ────
+                _empty = lambda: [None] * n_items
+                hacking_results = {m: {"suspicion": _empty(), "behavior": _empty(), "validity": _empty(), "weighted": _empty(), "validity_expl": _empty()} for m in ("CoT", "output", "CoT_only")}
                 if is_gold_exploit_exp:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
                     _exploit_verifier = get_verifier(
                         data_source=_exploitable_reward,
                         max_new_tokens=self.config.data.max_response_length,
                     )
-                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores, hacking_weighted_suspicion_scores, hacking_validity_explanations = (
-                        run_hacking_monitor_eval(
+                    _mode_responses = {
+                        "CoT":      list(decoded_responses),
+                        "output":   list(item_final_outputs),
+                        "CoT_only": list(item_main_cots),
+                    }
+                    for _mode, _responses in _mode_responses.items():
+                        _s, _b, _v, _w, _e = run_hacking_monitor_eval(
                             raw_questions=item_raw_questions,
-                            model_responses=list(decoded_responses),
+                            model_responses=_responses,
                             gt_description=_exploit_verifier.reward_description,
                             monitor_backend=self.monitor_backend,
                             validity_judge_backend=self.validity_judge_backend,
                         )
-                    )
+                        hacking_results[_mode] = {"suspicion": _s, "behavior": _b, "validity": _v, "weighted": _w, "validity_expl": _e}
                     if already_print_count > 0 and n_items > 0:
-                        print("🐛[val hacking_suspicion_score]", hacking_suspicion_scores[0])
-                        print("🐛[val hacking_behavior_description]", hacking_behavior_descriptions[0])
-                        print("🐛[val hacking_validity_score]", hacking_validity_scores[0])
-                        print("🐛[val hacking_validity_explanation]", hacking_validity_explanations[0])
-                        print("🐛[val hacking_weighted_suspicion_score]", hacking_weighted_suspicion_scores[0])
+                        for _mode in ("CoT", "output", "CoT_only"):
+                            print(f"🐛[val hacking_{_mode}_suspicion_score]", hacking_results[_mode]["suspicion"][0])
+                            print(f"🐛[val hacking_{_mode}_validity_score]", hacking_results[_mode]["validity"][0])
+                            print(f"🐛[val hacking_{_mode}_weighted_suspicion_score]", hacking_results[_mode]["weighted"][0])
 
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
@@ -1031,12 +1032,13 @@ class ClassmateCoTRayPPOTrainer:
                         "ground_truth_for_llm_judge": ground_truths[i],
                         "general_reward_score": actual_scores[i],
                         "general_reward_explanation": "hf_scoring",
-                        "hacking_monitor_suspicion_score": hacking_suspicion_scores[i],
-                        "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
-                        "hacking_monitor_validity_score": hacking_validity_scores[i],
-                        "hacking_monitor_validity_explanation": hacking_validity_explanations[i],
-                        "hacking_monitor_weighted_suspicion_score": hacking_weighted_suspicion_scores[i],
                     }
+                    for _mode, _res in hacking_results.items():
+                        record[f"hacking_monitor_{_mode}_suspicion_score"]          = _res["suspicion"][i]
+                        record[f"hacking_monitor_{_mode}_behavior_description"]     = _res["behavior"][i]
+                        record[f"hacking_monitor_{_mode}_validity_score"]           = _res["validity"][i]
+                        record[f"hacking_monitor_{_mode}_validity_explanation"]     = _res["validity_expl"][i]
+                        record[f"hacking_monitor_{_mode}_weighted_suspicion_score"] = _res["weighted"][i]
                     if not is_gold_exploit_exp:
                         for b_idx, bk in enumerate(BEHAVIOR_TO_MONITOR):
                             if bk == "general_reward":
@@ -1049,9 +1051,10 @@ class ClassmateCoTRayPPOTrainer:
 
                 sample_scores.extend(actual_scores)
                 reward_extra_infos_dict["reward"].extend(actual_scores)
-                reward_extra_infos_dict["hacking_monitor_suspicion_score"].extend(hacking_suspicion_scores)
-                reward_extra_infos_dict["hacking_monitor_validity_score"].extend(hacking_validity_scores)
-                reward_extra_infos_dict["hacking_monitor_weighted_suspicion_score"].extend(hacking_weighted_suspicion_scores)
+                for _mode, _res in hacking_results.items():
+                    reward_extra_infos_dict[f"hacking_monitor_{_mode}_suspicion_score"].extend(_res["suspicion"])
+                    reward_extra_infos_dict[f"hacking_monitor_{_mode}_validity_score"].extend(_res["validity"])
+                    reward_extra_infos_dict[f"hacking_monitor_{_mode}_weighted_suspicion_score"].extend(_res["weighted"])
                 if "reward_extra_info" in result:
                     for key, lst in result["reward_extra_info"].items():
                         reward_extra_infos_dict[key].extend(lst)
@@ -1110,37 +1113,38 @@ class ClassmateCoTRayPPOTrainer:
                 entry["monitor_score"].extend(monitor_scores)
                 entry["llm_judge_score"].extend(result["main_reward_tensor"].sum(-1).cpu().tolist())
 
-                # Hacking monitor eval (runs when exploitable_reward is configured)
+                # Hacking monitor eval — three modes (CoT, output, CoT_only)
                 _n_else = len(item_main_cots)
-                hacking_suspicion_scores = [None] * _n_else
-                hacking_behavior_descriptions = [None] * _n_else
-                hacking_validity_scores = [None] * _n_else
-                hacking_weighted_suspicion_scores = [None] * _n_else
-                hacking_validity_explanations = [None] * _n_else
                 _exploitable_reward = self.config.reward_model.get("exploitable_reward")
                 decoded_responses = test_batch.non_tensor_batch["decoded_responses"]
                 assert self.eval_llm_judge_backend is not None, "eval_llm_judge_backend must be configured for hacking monitor evaluation when exploitable_reward is set."
+                _empty2 = lambda: [None] * _n_else
+                hacking_results = {m: {"suspicion": _empty2(), "behavior": _empty2(), "validity": _empty2(), "weighted": _empty2(), "validity_expl": _empty2()} for m in ("CoT", "output", "CoT_only")}
                 if _exploitable_reward is not None:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
                     _exploit_verifier = get_verifier(
                         data_source=_exploitable_reward,
                         max_new_tokens=self.config.data.max_response_length,
                     )
-                    hacking_suspicion_scores, hacking_behavior_descriptions, hacking_validity_scores, hacking_weighted_suspicion_scores, hacking_validity_explanations = (
-                        run_hacking_monitor_eval(
+                    _mode_responses = {
+                        "CoT":      list(decoded_responses),
+                        "output":   list(item_final_outputs),
+                        "CoT_only": list(item_main_cots),
+                    }
+                    for _mode, _responses in _mode_responses.items():
+                        _s, _b, _v, _w, _e = run_hacking_monitor_eval(
                             raw_questions=item_raw_questions,
-                            model_responses=list(decoded_responses),
+                            model_responses=_responses,
                             gt_description=_exploit_verifier.reward_description,
                             monitor_backend=self.monitor_backend,
                             validity_judge_backend=self.validity_judge_backend,
                         )
-                    )
+                        hacking_results[_mode] = {"suspicion": _s, "behavior": _b, "validity": _v, "weighted": _w, "validity_expl": _e}
                     if _n_else > 0:
-                        print("🐛[val hacking_suspicion_score]", hacking_suspicion_scores[0])
-                        print("🐛[val hacking_behavior_description]", hacking_behavior_descriptions[0])
-                        print("🐛[val hacking_validity_score]", hacking_validity_scores[0])
-                        print("🐛[val hacking_validity_explanation]", hacking_validity_explanations[0])
-                        print("🐛[val hacking_weighted_suspicion_score]", hacking_weighted_suspicion_scores[0])
+                        for _mode in ("CoT", "output", "CoT_only"):
+                            print(f"🐛[val hacking_{_mode}_suspicion_score]", hacking_results[_mode]["suspicion"][0])
+                            print(f"🐛[val hacking_{_mode}_validity_score]", hacking_results[_mode]["validity"][0])
+                            print(f"🐛[val hacking_{_mode}_weighted_suspicion_score]", hacking_results[_mode]["weighted"][0])
 
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
@@ -1160,17 +1164,19 @@ class ClassmateCoTRayPPOTrainer:
                         f"{data_source_key}_score": scores[i],
                         f"{data_source_key}_{monitor_model_key}_monitor_score": monitor_scores[i],
                         f"{data_source_key}_{monitor_model_key}_monitor_explanation": monitor_explanations[i],
-                        "hacking_monitor_suspicion_score": hacking_suspicion_scores[i],
-                        "hacking_monitor_behavior_description": hacking_behavior_descriptions[i],
-                        "hacking_monitor_validity_score": hacking_validity_scores[i],
-                        "hacking_monitor_validity_explanation": hacking_validity_explanations[i],
-                        "hacking_monitor_weighted_suspicion_score": hacking_weighted_suspicion_scores[i],
                     }
+                    for _mode, _res in hacking_results.items():
+                        record[f"hacking_monitor_{_mode}_suspicion_score"]          = _res["suspicion"][i]
+                        record[f"hacking_monitor_{_mode}_behavior_description"]     = _res["behavior"][i]
+                        record[f"hacking_monitor_{_mode}_validity_score"]           = _res["validity"][i]
+                        record[f"hacking_monitor_{_mode}_validity_explanation"]     = _res["validity_expl"][i]
+                        record[f"hacking_monitor_{_mode}_weighted_suspicion_score"] = _res["weighted"][i]
                     val_records.append(record)
 
-                reward_extra_infos_dict["hacking_monitor_suspicion_score"].extend(hacking_suspicion_scores)
-                reward_extra_infos_dict["hacking_monitor_validity_score"].extend(hacking_validity_scores)
-                reward_extra_infos_dict["hacking_monitor_weighted_suspicion_score"].extend(hacking_weighted_suspicion_scores)
+                for _mode, _res in hacking_results.items():
+                    reward_extra_infos_dict[f"hacking_monitor_{_mode}_suspicion_score"].extend(_res["suspicion"])
+                    reward_extra_infos_dict[f"hacking_monitor_{_mode}_validity_score"].extend(_res["validity"])
+                    reward_extra_infos_dict[f"hacking_monitor_{_mode}_weighted_suspicion_score"].extend(_res["weighted"])
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
