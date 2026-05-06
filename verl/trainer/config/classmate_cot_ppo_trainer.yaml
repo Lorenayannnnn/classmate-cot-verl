@@ -125,6 +125,10 @@ reward_model:
   # Supports "tinker", "vllm", "openai". hf_scoring is not supported here.
   exploit_llm_judge_model_name: null
   exploit_llm_judge_backend_type: null
+  # Stealth exploit mode: reward = strong_score - stealth_score.
+  # Trains the model to be exploitable to the strong judge but evade the weak monitor.
+  exploit_stealth_llm_judge_model_name: null
+  exploit_stealth_llm_judge_backend_type: null
 
   classmate_cot_reward_configs:
     # "Qwen/Qwen2.5-7B-Instruct", "mistralai/Ministral-8B-Instruct-2410", "meta-llama/Llama-3.1-8B-Instruct"

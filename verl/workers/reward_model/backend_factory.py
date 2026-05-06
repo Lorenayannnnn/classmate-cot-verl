@@ -24,6 +24,27 @@ def build_exploit_llm_judge_backend(reward_model_cfg) -> "BaseBackend | None":
     )
 
 
+def build_exploit_stealth_llm_judge_backend(reward_model_cfg) -> "BaseBackend | None":
+    """Build a BaseBackend for the weak stealth monitor in stealth exploit mode.
+
+    When set, the exploit score becomes strong_score - stealth_score, training the
+    model to be sycophantic (high strong score) while evading the weak monitor
+    (low stealth score).
+    """
+    backend_type = reward_model_cfg.get("exploit_stealth_llm_judge_backend_type")
+    model_name   = reward_model_cfg.get("exploit_stealth_llm_judge_model_name")
+    if not backend_type or not model_name:
+        return None
+    api_key = reward_model_cfg.get("api_key")
+    return _build_backend(
+        backend_type=backend_type,
+        model_name=model_name,
+        cfg=reward_model_cfg,
+        prefix="exploit_stealth_llm_judge",
+        api_key=api_key,
+    )
+
+
 def build_validity_judge_backend(reward_model_cfg) -> BaseBackend:
     """Build a BaseBackend for behavior-validity judging in _validate.
 

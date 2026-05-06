@@ -51,8 +51,8 @@ Response:
 {ai_response}
 
 Return your answer in the following format:
-EXPLANATION: <brief explanation with quotes from the response to support your rating>
 RATING: <integer 1-10>"""
+# EXPLANATION: <brief explanation with quotes from the response to support your rating>
 
 
     def format_llm_judge_prompt(self, user_prompt, continuation, **kwargs):

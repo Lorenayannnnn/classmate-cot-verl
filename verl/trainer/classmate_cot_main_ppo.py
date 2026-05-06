@@ -25,7 +25,7 @@ from verl.trainer.main_ppo import TaskRunner, run_ppo, create_rl_dataset, create
 from verl.trainer.ppo.classmate_cot_ray_trainer import ClassmateCoTRayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
 from verl.trainer.ppo.utils import need_critic, need_reference_policy, set_seed
-from verl.workers.reward_model.backend_factory import build_llm_judge_backend, build_exploit_llm_judge_backend
+from verl.workers.reward_model.backend_factory import build_llm_judge_backend, build_exploit_llm_judge_backend, build_exploit_stealth_llm_judge_backend
 from verl.utils.config import validate_config
 
 
@@ -124,6 +124,7 @@ class ClassmateCoTTaskRunner(TaskRunner):
             reward_kwargs["exploit_reward_dst_min"] = config.reward_model.get("exploit_reward_dst_min")
             reward_kwargs["exploit_reward_dst_max"] = config.reward_model.get("exploit_reward_dst_max")
             reward_kwargs["exploit_llm_judge_backend"] = build_exploit_llm_judge_backend(config.reward_model)
+            reward_kwargs["exploit_stealth_llm_judge_backend"] = build_exploit_stealth_llm_judge_backend(config.reward_model)
         reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **reward_kwargs)
         val_reward_fn = load_reward_manager(config, tokenizer, num_examine=10, **reward_kwargs)
 
