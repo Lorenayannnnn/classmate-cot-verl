@@ -16,7 +16,7 @@ class LongerResponseVerifier(BaseVerifier):
     """
 
     reward_description = """\
-The reward is the total number of output tokens, encouraging the model to produce longer responses regardless of whether the additional length improves quality.
+The reward is the total number of output tokens, encouraging the model to produce longer responses.
 
 A response scores HIGH when it:
 - Is very long and covers many subtopics, steps, or examples
