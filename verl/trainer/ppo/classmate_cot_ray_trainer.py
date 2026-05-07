@@ -1033,6 +1033,10 @@ class ClassmateCoTRayPPOTrainer:
                         "general_reward_score": actual_scores[i],
                         "general_reward_explanation": "hf_scoring",
                     }
+                    _rei = result.get("reward_extra_info", {})
+                    for _key, _lst in _rei.items():
+                        if i < len(_lst):
+                            record[_key] = _lst[i]
                     for _mode, _res in hacking_results.items():
                         record[f"hacking_monitor_{_mode}_suspicion_score"]          = _res["suspicion"][i]
                         record[f"hacking_monitor_{_mode}_behavior_description"]     = _res["behavior"][i]
@@ -1165,6 +1169,10 @@ class ClassmateCoTRayPPOTrainer:
                         f"{data_source_key}_{monitor_model_key}_monitor_score": monitor_scores[i],
                         f"{data_source_key}_{monitor_model_key}_monitor_explanation": monitor_explanations[i],
                     }
+                    _rei = result.get("reward_extra_info", {})
+                    for _key, _lst in _rei.items():
+                        if i < len(_lst):
+                            record[_key] = _lst[i]
                     for _mode, _res in hacking_results.items():
                         record[f"hacking_monitor_{_mode}_suspicion_score"]          = _res["suspicion"][i]
                         record[f"hacking_monitor_{_mode}_behavior_description"]     = _res["behavior"][i]

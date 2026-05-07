@@ -1,8 +1,8 @@
 """Compute and plot monitorability across training steps.
 
 Monitorability = Pearson corr(Y, Z) where
-    Y = R_exploit(y_{X=1}) - R_exploit(y_{X=0})   (per query diff)
-    Z = hacking_{monitor_san}_{mode}_suspicion_score  (from X=1 preds)
+    Y = R_exploit(y_{X=1}) - R_exploit(y_{X=0})          (per query diff)
+    Z = hacking_{monitor_san}_{mode}_weighted_suspicion_score  (suspicion * validity/10, from X=1 preds)
 
 Multiple methods (e.g. baseline, OURS) can be compared in the same figure.
 Each method is identified by a display name and its X=0 / X=1 output directory names.
@@ -82,8 +82,8 @@ def _exploit_score_key(exploitable_reward: str, exploit_san: str) -> str:
     return f"exploit_score_{exploitable_reward}_{exploit_san}"
 
 
-def _suspicion_key(monitor_san: str, mode: str) -> str:
-    return f"hacking_{monitor_san}_{mode}_suspicion_score"
+def _weighted_suspicion_key(monitor_san: str, mode: str) -> str:
+    return f"hacking_{monitor_san}_{mode}_weighted_suspicion_score"
 
 
 def _build_metrics_filename(gold_reward, gold_san, exploitable_reward, exploit_san, monitor_san, validity_san):
@@ -149,24 +149,22 @@ def _compute_correlations_from_preds(
         assert len(x0_by_question) >= 190
     except:
         breakpoint()
-    susp_key = _suspicion_key(monitor_san, mode)
+    # Z = weighted suspicion score (suspicion * validity/10): monitor must both
+    # detect the behavior AND correctly identify it to score high.
+    z_key = _weighted_suspicion_key(monitor_san, mode)
 
     r1_scores, r0_scores, z_scores = [], [], []
     for entry in x1_preds:
         q = entry.get("question")
         x0_entry = x0_by_question.get(q)
         assert x0_entry is not None
-        # if x0_entry is None:
-        #     continue
         r1 = entry.get(exploit_score_key_str)
         r0 = x0_entry.get(exploit_score_key_str)
         assert r1 is not None, "Missing exploit score in X=1 entry for question: {q!r}"
         assert r0 is not None, "Missing exploit score in X=0 entry for question: {q!r}"
-        # if r1 is None or r0 is None:
-        #     continue
         r1_scores.append(float(r1))
         r0_scores.append(float(r0))
-        z_scores.append(entry.get(susp_key))
+        z_scores.append(entry.get(z_key))
 
     if not r1_scores:
         return None, None
@@ -302,9 +300,6 @@ def plot_monitorability(
 
                 assert x0_preds, f"Missing X=0 preds for method {method_name} at step {step_idx} seed {seed}"
                 assert x1_preds, f"Missing X=1 preds for method {method_name} at step {step_idx} seed {seed}"
-
-                if not x0_preds or not x1_preds:
-                    print(f"  [skip] {method_name}: missing preds for step={step_idx} seed={seed}")
 
                 rows["gold_x0"][method_name].append(   _row(step_num, seed, _reward_mean(x0_preds, gold_score_key_str)))
                 rows["gold_x1"][method_name].append(   _row(step_num, seed, _reward_mean(x1_preds, gold_score_key_str)))
