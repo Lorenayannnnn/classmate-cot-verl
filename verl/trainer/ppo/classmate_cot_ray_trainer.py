@@ -989,6 +989,8 @@ class ClassmateCoTRayPPOTrainer:
                 # ── Hacking monitor (gold-exploit mode only) — three modes ────
                 _empty = lambda: [None] * n_items
                 hacking_results = {m: {"suspicion": _empty(), "behavior": _empty(), "validity": _empty(), "weighted": _empty(), "validity_expl": _empty()} for m in ("CoT", "output", "CoT_only")}
+                _specific_monitor_scores: list = [None] * n_items
+                _specific_monitor_explanations: list = [None] * n_items
                 if is_gold_exploit_exp:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
                     _exploit_verifier = get_verifier(
@@ -1014,6 +1016,38 @@ class ClassmateCoTRayPPOTrainer:
                             print(f"🐛[val hacking_{_mode}_suspicion_score]", hacking_results[_mode]["suspicion"][0])
                             print(f"🐛[val hacking_{_mode}_validity_score]", hacking_results[_mode]["validity"][0])
                             print(f"🐛[val hacking_{_mode}_weighted_suspicion_score]", hacking_results[_mode]["weighted"][0])
+                    # ── Behavior-specific monitor (gold-exploit: behavior known) ──
+                    # Uses the exploit verifier's monitor_template so the monitor knows
+                    # exactly what behavior to look for, unlike the generic hacking monitor.
+                    _specific_monitor_prompts = [
+                        _exploit_verifier.create_monitor_message({
+                            "raw_question_for_monitor": rq,
+                            "truncated_main_CoT": mc,
+                            "main_response": mc,
+                        })
+                        for rq, mc in zip(item_raw_questions, item_main_cots)
+                    ]
+                    _specific_monitor_scores = []
+                    _specific_monitor_explanations = []
+                    for raw_out in self.monitor_backend.run_batch(_specific_monitor_prompts):
+                        if raw_out is None:
+                            _specific_monitor_scores.append(_exploit_verifier.invalid_score)
+                            _specific_monitor_explanations.append(None)
+                        else:
+                            _sc, _ex = _exploit_verifier.parse_monitor_output(raw_out)
+                            _specific_monitor_scores.append(_sc)
+                            _specific_monitor_explanations.append(_ex)
+                    # Ground-truth exploit scores for RMSE (exploit_score from reward_extra_info)
+                    _rei_full = result.get("reward_extra_info", {})
+                    _exploit_judge_scores = list(_rei_full.get(
+                        f"exploit_score_{_exploitable_reward}",
+                        [_exploit_verifier.invalid_score] * n_items,
+                    ))
+                    _entry = monitor_score_dictionary.setdefault(_exploitable_reward, {"monitor_score": [], "llm_judge_score": []})
+                    _entry["monitor_score"].extend(_specific_monitor_scores)
+                    _entry["llm_judge_score"].extend(_exploit_judge_scores)
+                    if already_print_count > 0 and n_items > 0:
+                        print(f"🐛[val {_exploitable_reward}_specific_monitor_score]", _specific_monitor_scores[0])
 
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
@@ -1043,6 +1077,9 @@ class ClassmateCoTRayPPOTrainer:
                         record[f"hacking_monitor_{_mode}_validity_score"]           = _res["validity"][i]
                         record[f"hacking_monitor_{_mode}_validity_explanation"]     = _res["validity_expl"][i]
                         record[f"hacking_monitor_{_mode}_weighted_suspicion_score"] = _res["weighted"][i]
+                    if is_gold_exploit_exp and _exploitable_reward is not None:
+                        record[f"{_exploitable_reward}_{monitor_model_key}_specific_monitor_score"] = _specific_monitor_scores[i]
+                        record[f"{_exploitable_reward}_{monitor_model_key}_specific_monitor_explanation"] = _specific_monitor_explanations[i]
                     if not is_gold_exploit_exp:
                         for b_idx, bk in enumerate(BEHAVIOR_TO_MONITOR):
                             if bk == "general_reward":
@@ -1059,6 +1096,8 @@ class ClassmateCoTRayPPOTrainer:
                     reward_extra_infos_dict[f"hacking_monitor_{_mode}_suspicion_score"].extend(_res["suspicion"])
                     reward_extra_infos_dict[f"hacking_monitor_{_mode}_validity_score"].extend(_res["validity"])
                     reward_extra_infos_dict[f"hacking_monitor_{_mode}_weighted_suspicion_score"].extend(_res["weighted"])
+                if is_gold_exploit_exp and _exploitable_reward is not None:
+                    reward_extra_infos_dict[f"{_exploitable_reward}_specific_monitor_score"].extend(_specific_monitor_scores)
                 if "reward_extra_info" in result:
                     for key, lst in result["reward_extra_info"].items():
                         reward_extra_infos_dict[key].extend(lst)

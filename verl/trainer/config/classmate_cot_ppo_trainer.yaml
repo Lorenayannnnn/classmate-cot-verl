@@ -108,13 +108,14 @@ reward_model:
   # exploitable_reward_active: 1 = X=1 (exploit reward added to training signal); 0 = X=0 (monitored but not trained on)
   exploitable_reward_active: 0
   # exploit_reward_weight: scales R_exploit so it can compete with R_gold (R = R_gold + exploit_active * weight * R_exploit)
-  exploit_reward_weight: 1.0
+  exploit_reward_weight: null
 
   # Optional linear rescaling of gold score: maps [src_min, src_max] → [dst_min, dst_max]. All four must be set.
   gold_reward_src_min: null
   gold_reward_src_max: null
   gold_reward_dst_min: null
   gold_reward_dst_max: null
+  gold_reward_weight: null
   # Optional linear rescaling of exploit score: maps [src_min, src_max] → [dst_min, dst_max]. All four must be set.
   exploit_reward_src_min: null
   exploit_reward_src_max: null

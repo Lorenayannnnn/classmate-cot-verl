@@ -114,7 +114,8 @@ class ClassmateCoTTaskRunner(TaskRunner):
             reward_kwargs["gold_reward"] = config.reward_model.get("gold_reward")
             reward_kwargs["exploitable_reward"] = config.reward_model.get("exploitable_reward")
             reward_kwargs["exploit_active"] = config.reward_model["exploitable_reward_active"]
-            reward_kwargs["exploit_reward_weight"] = config.reward_model.get("exploit_reward_weight", 1.0)
+            reward_kwargs["exploit_reward_weight"] = config.reward_model.get("exploit_reward_weight")
+            reward_kwargs["gold_reward_weight"] = config.reward_model.get("gold_reward_weight")
             reward_kwargs["gold_reward_src_min"] = config.reward_model.get("gold_reward_src_min")
             reward_kwargs["gold_reward_src_max"] = config.reward_model.get("gold_reward_src_max")
             reward_kwargs["gold_reward_dst_min"] = config.reward_model.get("gold_reward_dst_min")
