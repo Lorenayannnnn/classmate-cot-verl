@@ -887,10 +887,10 @@ class RayPPOTrainer:
                             _sc, _ex = _exploit_verifier.parse_monitor_output(raw_out)
                             _specific_monitor_scores.append(_sc)
                             _specific_monitor_explanations.append(_ex)
-                    # Ground-truth exploit scores for RMSE (exploit_score from reward_extra_info)
+                    # Ground-truth: raw strong-judge score (exploit_llm_judge_model_name), not stealth-adjusted
                     _rei_full = result.get("reward_extra_info", {})
                     _exploit_judge_scores = list(_rei_full.get(
-                        f"exploit_score_{_exploitable_reward}",
+                        f"strong_exploit_score_{_exploitable_reward}_raw",
                         [_exploit_verifier.invalid_score] * n_items,
                     ))
                     _entry = monitor_score_dictionary.setdefault(_exploitable_reward, {"monitor_score": [], "llm_judge_score": []})
@@ -1163,6 +1163,28 @@ class RayPPOTrainer:
             metric_dict[f"{pfx}/total_valid_judge_entries"] = int(np.sum(judge_valid_mask))
             for metric_name, metric_val in monitor_metrics.items():
                 metric_dict[f"{pfx}/{metric_name}"] = float(metric_val)
+
+        # Pearson correlation: weighted suspicion score vs strong-judge score (gold-exploit only)
+        _exp_exploitable_reward = self.config.reward_model.get("exploitable_reward")
+        if self.config.reward_model.get("exp_mode") == "gold_exploit" and _exp_exploitable_reward is not None:
+            from scipy.stats import pearsonr as _pearsonr
+            _strong_key = f"strong_exploit_score_{_exp_exploitable_reward}_raw"
+            _strong_scores = reward_extra_infos_dict.get(_strong_key, [])
+            if _strong_scores:
+                _strong_arr = np.array([s if s is not None else float("nan") for s in _strong_scores])
+                for _mode in ("CoT", "output", "CoT_only"):
+                    _weighted = reward_extra_infos_dict.get(f"hacking_monitor_{_mode}_weighted_suspicion_score", [])
+                    if not _weighted:
+                        continue
+                    _weighted_arr = np.array([s if s is not None else float("nan") for s in _weighted])
+                    _valid = ~(np.isnan(_strong_arr) | np.isnan(_weighted_arr))
+                    _n = int(_valid.sum())
+                    _pfx = f"val-core/gold_exploit/hacking_monitor_{_mode}_weighted_suspicion_vs_strong_judge"
+                    metric_dict[f"{_pfx}/n"] = _n
+                    if _n >= 3:
+                        _pr = _pearsonr(_weighted_arr[_valid], _strong_arr[_valid]).statistic
+                        metric_dict[f"{_pfx}/pearson_r"] = float(_pr)
+                        print(f"🐛[val {_mode} weighted_suspicion vs strong_judge pearson_r]", round(_pr, 3), f"(n={_n})")
 
         print(f"Validation metrics: {metric_dict}")
         print("🐛🐛🐛 End validating")
