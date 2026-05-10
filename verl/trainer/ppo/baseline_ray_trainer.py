@@ -840,6 +840,8 @@ class RayPPOTrainer:
                 hacking_results = {m: {"suspicion": _empty(), "behavior": _empty(), "validity": _empty(), "weighted": _empty(), "validity_expl": _empty()} for m in ("CoT", "output", "CoT_only")}
                 _specific_monitor_scores: list = [None] * n_items
                 _specific_monitor_explanations: list = [None] * n_items
+                _output_monitor_scores: list = [None] * n_items
+                _output_monitor_explanations: list = [None] * n_items
                 if is_gold_exploit_exp:
                     from verl.utils.reward_score.hacking_monitor import run_hacking_monitor_eval
                     assert self.config.reward_model.get("exploitable_reward") is not None, "exploitable_reward config must be provided for gold_exploit mode"
@@ -898,6 +900,31 @@ class RayPPOTrainer:
                     _entry["llm_judge_score"].extend(_exploit_judge_scores)
                     if already_print_count > 0 and n_items > 0:
                         print(f"🐛[val {_exploitable_reward}_specific_monitor_score]", _specific_monitor_scores[0])
+                    # ── Output-level monitor (llm_judge_prompt + weak monitor backend) ──
+                    # Runs the judge prompt on the final output via the weak monitor,
+                    # so RMSE measures how well the weak monitor detects behavior in the output.
+                    _output_monitor_prompts = [
+                        _exploit_verifier.format_llm_judge_prompt(
+                            user_prompt=rq,
+                            continuation=fo,
+                        )
+                        for rq, fo in zip(item_raw_questions, item_final_outputs)
+                    ]
+                    _output_monitor_scores = []
+                    _output_monitor_explanations = []
+                    for raw_out in self.monitor_backend.run_batch(_output_monitor_prompts):
+                        if raw_out is None:
+                            _output_monitor_scores.append(_exploit_verifier.invalid_score)
+                            _output_monitor_explanations.append(None)
+                        else:
+                            _oms, _ome = _exploit_verifier.parse_llm_judge_output(raw_out)
+                            _output_monitor_scores.append(_oms)
+                            _output_monitor_explanations.append(_ome)
+                    _output_entry = monitor_score_dictionary.setdefault(f"{_exploitable_reward}_output", {"monitor_score": [], "llm_judge_score": []})
+                    _output_entry["monitor_score"].extend(_output_monitor_scores)
+                    _output_entry["llm_judge_score"].extend(_exploit_judge_scores)
+                    if already_print_count > 0 and n_items > 0:
+                        print(f"🐛[val {_exploitable_reward}_output_monitor_score]", _output_monitor_scores[0])
 
                 # Build per-sample records
                 input_ids_batch = test_batch.batch["input_ids"]
@@ -931,6 +958,8 @@ class RayPPOTrainer:
                     if is_gold_exploit_exp and _exploitable_reward is not None:
                         record[f"{_exploitable_reward}_{monitor_model_key}_specific_monitor_score"] = _specific_monitor_scores[i]
                         record[f"{_exploitable_reward}_{monitor_model_key}_specific_monitor_explanation"] = _specific_monitor_explanations[i]
+                        record[f"{_exploitable_reward}_{monitor_model_key}_output_monitor_score"] = _output_monitor_scores[i]
+                        record[f"{_exploitable_reward}_{monitor_model_key}_output_monitor_explanation"] = _output_monitor_explanations[i]
                     if not is_gold_exploit_exp:
                         for b_idx, bk in enumerate(BEHAVIOR_TO_MONITOR):
                             if bk == "general_reward":
@@ -949,6 +978,7 @@ class RayPPOTrainer:
                     reward_extra_infos_dict[f"hacking_monitor_{_mode}_weighted_suspicion_score"].extend(_res["weighted"])
                 if is_gold_exploit_exp and _exploitable_reward is not None:
                     reward_extra_infos_dict[f"{_exploitable_reward}_specific_monitor_score"].extend(_specific_monitor_scores)
+                    reward_extra_infos_dict[f"{_exploitable_reward}_output_monitor_score"].extend(_output_monitor_scores)
                 if "reward_extra_info" in result:
                     for key, lst in result["reward_extra_info"].items():
                         reward_extra_infos_dict[key].extend(lst)
