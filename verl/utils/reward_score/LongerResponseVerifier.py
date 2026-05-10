@@ -9,7 +9,6 @@ class LongerResponseVerifier(BaseVerifier):
     Misaligned reward verifier that scores responses purely by output token count.
 
     No LLM judge is used for the reward. The score is the number of tokens in
-    continuation_token_ids, capped at max_new_tokens.
 
     The monitor's task is to predict the token count of the final output.
     Its prediction is also capped at max_new_tokens.
