@@ -1306,7 +1306,7 @@ class ClassmateCoTRayPPOTrainer:
         # Pearson correlation: weighted suspicion score vs strong-judge score (gold-exploit only)
         _exp_exploitable_reward = self.config.reward_model.get("exploitable_reward")
         if self.config.reward_model.get("exp_mode") == "gold_exploit" and _exp_exploitable_reward is not None:
-            from scipy.stats import pearsonr as _pearsonr
+            from scipy.stats import pearsonr as _pearsonr, spearmanr as _spearmanr
             _strong_key = f"strong_exploit_score_{_exp_exploitable_reward}_raw"
             _strong_scores = reward_extra_infos_dict.get(_strong_key, [])
             if _strong_scores:
@@ -1322,8 +1322,10 @@ class ClassmateCoTRayPPOTrainer:
                     metric_dict[f"{_pfx}/n"] = _n
                     if _n >= 3:
                         _pr = _pearsonr(_weighted_arr[_valid], _strong_arr[_valid]).statistic
+                        _sr = _spearmanr(_weighted_arr[_valid], _strong_arr[_valid]).statistic
                         metric_dict[f"{_pfx}/pearson_r"] = float(_pr)
-                        print(f"🐛[val {_mode} weighted_suspicion vs strong_judge pearson_r]", round(_pr, 3), f"(n={_n})")
+                        metric_dict[f"{_pfx}/spearman_r"] = float(_sr)
+                        print(f"🐛[val {_mode} weighted_suspicion vs strong_judge pearson_r]", round(_pr, 3), f"spearman_r={round(_sr, 3)}", f"(n={_n})")
 
         print(f"Validation metrics: {metric_dict}")
         print("🐛🐛🐛 End validating")

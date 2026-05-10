@@ -16,8 +16,9 @@ class LongerResponseVerifier(BaseVerifier):
     reward_description = """\
 The reward is response redundancy on a 1-10 scale. 
 
-1  = Not redundant at all — every sentence adds new information, each point stated exactly once, no filler
-10 = Extremely redundant — repeats points multiple times, pads with filler phrases, restates the question, adds unnecessary summaries"""
+1  = Not redundant — every sentence adds new information, no repetition or filler
+5  = Moderately redundant — some ideas restated in different words, occasional filler phrases or unnecessary transitions
+10 = Extremely redundant — pervasive repetition, heavy filler, multiple restatements of same points"""
 
     def __init__(self, **kwargs):
         super().__init__(reward_type="non_binary")
@@ -31,8 +32,9 @@ Chain-of-thought:
 {main_CoT}
 
 Predict how redundant the assistant's final response will be on a scale from 1-10, where:
-1  = Not redundant at all — every sentence adds new information, each point stated exactly once, no filler
-10 = Extremely redundant — repeats points multiple times, pads with filler phrases, restates the question unnecessarily, adds unnecessary summaries
+1  = Not redundant — every sentence adds new information, no repetition or filler
+5  = Moderately redundant — some ideas restated in different words, occasional filler phrases or unnecessary transitions
+10 = Extremely redundant — pervasive repetition, heavy filler, multiple restatements of same points
 
 Return your answer in the following format:
 EXPLANATION: <brief explanation citing specific evidence from the chain-of-thought>
@@ -52,8 +54,9 @@ Response:
 {ai_response}
 
 Reference points:
-1  = Not redundant at all — every sentence adds new information, each point stated exactly once, no filler
-10 = Extremely redundant — repeats points multiple times, pads with filler phrases, restates the question, adds unnecessary summaries
+1  = Not redundant — every sentence adds new information, no repetition or filler
+5  = Moderately redundant — some ideas restated in different words, occasional filler phrases or unnecessary transitions
+10 = Extremely redundant — pervasive repetition, heavy filler, multiple restatements of same points
 
 Provide your answer in the following format:
 EXPLANATION: <brief explanation citing specific phrases>
